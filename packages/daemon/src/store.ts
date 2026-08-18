@@ -527,11 +527,107 @@ export class Store {
       display_name: string;
       last_seen_at: number;
     }>;
-    return rows.map((r) => ({
-      projectId: r.project_id,
-      displayName: r.display_name,
-      lastSeenAt: r.last_seen_at,
-    }));
+    // A superseded identity is a ghost: same directory, same name, an id that
+    // will never be seen again. Listing it puts two identical rows in the
+    // chooser distinguishable only by a hash, and ticking the wrong one follows
+    // nothing.
+    const moved = this.identityMoves();
+    return rows
+      .filter((r) => !moved.has(r.project_id))
+      .map((r) => ({
+        projectId: r.project_id,
+        displayName: r.display_name,
+        lastSeenAt: r.last_seen_at,
+      }));
+  }
+
+  /**
+   * Identities that have been replaced, old id to new.
+   *
+   * A project's id comes from a ladder — git root commit, then package name,
+   * then path — so `git init` in a followed directory silently renames it from
+   * `pkg:…` to `git:…`. Nothing is wrong with either id; they are answers to
+   * the same question asked before and after the ground moved. But the config
+   * still names the old one, so the project drops off the board and the chooser
+   * grows a second row with the same display name. Measured here, on this
+   * repository, the day it got a git history.
+   *
+   * The evidence is a directory: one `norm_path` recorded under two project
+   * ids, the newer sighting winning. An id counts as superseded only when
+   * *every* path it was ever seen at has moved on — a project still live
+   * somewhere else is not a ghost, it is a project with two workspaces, and
+   * one of them happening to be reused by something else must not retire it.
+   *
+   * Read at the point of use rather than written into the config: this is a
+   * reading of what the disk says now, and a disk that says something else
+   * tomorrow should be free to say so. The user's file is theirs.
+   */
+  identityMoves(): Map<string, string> {
+    const rows = this.#db
+      .prepare(
+        `SELECT project_id, norm_path, last_seen_at
+           FROM workspaces
+          WHERE norm_path IN (
+                SELECT norm_path FROM workspaces
+                 GROUP BY norm_path HAVING COUNT(DISTINCT project_id) > 1)`,
+      )
+      .all() as Array<{ project_id: string; norm_path: string; last_seen_at: number }>;
+
+    // Per path: who holds it now, and who used to.
+    const holder = new Map<string, { id: string; at: number }>();
+    for (const r of rows) {
+      const cur = holder.get(r.norm_path);
+      if (!cur || r.last_seen_at > cur.at) holder.set(r.norm_path, { id: r.project_id, at: r.last_seen_at });
+    }
+
+    // Per id: every path it was ever seen at, and whether it still holds any.
+    const paths = new Map<string, string[]>();
+    for (const r of rows) {
+      const list = paths.get(r.project_id);
+      if (list) list.push(r.norm_path);
+      else paths.set(r.project_id, [r.norm_path]);
+    }
+    // Paths outside the contested set count too: an id living at one of them is
+    // current, whatever happened to the directory it shares.
+    const elsewhere = this.#db
+      .prepare(
+        `SELECT DISTINCT project_id FROM workspaces
+          WHERE norm_path NOT IN (
+                SELECT norm_path FROM workspaces
+                 GROUP BY norm_path HAVING COUNT(DISTINCT project_id) > 1)`,
+      )
+      .all() as Array<{ project_id: string }>;
+    const alive = new Set(elsewhere.map((r) => r.project_id));
+
+    const direct = new Map<string, string>();
+    for (const [id, own] of paths) {
+      if (alive.has(id)) continue;
+      let successor: { id: string; at: number } | null = null;
+      let superseded = true;
+      for (const path of own) {
+        const now = holder.get(path);
+        if (!now || now.id === id) {
+          superseded = false;
+          break;
+        }
+        if (!successor || now.at > successor.at) successor = now;
+      }
+      if (superseded && successor) direct.set(id, successor.id);
+    }
+
+    // Follow chains — pkg: became git: became path: — but never a cycle, which
+    // two directories swapping owners could otherwise produce.
+    const out = new Map<string, string>();
+    for (const start of direct.keys()) {
+      const seen = new Set<string>([start]);
+      let at = direct.get(start) as string;
+      while (direct.has(at) && !seen.has(at)) {
+        seen.add(at);
+        at = direct.get(at) as string;
+      }
+      if (at !== start) out.set(start, at);
+    }
+    return out;
   }
 
   stats(): { sizeBytes: number; sessions: number; transitions: number; projects: number } {

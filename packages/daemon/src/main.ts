@@ -119,6 +119,9 @@ export class Daemon {
   #lastError: string | null = null;
   /** Last few event-loop phases, so a watchdog kill can explain itself. */
   #tracking: TrackingConfig = defaultConfig().tracking;
+  /** Exactly what the config file says, before identity moves are applied. */
+  #trackingRaw: TrackingConfig = defaultConfig().tracking;
+  #loggedMoves = new Set<string>();
   #trackingStamp = 0;
   #phase = 'idle';
   #phaseSince = Date.now();
@@ -255,6 +258,17 @@ export class Daemon {
     mkdirSync(dataDir(), { recursive: true });
     enableFileLog(logFilePath());
 
+    // Read the selection before anything can be asked about it.
+    //
+    // `#tracking` starts at the default, which is *follow everything*, and it
+    // used to be corrected only by the first scan -- several seconds later,
+    // because that scan pays the probe host's startup. In between, the chooser
+    // answered `tracked: true` for all 42 projects, so a panel opened at launch
+    // showed every box ticked; pressing save from that screen would have
+    // written the lie back over a real selection. The desktop app opens the
+    // panel the moment it starts the daemon, which is precisely that window.
+    await this.#refreshTracking();
+
     // Single instance: if the port is busy, ask who is there.
     const existing = await probeExisting(this.#opts.port);
     if (existing?.ok) {
@@ -384,6 +398,41 @@ export class Daemon {
     ];
   }
 
+  /**
+   * Carry a selection across an identity change.
+   *
+   * A project's id can change under it — `git init` in a followed directory
+   * moves it from `pkg:…` to `git:…` — and the config still names the id that
+   * was true when the box was ticked. Left alone the project simply vanishes
+   * from the board, which reads as the tool losing it rather than as the
+   * ground moving.
+   *
+   * Applied on read, not written back. The config keeps saying what the user
+   * typed; the daemon resolves it the way a name is resolved. The next
+   * deliberate change — following or unfollowing anything — writes the
+   * resolved list, so the file heals at a moment the user is already editing it
+   * rather than behind their back.
+   */
+  #followMoves(tracking: TrackingConfig): TrackingConfig {
+    if (tracking.mode !== 'selected') return tracking;
+    const moves = this.#store.identityMoves();
+    if (moves.size === 0) return tracking;
+    const seen = new Set<string>();
+    const selected: string[] = [];
+    for (const id of tracking.selected) {
+      const to = moves.get(id) ?? id;
+      if (seen.has(to)) continue;
+      seen.add(to);
+      selected.push(to);
+      // Once per move, not once per scan: this runs every three seconds.
+      if (to !== id && !this.#loggedMoves.has(id + '>' + to)) {
+        this.#loggedMoves.add(id + '>' + to);
+        log(t`proje kimliği değişmiş · ${id} → ${to}`);
+      }
+    }
+    return { mode: 'selected', selected };
+  }
+
   async #setTracking(mode: string, selected: string[]): Promise<void> {
     const path = configPath();
     let text = '';
@@ -397,6 +446,8 @@ export class Daemon {
     // Apply immediately rather than waiting for the mtime check, so the very
     // next push already reflects the click that caused it.
     this.#tracking = { mode: mode === 'selected' ? 'selected' : 'all', selected };
+    // What was just written *is* the file now, so it is also the raw reading.
+    this.#trackingRaw = this.#tracking;
     try {
       this.#trackingStamp = statSync(path).mtimeMs;
     } catch {
@@ -420,11 +471,19 @@ export class Daemon {
     } catch {
       stamp = 0; // No config file: defaults, which means everything.
     }
-    if (stamp === this.#trackingStamp) return;
+    if (stamp === this.#trackingStamp) {
+      // The file has not changed, but the ground under it can: a directory
+      // gets a git history and the id in the file stops naming anything. Cheap
+      // enough to redo every scan -- two queries over a table with one row per
+      // workspace -- and skipped outright while following everything.
+      this.#tracking = this.#followMoves(this.#trackingRaw);
+      return;
+    }
     this.#trackingStamp = stamp;
     try {
       const cfg = (await loadConfig()).config;
-      this.#tracking = cfg.tracking;
+      this.#trackingRaw = cfg.tracking;
+      this.#tracking = this.#followMoves(cfg.tracking);
       // Read from the same file at the same moment: a selection that names a
       // hand-added project while its path is still the previous read's would
       // put the project on the board with no directory to look in.

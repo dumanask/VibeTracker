@@ -593,6 +593,7 @@
   "Post-it penceresi — küçük, üstte kalan panel": "Sticky-note window — small, stays on top",
   "İzlenecek projeleri seç (list|add|rm|all)": "Choose which projects to track (list|add|rm|all)",
   "izlenen projeler güncellendi · {0} · {1}": "tracked projects updated · {0} · {1}",
+  "proje kimliği değişmiş · {0} → {1}": "project identity changed · {0} → {1}",
   "izlenen projeler yeniden okundu · {0}": "tracked projects re-read · {0}",
   "gövde okunamadı": "could not read the body",
   "yapılandırma yazılamadı": "could not write the configuration",

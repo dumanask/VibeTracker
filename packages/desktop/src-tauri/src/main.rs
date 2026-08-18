@@ -19,6 +19,7 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -157,25 +158,59 @@ fn overview(rt: &Runtime) -> Option<Overview> {
     serde_json::from_str::<Overview>(&body).ok()
 }
 
+/// Guards the one moment two clicks can collide.
+///
+/// Creating the window is now asynchronous, so a double click can put two
+/// threads past the `get_webview_window` check before either has built
+/// anything. The loser's `build` would fail on the duplicate label -- harmless,
+/// but it would also spend a WebView2 startup to find that out.
+static OPENING: AtomicBool = AtomicBool::new(false);
+
 /// Open (or focus) the dashboard window.
 ///
 /// The page is the daemon's, fetched over loopback with the token in the query
 /// — which the page strips from its own address bar on load, so it does not sit
 /// in a title or a history entry.
+///
+/// **The window is built on a spawned thread, and it has to be.** Tauri's own
+/// runtime says so twice, in `tauri-runtime-wry`:
+///
+/// > Creates a webview by dispatching a message to the event loop. Note that
+/// > this must be called from a separate thread, otherwise the channel will
+/// > introduce a deadlock.
+///
+/// Both callers here -- the tray click and the tray menu -- are synchronous
+/// handlers running *on* that event loop. Building from inside one asks the
+/// loop for a window and then blocks the loop that would deliver it, so the
+/// whole app stops: no window, and a tray icon that no longer answers. That is
+/// exactly what it did, and the half-created window at -32000,-32000 that an
+/// earlier fix chased was this deadlock's wreckage rather than a missing
+/// `unminimize`.
+///
+/// Showing an existing window stays inline, because that path is not a
+/// deadlock: `send_user_message` runs the message directly when it is already
+/// on the main thread instead of posting it and waiting.
 fn open_panel(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("panel") {
-        // `unminimize` before `show`, and both before `set_focus`. Closing the
-        // window only hides it, so the one being reopened is usually hidden --
-        // but it can also be minimised, and a hidden window that is also
-        // minimised comes back at -32000,-32000 with a zero-sized client area,
-        // which looks exactly like a window that failed to open. Observed, not
-        // guessed: the first build did precisely that when the icon was clicked
-        // from the overflow flyout.
+        // Closing the window only hides it, so the one being reopened is
+        // usually hidden -- but it can also be minimised, and `show` alone
+        // leaves a minimised window minimised.
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
         return;
     }
+    if OPENING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        build_panel(&app);
+        OPENING.store(false, Ordering::SeqCst);
+    });
+}
+
+fn build_panel(app: &AppHandle) {
     let Some(rt) = read_runtime() else { return };
     let url = format!("http://127.0.0.1:{}/?t={}", rt.port, rt.token);
     let Ok(parsed) = url.parse() else { return };
@@ -189,7 +224,7 @@ fn open_panel(app: &AppHandle) {
     {
         // Asked for again after the build. The window is created while a tray
         // flyout owns the foreground, and on Windows that is enough for it to
-        // arrive iconified however it was configured.
+        // arrive behind whatever had it.
         let _ = w.unminimize();
         let _ = w.set_focus();
     }

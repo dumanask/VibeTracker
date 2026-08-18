@@ -1179,13 +1179,23 @@ if ([int]$state.x -ge 0) {
   $note.Location = New-Object System.Drawing.Point(($wa.Right - [int]$state.w - 24), ($wa.Top + 24))
 }
 
+$script:savedState = ''
+
 function Save-State {
   if (-not $StatePath) { return }
   try {
-    @{ x = $note.Location.X; y = $note.Location.Y
-       w = $note.WideW; h = $note.ClientSize.Height
-       mode = $note.Form_.ToString(); speak = $note.Speaking } |
-      ConvertTo-Json -Compress | Set-Content -Path $StatePath -Encoding utf8
+    $json = @{ x = $note.Location.X; y = $note.Location.Y
+               w = $note.WideW; h = $note.ClientSize.Height
+               mode = $note.Form_.ToString(); speak = $note.Speaking } |
+      ConvertTo-Json -Compress
+    # Only when it actually changed. Every poll calls Fit(), Fit() re-applies
+    # the shape so the window can follow the row count, and applying a shape
+    # reports it -- so an unguarded save rewrote this file every two seconds
+    # for as long as the window was open, which on a laptop is a disk kept
+    # awake to record that nothing happened.
+    if ($json -eq $script:savedState) { return }
+    $script:savedState = $json
+    Set-Content -Path $StatePath -Value $json -Encoding utf8
   } catch { }
 }
 
