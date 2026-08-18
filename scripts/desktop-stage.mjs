@@ -53,18 +53,43 @@ const STAGE = join(ROOT, 'packages', 'desktop', 'src-tauri', 'runtime');
 const PACKAGES = ['cli', 'core', 'daemon', 'engine', 'fixtures', 'platform', 'shared'];
 
 /**
+ * Where each package's name actually points.
+ *
+ * Read from the package's own `exports`, never assumed. Six of the seven do
+ * resolve to `src/index.ts` and the seventh does not — `@vibetracker/daemon`
+ * is `src/main.ts` — so a rewrite that spelled the convention out shipped a
+ * CLI whose `vt mini` died on ERR_MODULE_NOT_FOUND against a path that had
+ * never existed in this repository either. The convention was the bug.
+ */
+const ENTRY = new Map(
+  PACKAGES.map((pkg) => {
+    const manifest = JSON.parse(
+      readFileSync(join(ROOT, 'packages', pkg, 'package.json'), 'utf8'),
+    );
+    const entry = manifest.exports?.['.'] ?? manifest.main;
+    // `cli` has no export map because nothing imports it; it is the entry.
+    return [pkg, entry ? entry.replace(/^\.\//, '') : 'src/index.ts'];
+  }),
+);
+
+/** Every path a rewrite pointed at, so the guard below can check they exist. */
+const rewritten = new Set();
+
+/**
  * Turn `@vibetracker/core` into a relative path from the importing file.
  *
  * `depth` is how far the file sits below its own package directory, so a file
- * at `packages/cli/src/a/b.ts` (depth 2 below `packages/cli`) reaches
- * `packages/core/src/index.ts` by going up depth+1 levels.
+ * at `packages/cli/src/a/b.ts` (depth 2 below `packages/cli`) reaches its
+ * target by going up depth+1 levels.
  */
 function rewriteImports(src, depth) {
   const up = '../'.repeat(depth + 1);
-  return src.replace(
-    /(['"])@vibetracker\/([a-z]+)\1/g,
-    (_whole, q, pkg) => `${q}${up}${pkg}/src/index.ts${q}`,
-  );
+  return src.replace(/(['"])@vibetracker\/([a-z]+)\1/g, (_whole, q, pkg) => {
+    const entry = ENTRY.get(pkg);
+    if (!entry) throw new Error(`bilinmeyen paket: @vibetracker/${pkg}`);
+    rewritten.add(`${pkg}/${entry}`);
+    return `${q}${up}${pkg}/${entry}${q}`;
+  });
 }
 
 /** Directories inside a package that must travel — data files, not just code. */
@@ -150,6 +175,21 @@ const leftovers = [];
 if (leftovers.length > 0) {
   process.stderr.write(
     `Çözümlenmemiş paket adı kalan dosyalar:\n  ${leftovers.join('\n  ')}\n`,
+  );
+  process.exit(1);
+}
+
+// And every path a rewrite produced has to be a file that is actually here.
+//
+// The check above only asked whether any bare specifier survived; a rewrite
+// that pointed confidently at the wrong file passed it. That is how the desktop
+// package shipped a `vt mini` that could not start: `@vibetracker/daemon`
+// became `daemon/src/index.ts`, which resolves to nothing, and nothing said so
+// until the command was run on a user's machine.
+const missing = [...rewritten].filter((rel) => !existsSync(join(STAGE, 'packages', rel)));
+if (missing.length > 0) {
+  process.stderr.write(
+    `Var olmayan dosyayı gösteren içe aktarım:\n  ${missing.join('\n  ')}\n`,
   );
   process.exit(1);
 }

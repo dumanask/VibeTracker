@@ -119,11 +119,21 @@ fn spawn_daemon(app: &AppHandle) -> Option<Child> {
             return None;
         }
     }
+    run_cli(app, &["daemon"])
+}
+
+/// Run the bundled `vt` with the given arguments.
+///
+/// The same runtime the daemon runs on, because there is only one: the app
+/// carries a Node and the CLI's sources, and every subcommand is reachable
+/// from here without the user having installed anything.
+fn run_cli(app: &AppHandle, args: &[&str]) -> Option<Child> {
     let (node, entry) = runtime_paths(app)?;
     let mut cmd = Command::new(node);
-    cmd.arg("--no-warnings=ExperimentalWarning")
-        .arg(entry)
-        .arg("daemon");
+    cmd.arg("--no-warnings=ExperimentalWarning").arg(entry);
+    for a in args {
+        cmd.arg(a);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -131,6 +141,26 @@ fn spawn_daemon(app: &AppHandle) -> Option<Child> {
         cmd.creation_flags(0x0800_0000);
     }
     cmd.spawn().ok()
+}
+
+/// Open the sticky note.
+///
+/// The dashboard window and the note are two sizes of one board, and until now
+/// you could only get from the small one to the big one -- the note has had an
+/// arrow to the full dashboard since it was written, while the only route back
+/// was typing `vt mini` in a terminal. A tray app whose smaller surface is
+/// reachable only from a terminal has not really shipped it.
+///
+/// Nothing is tracked about it here. `vt mini` already refuses to open a second
+/// one and says which window is holding the place, and the note closes itself
+/// from its own ×, so a menu entry that only ever opens is the whole of it.
+fn open_note(app: &AppHandle) {
+    let app = app.clone();
+    // Spawned, like the panel: this runs on the event loop, and `vt mini`
+    // waits on a window handshake before it returns.
+    std::thread::spawn(move || {
+        let _ = run_cli(&app, &["mini"]);
+    });
 }
 
 fn health(rt: &Runtime) -> Option<()> {
@@ -242,8 +272,9 @@ fn main() {
             *child.lock().unwrap() = spawn_daemon(&handle);
 
             let open = MenuItem::with_id(app, "open", "Paneli aç", true, None::<&str>)?;
+            let note = MenuItem::with_id(app, "note", "Post-it", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Çık", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&open, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &note, &quit])?;
 
             let (tx, rx) = mpsc::channel::<u32>();
 
@@ -254,6 +285,7 @@ fn main() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => open_panel(app),
+                    "note" => open_note(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
