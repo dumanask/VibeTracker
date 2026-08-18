@@ -1,0 +1,243 @@
+name: ci
+
+# The matrix is not "all the platforms we can think of". Every job below exists
+# because of a specific way this tool can break on a machine we do not own, and
+# each one is cheap enough to keep. A job that never fails for a reason we
+# understand is a job worth deleting.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Node runs the TypeScript sources directly; the warnings are expected.
+  NODE_OPTIONS: --no-warnings=ExperimentalWarning
+
+jobs:
+  # ── the platforms users actually run on ──────────────────────────────────
+  test:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+        node: ['22.20', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: typecheck
+        run: pnpm typecheck
+      - name: test
+        run: pnpm test
+      # The fixture generator is the only way to exercise the readers on a
+      # machine with no agent installed — which is every CI runner.
+      - name: demo smoke
+        run: node packages/cli/src/index.ts demo --json > /dev/null
+        shell: bash
+      - name: probe precision is reported honestly
+        shell: bash
+        run: |
+          node packages/cli/src/index.ts demo --json \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+                const r=JSON.parse(s);
+                console.log(process.platform, r.probeKind, r.probePrecision);
+                const expected = {win32:'exact', linux:'exact', darwin:'second'}[process.platform];
+                if (expected && r.probePrecision !== expected) {
+                  console.error('beklenen hassasiyet ' + expected + ', gelen ' + r.probePrecision);
+                  process.exit(1);
+                }
+              })"
+
+  # ── musl: proves node:sqlite needs no prebuilt binary ────────────────────
+  alpine:
+    name: alpine (musl)
+    runs-on: ubuntu-latest
+    container: node:22-alpine
+    steps:
+      - uses: actions/checkout@v4
+      - run: apk add --no-cache git
+      - run: corepack enable && corepack prepare pnpm@9 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: node:sqlite opens a database without a native module
+        run: |
+          node -e "
+            const { DatabaseSync } = require('node:sqlite');
+            const db = new DatabaseSync(':memory:');
+            db.exec('CREATE TABLE t (a INTEGER)');
+            db.prepare('INSERT INTO t VALUES (?)').run(1);
+            console.log('musl ok:', db.prepare('SELECT COUNT(*) AS n FROM t').get().n);
+          "
+      - run: pnpm test
+
+  # ── the dotted/dotless I ────────────────────────────────────────────────
+  # `'I'.toLowerCase()` and `'İ'.toLowerCase()` disagree with every other
+  # locale under tr_TR. Folding must give the same answer everywhere, and the
+  # only way to know is to run under that locale.
+  tr-locale:
+    name: tr_TR locale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20'
+          cache: pnpm
+      - run: sudo locale-gen tr_TR.UTF-8 && sudo update-locale
+      - run: pnpm install --frozen-lockfile
+      - name: tests under tr_TR.UTF-8
+        env:
+          LANG: tr_TR.UTF-8
+          LC_ALL: tr_TR.UTF-8
+        run: pnpm test
+      - name: percent literal and folding survive the locale
+        env:
+          LANG: tr_TR.UTF-8
+          LC_ALL: tr_TR.UTF-8
+        run: |
+          node -e "
+            const { foldText } = require('./packages/core/src/index.ts');
+            const cases = [['İPTAL','iptal'],['IPTAL','iptal'],['ıptal','iptal'],['Aşama','asama']];
+            for (const [input, want] of cases) {
+              const got = foldText(input);
+              if (got !== want) { console.error(input + ' -> ' + got + ', beklenen ' + want); process.exit(1); }
+            }
+            console.log('tr-locale folding ok');
+          " --experimental-strip-types
+
+  # ── inotify exhaustion ──────────────────────────────────────────────────
+  # The watch limit varies from 8192 to 524288 across distributions. The policy
+  # is that polling is source-of-truth and watches are only an accelerator, so
+  # starving them must degrade rather than break.
+  inotify-starved:
+    name: inotify starved
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20'
+          cache: pnpm
+      - run: sudo sysctl -w fs.inotify.max_user_watches=128
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: node packages/cli/src/index.ts demo --json > /dev/null
+
+  # ── what actually ships ─────────────────────────────────────────────────
+  package:
+    name: tarball audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/pack.mjs
+      - name: nothing sensitive rides along
+        run: |
+          cd .pack
+          npm pack --dry-run --json > /tmp/pack.json
+          node -e "
+            const j = JSON.parse(require('fs').readFileSync('/tmp/pack.json','utf8'))[0];
+            const bad = j.files.filter(f => /credential|[.]env$|[.]pem$|id_rsa|[.]tgz$|[/]test[/]/i.test(f.path));
+            if (bad.length) { console.error('şüpheli dosyalar:', bad.map(f=>f.path)); process.exit(1); }
+            if (j.unpackedSize > 2 * 1024 * 1024) { console.error('paket çok büyük:', j.unpackedSize); process.exit(1); }
+            console.log(j.entryCount, 'dosya ·', (j.unpackedSize/1024).toFixed(0), 'KB');
+          "
+      - name: the tarball installs and runs
+        run: |
+          npm pack ./.pack --pack-destination /tmp
+          mkdir -p /tmp/probe && cd /tmp/probe && npm init -y > /dev/null
+          npm install /tmp/vibetracker-*.tgz
+          node node_modules/vibetracker/bin/vt.mjs --help | head -3
+          node node_modules/vibetracker/bin/vt.mjs --lang en demo --json > /dev/null
+      # Until a licence was chosen this step asserted the opposite -- that
+      # publishing was blocked. Apache-2.0 is chosen, so the question is no
+      # longer "is it blocked" but "does what ships carry the licence it claims".
+      # A package whose metadata says Apache-2.0 and whose tarball has no LICENSE
+      # in it is worse than one with no licence at all.
+      - name: the package carries the licence it claims
+        run: |
+          test -f .pack/LICENSE || { echo "LICENSE tarball'da yok"; exit 1; }
+          test -f .pack/NOTICE  || { echo "NOTICE tarball'da yok"; exit 1; }
+          node -e "
+            const p = require('./.pack/package.json');
+            if (p.license !== 'Apache-2.0') { console.error('lisans alanı:', p.license); process.exit(1) }
+            if (p.scripts && p.scripts.prepublishOnly) {
+              console.error('yayın engeli hâlâ duruyor'); process.exit(1)
+            }
+            console.log('lisans ok:', p.license);
+          "
+          head -2 .pack/LICENSE | grep -qi 'Apache License' || { echo "LICENSE metni Apache değil"; exit 1; }
+
+  # ── translation coverage is a gate, not an intention ────────────────────
+  i18n:
+    name: i18n coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test "packages/core/test/i18n-coverage.test.ts"
+      - run: node --test "packages/core/test/source-hygiene.test.ts"
+
+  # ── the desktop shell still compiles ────────────────────────────────────
+  # Only a `cargo check`, and only on Linux. A full three-platform bundle costs
+  # twenty minutes and belongs in release.yml; what this catches is the thing
+  # that actually breaks -- Rust that stopped compiling because a dependency
+  # moved -- and it catches it on the push that caused it.
+  desktop:
+    name: desktop shell
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: webkitgtk and the tray backend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev build-essential libssl-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20'
+      # tauri-build reads tauri.conf.json and the icons at compile time, so both
+      # have to exist before `cargo check` runs.
+      - run: node scripts/make-icon.mjs
+      - run: node scripts/desktop-stage.mjs
+      - name: the staged runtime is a working CLI, not just files
+        run: |
+          ./packages/desktop/src-tauri/runtime/node \
+            --no-warnings=ExperimentalWarning \
+            packages/desktop/src-tauri/runtime/packages/cli/src/index.ts \
+            --lang en demo --json > /dev/null
+          echo "staged runtime ok"
+      - run: cargo check --release --manifest-path packages/desktop/src-tauri/Cargo.toml

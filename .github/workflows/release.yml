@@ -1,0 +1,178 @@
+name: release
+
+# Desktop builds, one per platform, on the platform.
+#
+# Tauri does not cross-compile in any way worth relying on: the bundle format,
+# the icon container, the webview binding and the signing story are all
+# per-platform. So this is not a convenience — it is the only way macOS and
+# Linux artifacts exist at all, and the only place they get tested, because the
+# machine this was written on runs Windows.
+#
+# Nothing here signs anything yet. Unsigned builds raise SmartScreen on Windows
+# and are refused by Gatekeeper on macOS without a right-click; that is stated
+# in the release notes rather than papered over. Signing needs certificates,
+# which need an identity and a paid programme, and both are the maintainer's
+# decision to make.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Derle ama yayın oluşturma'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  NODE_OPTIONS: --no-warnings=ExperimentalWarning
+
+jobs:
+  # The npm package first. It is the artifact most people will actually use, it
+  # takes a minute, and there is no point building three desktop bundles for a
+  # commit whose tests do not pass.
+  npm:
+    name: npm paketi
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.20', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: paketle
+        run: node scripts/pack.mjs
+      - name: lisans gerçekten pakette mi
+        run: |
+          test -f .pack/LICENSE || { echo "LICENSE eksik"; exit 1; }
+          test -f .pack/NOTICE  || { echo "NOTICE eksik";  exit 1; }
+          node -e "
+            const p = require('./.pack/package.json');
+            if (p.license !== 'Apache-2.0') { console.error('lisans:', p.license); process.exit(1) }
+            if (p.scripts && p.scripts.prepublishOnly) { console.error('yayın hâlâ engelli'); process.exit(1) }
+            if (Object.keys(p.dependencies || {}).length) { console.error('bağımlılık var'); process.exit(1) }
+          "
+      - name: tarball
+        run: cd .pack && npm pack --pack-destination ..
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarball
+          path: '*.tgz'
+
+  desktop:
+    name: ${{ matrix.name }}
+    needs: npm
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: 'Windows', args: '' }
+          - { os: macos-latest, name: 'macOS (Apple Silicon)', args: '--target aarch64-apple-darwin' }
+          - { os: macos-13, name: 'macOS (Intel)', args: '--target x86_64-apple-darwin' }
+          - { os: ubuntu-22.04, name: 'Linux', args: '' }
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri's Linux backend is WebKitGTK, and the packagers for .deb and
+      # AppImage are separate tools. None of this is needed on the other two.
+      - name: linux bağımlılıkları
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            build-essential curl wget file libssl-dev libayatana-appindicator3-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin' || matrix.os == 'macos-13' && 'x86_64-apple-darwin' || '' }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: packages/desktop/src-tauri
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22.20', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      # The icons are generated, not committed as binaries — see
+      # scripts/make-icon.mjs for why. So they have to exist before the bundler
+      # looks for them.
+      - name: simgeler
+        run: node scripts/make-icon.mjs
+
+      # The runtime that gets bundled is whichever Node this job set up, so the
+      # artifact carries the same version the tests just ran against — and, on
+      # each platform, that platform's binary. This is the step that cannot be
+      # done anywhere but here.
+      - name: çalışma zamanını hazırla
+        run: node scripts/desktop-stage.mjs
+
+      - name: derle
+        working-directory: packages/desktop
+        run: pnpm exec tauri build ${{ matrix.args }}
+
+      - name: taşınan çalışma zamanı doğru platformun mu
+        shell: bash
+        run: |
+          node -e "
+            const { readdirSync, statSync } = require('node:fs');
+            const dir = 'packages/desktop/src-tauri/runtime';
+            const names = readdirSync(dir);
+            const bin = names.find(n => n === 'node' || n === 'node.exe');
+            if (!bin) { console.error('çalışma zamanı yok:', names); process.exit(1) }
+            const mb = statSync(dir + '/' + bin).size / 1e6;
+            console.log(process.platform, bin, mb.toFixed(1) + ' MB');
+            if (mb < 20) { console.error('çalışma zamanı şüpheli derecede küçük'); process.exit(1) }
+          "
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            packages/desktop/src-tauri/target/**/release/bundle/nsis/*-setup.exe
+            packages/desktop/src-tauri/target/**/release/bundle/dmg/*.dmg
+            packages/desktop/src-tauri/target/**/release/bundle/deb/*.deb
+            packages/desktop/src-tauri/target/**/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+
+  publish:
+    name: yayın taslağı
+    needs: [npm, desktop]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: taslak yayın
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: dist/**/*
+          body: |
+            ## Kurulum
+
+            **Node kullananlar için** — `npm i -g vibetracker`, sonra `vt init`.
+
+            **Masaüstü uygulaması** — kendi platformunun paketini indir. Node
+            gerekmiyor: paket kendi çalışma zamanını taşıyor.
+
+            ### Bu paketler imzalı değil
+
+            Windows SmartScreen uyarısı gösterecek ("Daha fazla bilgi" →
+            "Yine de çalıştır"). macOS Gatekeeper doğrudan açtırmayacak; sağ
+            tık → Aç gerekiyor. Kod imzalama sertifikası gerektiriyor ve henüz
+            alınmadı — bu, dürüstçe söylenmesi gereken bir eksik, gizlenecek
+            bir şey değil.
+
+            Paketin ne yaptığını doğrulamak istersen: kaynak Apache-2.0 ve
+            uygulamanın taşıdığı kod, derlenmiş değil, okunabilir hâlde
+            `resources/runtime/` altında duruyor.

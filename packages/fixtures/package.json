@@ -1,0 +1,14 @@
+{
+  "name": "@vibetracker/fixtures",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@vibetracker/shared": "workspace:*",
+    "@vibetracker/engine": "workspace:*",
+    "@vibetracker/platform": "workspace:*"
+  }
+}

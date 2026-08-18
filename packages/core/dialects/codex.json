@@ -1,0 +1,66 @@
+{
+  "_note": "Codex rollout shapes. Read off 231 real rollout files on a machine running 0.146.1, tail-surveyed rather than taken from one conversation: a single session only exercises the tools it happened to use. Keys are 'type/payload.type' because Codex nests the discriminator one level down.",
+  "dialectVersion": 1,
+  "agent": "codex",
+  "appliesTo": "*",
+
+  "entryTypes": {
+    "session_meta": "ignore",
+    "turn_context": "ignore",
+    "world_state": "ignore",
+    "event_msg/user_message": "message",
+    "event_msg/agent_message": "message",
+    "event_msg/task_started": "message",
+    "event_msg/task_complete": "message",
+    "event_msg/turn_aborted": "message",
+    "event_msg/token_count": "ignore",
+    "event_msg/thread_settings_applied": "ignore",
+    "event_msg/exec_command_begin": "ignore",
+    "event_msg/exec_command_end": "ignore",
+    "event_msg/patch_apply_begin": "ignore",
+    "event_msg/patch_apply_end": "ignore",
+    "event_msg/mcp_tool_call_begin": "ignore",
+    "event_msg/mcp_tool_call_end": "ignore",
+    "event_msg/web_search_begin": "ignore",
+    "event_msg/web_search_end": "ignore",
+    "event_msg/error": "ignore",
+    "event_msg/stream_error": "ignore",
+    "event_msg/agent_reasoning": "ignore",
+    "event_msg/agent_reasoning_delta": "ignore",
+    "event_msg/agent_message_delta": "ignore",
+    "response_item/message": "ignore",
+    "response_item/reasoning": "ignore",
+    "response_item/function_call": "ignore",
+    "response_item/function_call_output": "ignore",
+    "response_item/custom_tool_call": "ignore",
+    "response_item/custom_tool_call_output": "ignore",
+    "response_item/local_shell_call": "ignore",
+    "response_item/local_shell_call_output": "ignore",
+    "response_item/web_search_call": "ignore",
+    "compacted": "ignore"
+  },
+
+  "fields": {
+    "type": "type",
+    "subtype": "payload.type",
+    "timestamp": "timestamp",
+    "sessionId": "payload.session_id",
+    "cwd": "payload.cwd",
+    "version": "payload.cli_version",
+    "originator": "payload.originator"
+  },
+
+  "content": {
+    "_note": "Codex pairs a call to its output by call_id. Two families do it: function_call/function_call_output and custom_tool_call/custom_tool_call_output. The event_msg *_end records carry the same call_id and are treated as closing too, because a tool whose end event arrived is not open however its output was recorded.",
+    "toolUse": "function_call,custom_tool_call,local_shell_call,web_search_call",
+    "toolResult": "function_call_output,custom_tool_call_output,local_shell_call_output,exec_command_end,patch_apply_end,mcp_tool_call_end,web_search_end",
+    "toolUseId": "payload.call_id",
+    "toolResultId": "payload.call_id",
+    "toolName": "payload.name"
+  },
+
+  "sessions": {
+    "_note": "One file per session, laid out by date. There is no registry and no pid anywhere in the file, which is why the adapter reports liveProcess:false and falls back to a recency window it declares.",
+    "path": "sessions/<YYYY>/<MM>/<DD>/rollout-*.jsonl"
+  }
+}

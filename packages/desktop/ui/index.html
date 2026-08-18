@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="referrer" content="no-referrer" />
+<title>VibeTracker</title>
+<!--
+  The shell's only local page.
+
+  It is not the dashboard. The dashboard is the daemon's, served over loopback,
+  and this window navigates to it — one renderer, not two. This page is what is
+  left when there is nothing to navigate to yet: the daemon is still starting,
+  or it failed to. Saying so beats a white rectangle.
+-->
+<style>
+  :root { color-scheme: dark; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #14171e; color: #98a0b0;
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: grid; place-items: center; text-align: center; padding: 2rem;
+  }
+  .rows { display: grid; gap: 7px; justify-items: start; margin: 0 auto 1.5rem; width: 74px; }
+  .r { height: 9px; border-radius: 5px; background: #3a4150; }
+  .r.a { width: 46px; }
+  .r.b { width: 68px; background: #38d9d9; animation: pulse 1.6s ease-in-out infinite; }
+  .r.c { width: 34px; }
+  @keyframes pulse { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+  h1 { color: #e6e8ee; font-size: 15px; font-weight: 600; margin: 0 0 .4rem; }
+  code { color: #7aa7ff; }
+</style>
+<div>
+  <div class="rows"><div class="r a"></div><div class="r b"></div><div class="r c"></div></div>
+  <h1>Daemon başlatılıyor…</h1>
+  <p>Pano hazır olduğunda bu pencere ona geçer.<br />
+     Açılmazsa tepsi simgesinden <b>Paneli aç</b>, ya da terminalden <code>vt doctor</code>.</p>
+</div>

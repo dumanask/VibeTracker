@@ -1,0 +1,1001 @@
+<!doctype html>
+<html lang="__VT_LANG__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>VibeTracker</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg:#fff; --fg:#16181d; --muted:#5b6270; --line:#e3e6ec; --card:#f7f8fa; --raise:#fff;
+    --busy:#1f8b4c; --wait:#2563c9; --perm:#c3311f; --warn:#9a6300; --idle:#6b7280;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f1116; --fg:#e6e8ee; --muted:#98a0b0; --line:#262a33; --card:#161922; --raise:#1c2029;
+      --busy:#4ade80; --wait:#7aa7ff; --perm:#ff8a75; --warn:#ffc266; --idle:#8b93a3;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 18px 72px; }
+
+  header { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
+  .conn { font-size:12px; font-family:var(--mono); padding:2px 9px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); }
+  .conn.live { color:var(--busy); border-color:currentColor; }
+  .conn.down { color:var(--perm); border-color:currentColor; }
+  .meta { color:var(--muted); font-size:12px; font-family:var(--mono); margin-top:4px; }
+
+  .stats { display:flex; flex-wrap:wrap; gap:6px 22px; margin:18px 0 6px; }
+  .stat b { font-size:23px; font-weight:650; letter-spacing:-.02em; }
+  .stat span { color:var(--muted); font-size:12.5px; margin-inline-start:6px; }
+  .stat.alert b { color:var(--perm); }
+
+  .caps { display:flex; flex-wrap:wrap; gap:5px; margin:12px 0 4px; }
+  .cap { font-size:11px; font-family:var(--mono); padding:2px 8px; border-radius:999px;
+    border:1px solid var(--line); color:var(--muted); cursor:help; }
+  .cap.ok { color:var(--busy); } .cap.bad { color:var(--warn); border-color:var(--warn); }
+
+  .warn { border-inline-start:3px solid var(--warn); background:var(--card);
+    padding:9px 13px; margin:7px 0; border-radius:0 6px 6px 0; font-size:13px; }
+
+  h2 { font-size:11.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
+    margin:32px 0 10px; font-weight:600; }
+
+  .waiting { display:grid; gap:8px; }
+  .wrow { display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:9px;
+    background:var(--card); border:1px solid var(--line); border-inline-start-width:3px; }
+  .wrow.u3 { border-inline-start-color:var(--perm); }
+  .wrow.u2 { border-inline-start-color:var(--warn); }
+  .wrow.u1 { border-inline-start-color:var(--wait); }
+  .wrow .proj { font-weight:600; min-width:130px; }
+  .wrow .sess { font-family:var(--mono); font-size:12px; color:var(--muted); min-width:160px; }
+  .wrow .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    color:var(--muted); font-size:13px; }
+  .dwell { font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap; }
+
+  .card { border:1px solid var(--line); border-radius:11px; background:var(--card);
+    padding:14px 16px; margin:11px 0; }
+  .card h3 { margin:0 0 2px; font-size:16px; display:flex; align-items:center; gap:9px;
+    flex-wrap:wrap; }
+  .pid { font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:400; }
+  .flag { font-size:10.5px; padding:1px 7px; border-radius:999px; border:1px solid var(--warn);
+    color:var(--warn); }
+  .ws { font-family:var(--mono); font-size:11.5px; color:var(--muted); margin:6px 0 0;
+    overflow-x:auto; white-space:nowrap; }
+  .sess-row { display:flex; align-items:center; gap:10px; padding:7px 0; flex-wrap:wrap;
+    border-top:1px solid var(--line); margin-top:8px; }
+  .sess-row:first-of-type { border-top:none; }
+  .sess-name { font-family:var(--mono); font-size:12px; min-width:170px; }
+  .chip { font-size:11px; font-family:var(--mono); padding:2px 8px; border-radius:999px;
+    border:1px solid currentColor; white-space:nowrap; }
+  .chip.unsure { border-style:dashed; opacity:.72; }
+  /* Filled = measured from hooks, hollow = inferred. Same shape so the eye
+     compares them, different fill so it can tell them apart at a glance. */
+  /* Which agent produced a row. Drawn only when it is not the default one:
+     a badge on every session would be a column of the same word, and the
+     interesting case is the exception. */
+  .agent { font-size:10px; letter-spacing:.02em; padding:1px 5px; border-radius:3px;
+           background:var(--card); color:var(--muted); margin-right:4px;
+           border:1px solid var(--line); white-space:nowrap; }
+  .prec { font-size:10px; margin-right:4px; cursor:default; }
+  .prec.hooked { color:var(--busy); }
+  .prec.passive { color:var(--muted); }
+  .sub { font-size:10.5px; font-family:var(--mono); margin-left:5px; color:var(--muted);
+         border:1px solid var(--line); border-radius:999px; padding:1px 6px; }
+  /* Progress. A counted number and an inferred one are drawn differently on
+     purpose: same bar, different fill, so the eye can compare them without
+     being told they are equally solid. */
+  .prog { display:flex; align-items:center; gap:9px; margin:7px 0 2px; flex-wrap:wrap; }
+  .phase { font-size:11.5px; font-family:var(--mono); padding:2px 9px; border-radius:999px;
+           border:1px solid var(--line); background:var(--raise); }
+  .bar { flex:0 0 132px; height:7px; border-radius:999px; background:var(--line);
+         overflow:hidden; border:1px solid transparent; }
+  .bar > i { display:block; height:100%; background:var(--busy); }
+  .bar.approx { border-color:var(--line); background:transparent; }
+  .bar.approx > i { background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px); }
+  .bar.none { border:1px dashed var(--line); background:transparent; }
+  .pct { font-size:12px; font-family:var(--mono); min-width:46px; }
+  .prov { font-size:10.5px; color:var(--muted); }
+  .drift { font-size:10.5px; padding:1px 7px; border-radius:999px;
+           border:1px solid var(--perm); color:var(--perm); }
+  .noprog { font-size:10.5px; color:var(--muted); font-style:italic; }
+  .s-BUSY{color:var(--busy)} .s-WAITING_INPUT{color:var(--wait)}
+  .s-WAITING_PERMISSION{color:var(--perm)} .s-STALLED,.s-ERRORED{color:var(--warn)}
+  .s-ORPHANED,.s-ENDED,.s-STARTING,.s-UNKNOWN{color:var(--idle)}
+  .ev { font-family:var(--mono); font-size:11px; color:var(--muted); flex-basis:100%;
+    opacity:.85; }
+  .title { font-size:13px; color:var(--fg); opacity:.8; flex:1; min-width:0;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .empty { color:var(--muted); font-style:italic; }
+  .boardbtn { background:none; border:1px solid var(--line); color:var(--muted);
+    font:inherit; font-size:11px; padding:2px 9px; border-radius:999px; cursor:pointer;
+    margin:2px 0 6px; }
+  .boardbtn:hover { color:var(--fg); border-color:var(--muted); }
+  .board { font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    border-left:2px solid var(--line); padding:6px 0 6px 10px; margin:0 0 8px; }
+  .board .row { white-space:pre; }
+  .board .rung { color:var(--fg); }
+  .board .done { color:var(--ok-ish, #7ec699); }
+  .board .after { color:var(--warn); }
+  .board .note { font-family:var(--sans, inherit); font-style:italic; margin-top:4px; }
+  footer { margin-top:44px; color:var(--muted); font-size:11.5px; border-top:1px solid var(--line);
+    padding-top:12px; }
+
+  /* ── the compact list ──────────────────────────────────────────────────
+     One row per project: who, what its agents are doing, how far it has got.
+     A grid rather than flexbox so the columns line up down the whole list —
+     a ragged left edge is what makes twelve rows unreadable. */
+  .plist { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .prow { display:grid; align-items:center; gap:10px; width:100%; text-align:start;
+    grid-template-columns:16px minmax(0,1fr) 54px 96px 96px 56px 78px 52px;
+    padding:9px 13px; background:var(--card); border:0; border-top:1px solid var(--line);
+    color:inherit; font:inherit; cursor:pointer; }
+  .prow:first-child { border-top:0; }
+  .prow:hover { background:var(--raise); }
+  .prow:focus-visible { outline:2px solid var(--wait); outline-offset:-2px; }
+  .prow .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prow .ag { font-size:12px; font-family:var(--mono); white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .prow .xy { font-size:11.5px; font-family:var(--mono); color:var(--muted); text-align:end; }
+  .prow .pc { font-size:12px; font-family:var(--mono); text-align:end; }
+  /* Colour follows the cell, not the row. Waiting is always the waiting
+     colour and running always the running one, so a project doing both reads
+     as doing both instead of taking one colour for the whole line. */
+  .prow .ag.wait { color:var(--wait); }
+  .prow.u3 .ag.wait { color:var(--perm); font-weight:600; }
+  .prow .ag.run { color:var(--busy); }
+  .prow .ag.wait.off, .prow .ag.run.off { color:var(--muted); font-weight:400; }
+  /* The last half hour. Minutes nobody watched are simply not drawn, which
+     is why this is a polyline with breaks rather than an area chart: a filled
+     shape has to sit on a floor, and inventing that floor is the one thing
+     this picture must not do. */
+  .prow .spark { display:block; width:54px; height:16px; overflow:visible; }
+  .prow .spark path { fill:none; stroke-width:1.4; stroke-linejoin:round;
+    stroke:var(--muted); opacity:.5; }
+  .prow.waiting .spark path { stroke:var(--wait); opacity:1; }
+  .prow.u3 .spark path { stroke:var(--perm); }
+  .prow.running .spark path { stroke:var(--busy); opacity:1; }
+  .prow .spark .flat { stroke-dasharray:2 3; opacity:.5; stroke:var(--line); }
+  body[data-mini] .prow .spark { display:none; }
+
+  /* ── fleet load ────────────────────────────────────────────────────────
+     Of the sessions alive right now, what share is engaged. Deliberately not
+     an average of the progress bars below it: a plan that grows makes that
+     number fall while work is being done. Two colours in one bar, because
+     "everything is running" and "everything is blocked" are the same load and
+     opposite situations. */
+  .load { display:flex; align-items:center; gap:10px; margin:10px 0 0;
+    font-size:11.5px; font-family:var(--mono); color:var(--muted); }
+  .load .track { flex:1; height:7px; border-radius:4px; background:var(--raise);
+    display:flex; overflow:hidden; }
+  .load .track.none { background:none; border:1px dotted var(--line); }
+  .load .run { background:var(--busy); }
+  .load .wait { background:var(--wait); }
+  .load .pc { color:var(--fg); min-width:38px; text-align:end; }
+  body[data-mini] .load { display:none; }
+
+  .prow .why { grid-column:2 / -1; font-size:11px; color:var(--muted);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:-2px; }
+
+  .backbtn { background:none; border:1px solid var(--line); color:var(--muted); font:inherit;
+    font-size:12px; padding:3px 11px; border-radius:999px; cursor:pointer; margin:0 0 12px; }
+  .backbtn:hover { color:var(--fg); border-color:var(--muted); }
+
+  /* ── choosing what to follow ───────────────────────────────────────── */
+  .pickwrap { margin:10px 0 0; }
+  .pick { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line);
+    border-radius:9px; padding:9px 12px; background:var(--card); margin-top:8px; }
+  .pick label { display:flex; align-items:center; gap:9px; font-size:13px; padding:3px 0;
+    cursor:pointer; }
+  .pick .pid { margin-inline-start:auto; }
+  .pickbar { display:flex; gap:8px; align-items:center; margin-top:9px; }
+  .pickbar button { font:inherit; font-size:12px; padding:3px 12px; border-radius:999px;
+    border:1px solid var(--line); background:var(--raise); color:var(--fg); cursor:pointer; }
+  .pickbar button:hover { border-color:var(--muted); }
+  .pickbar .msg { font-size:11.5px; color:var(--muted); }
+
+  /* ── pinned mode ───────────────────────────────────────────────────────
+     Same page, same data, less of it. Everything explanatory is dropped
+     because the window is two centimetres tall and sits over other work; what
+     survives is the answer to "is anything waiting for me". */
+  body[data-mini] { font-size:13px; }
+  body[data-mini] .wrap { padding:0; max-width:none; }
+  body[data-mini] header, body[data-mini] .meta, body[data-mini] .stats,
+  body[data-mini] .caps, body[data-mini] footer, body[data-mini] #warnings,
+  body[data-mini] h2, body[data-mini] #waitingWrap, body[data-mini] .pickwrap { display:none; }
+  body[data-mini] .plist { border-radius:0; border:0; }
+  /* One column per cell the row actually emits. Declaring four for a
+     six-cell row pushed the percentage onto a wrapped second line under the
+     project name — which is exactly where it showed up. */
+  body[data-mini] .prow { grid-template-columns:14px minmax(0,1fr) 72px 64px 44px 40px;
+    padding:5px 9px; gap:7px; font-size:12.5px; }
+  body[data-mini] .prow .bar, body[data-mini] .prow .why { display:none; }
+  body[data-mini] .minibar { display:flex; }
+  /* The strip is the only chrome left: a drag handle and the one number that
+     justifies the window being on top of everything else. */
+  .minibar { display:none; align-items:center; gap:8px; padding:4px 9px;
+    border-bottom:1px solid var(--line); background:var(--raise);
+    font-size:11.5px; font-family:var(--mono); color:var(--muted);
+    position:sticky; top:0; -webkit-app-region:drag; app-region:drag; }
+  .minibar b { color:var(--perm); }
+  .minibar .sp { margin-inline-start:auto; -webkit-app-region:no-drag; app-region:no-drag; }
+  .minibar a { color:var(--muted); text-decoration:none; border:1px solid var(--line);
+    border-radius:999px; padding:1px 8px; -webkit-app-region:no-drag; app-region:no-drag; }
+  .minibar a:hover { color:var(--fg); }
+</style>
+</head>
+<body>
+<div class="minibar" id="minibar">
+  <span id="miniCount"></span>
+  <span class="sp"></span>
+  <a href="#" id="miniFull" data-tr="tam görünüm">tam görünüm</a>
+</div>
+<div class="wrap">
+  <header>
+    <h1>VibeTracker</h1>
+    <span class="conn" id="conn" data-tr="bağlanıyor…">bağlanıyor…</span>
+  </header>
+  <div class="meta" id="meta"></div>
+
+  <div class="load" id="load"></div>
+  <div class="stats" id="stats"></div>
+  <div class="caps" id="caps"></div>
+  <div id="warnings"></div>
+
+  <div id="waitingWrap" hidden>
+    <h2 data-tr="Seni bekleyenler">Seni bekleyenler</h2>
+    <div class="waiting" id="waiting"></div>
+  </div>
+
+  <div id="listView">
+    <h2 data-tr="Projeler">Projeler</h2>
+    <div class="plist" id="projects"></div>
+    <div class="pickwrap">
+      <button class="backbtn" id="pickToggle" data-tr="izlenecekleri seç">izlenecekleri seç</button>
+      <div class="pick" id="pick" hidden></div>
+    </div>
+  </div>
+
+  <div id="detailView" hidden>
+    <button class="backbtn" id="back" data-tr="← tüm projeler">← tüm projeler</button>
+    <div id="detail"></div>
+  </div>
+
+  <footer>
+    <span data-tr="Canlı — sunucu itiyor, sayfa yenilemeye gerek yok.">Canlı — sunucu itiyor, sayfa yenilemeye gerek yok.</span>
+    <span data-tr="VibeTracker hiçbir projene yazmaz ve hiçbir ajanla konuşmaz.">VibeTracker hiçbir projene yazmaz ve hiçbir ajanla konuşmaz.</span>
+    <span data-tr="Anthropic, OpenAI, Google, Microsoft veya Cursor ile ilişkili değildir.">Anthropic, OpenAI, Google, Microsoft veya Cursor ile ilişkili değildir.</span>
+  </footer>
+</div>
+
+<script>
+const TOKEN = '__VT_TOKEN__';
+
+/**
+ * Get the token out of the address bar, immediately.
+ *
+ * A link is the only way to hand a browser a credential, so `vt daemon` prints
+ * `?t=<token>` and that is unavoidable. What is avoidable is it *staying*
+ * there: the query string becomes the window title, the history entry, the
+ * "recently closed" list, and — the reason this got noticed — whatever is in
+ * frame when the window is screenshotted or shared. The page already has the
+ * token inlined by the server, so the query has done its job before this line
+ * runs and nothing below ever reads it.
+ *
+ * `replaceState` rather than `pushState`: a back button that walks you into a
+ * URL carrying the token would undo the whole point. The hash survives,
+ * because `#mini` is a view preference and not a secret.
+ */
+try {
+  if (location.search) history.replaceState(null, '', location.pathname + location.hash);
+} catch (e) { /* file:// or a locked-down embedder — the page still works */ }
+
+/**
+ * Translation, mirroring packages/core/src/i18n.ts: the Turkish source text is
+ * the key, and a missing entry falls back to a real sentence rather than to an
+ * identifier. The catalog is inlined by the daemon so the page makes no extra
+ * request and works when opened from a restart before any scan completes.
+ */
+const I18N = "__VT_I18N__";
+const tr = (s) => (typeof I18N === 'object' && I18N[s]) || s;
+function t(strings, ...values) {
+  let key = strings[0];
+  for (let i = 1; i < strings.length; i++) key += '{' + (i - 1) + '}' + strings[i];
+  const template = tr(key);
+  return template.replace(/\{(\d+)\}/g, (whole, d) => {
+    const v = values[Number(d)];
+    return v === undefined ? whole : String(v);
+  });
+}
+/** Phrases from the engine: {key, args}, translated and interpolated here. */
+function say(p) {
+  if (!p) return '';
+  if (typeof p === 'string') return p;
+  return tr(p.key).replace(/\{(\d+)\}/g, (whole, d) => {
+    const v = p.args[Number(d)];
+    if (v === undefined) return whole;
+    return (v && typeof v === 'object' && v.key) ? say(v) : String(v);
+  });
+}
+/** Static markup carries its own key in data-tr. */
+function translateStatic() {
+  for (const el of document.querySelectorAll('[data-tr]')) el.textContent = tr(el.dataset.tr);
+}
+const CONFIDENT = 0.7;
+const GLYPH = { STARTING:'◌', BUSY:'▶', WAITING_PERMISSION:'●', WAITING_INPUT:'⏸',
+                STALLED:'⚠', ERRORED:'✖', ENDED:'·', ORPHANED:'×', UNKNOWN:'?' };
+
+// Units must be unambiguous within a language: `9sa 36dk` once rendered as
+// `9s 36dk`, which reads as nine seconds. They are looked up rather than
+// translated as whole strings — an age appears on nearly every line, and a
+// catalog entry per duration would be thousands of keys for four words.
+const U = { s: tr('sn'), m: tr('dk'), h: tr('sa'), d: tr('g') };
+
+// Turkish writes the sign first (%99), English last (99%). The number is the
+// message here, so the sign has to move around it rather than be a catalog
+// entry of its own.
+const PCT_FIRST = tr('%{0}') !== '%{0}';
+function fmtPercent(v, approximate) {
+  const tilde = approximate ? '~' : '';
+  return PCT_FIRST ? tilde + v + '%' : tilde + '%' + v;
+}
+
+// Mirrors sinceMs() in core: a timestamp slightly in the future is a session
+// that wrote while the scan was still running, not a broken clock. Fold it to
+// zero; anything further ahead than a scan could explain keeps its '?'.
+const FUTURE_TOLERANCE_MS = 90000;
+function sinceMs(now, at) {
+  const d = now - at;
+  return d < 0 && d > -FUTURE_TOLERANCE_MS ? 0 : d;
+}
+
+function fmtAge(ms) {
+  if (!isFinite(ms) || ms < 0) return '?';
+  const s = Math.floor(ms/1000);
+  if (s < 60) return s + U.s;
+  const m = Math.floor(s/60);
+  if (m < 60) return m + U.m + ' ' + (s%60) + U.s;
+  const h = Math.floor(m/60);
+  if (h < 24) return h + U.h + ' ' + (m%60) + U.m;
+  return Math.floor(h/24) + U.d + ' ' + (h%24) + U.h;
+}
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const needsYou = st =>
+  st==='WAITING_PERMISSION'||st==='WAITING_INPUT'||st==='STALLED'||st==='ERRORED';
+const urgency = st =>
+  st==='WAITING_PERMISSION'?3 : (st==='STALLED'||st==='ERRORED')?2 : st==='WAITING_INPUT'?1 : 0;
+
+let report = null;
+
+function chip(s) {
+  const unsure = s.confidence < CONFIDENT;
+  const tool = s.openTools?.[0] ? ' ' + esc(s.openTools[0]) : '';
+  const label = esc(s.state) + (unsure ? '?' : '') + tool;
+  const how = s.hooked ? tr('hook (ölçüldü)') : tr('pasif (çıkarım)');
+  return `<span class="chip s-${esc(s.state)}${unsure?' unsure':''}" title="${tr('güven')} ${s.confidence.toFixed(2)} · ${how}">${label}</span>`;
+}
+
+// A measured state and an inferred one must never look the same. The dot marks
+// sessions whose state came from hook events; everything else is our best
+// reading of a transcript, and the difference matters most exactly when the
+// screen says WAITING_PERMISSION.
+/**
+ * A session's name.
+ *
+ * The pid is appended because the agent's own names are not unique -- two
+ * sessions in one project were observed sharing `agentworld-43`, one live and
+ * one whose pid had been recycled. But Codex and opencode publish no pid at
+ * all, and a trailing `·0` would suggest there was something to tell apart.
+ */
+function sessionName(s) {
+  const base = s.name || s.sessionId.slice(0, 8);
+  return s.pid > 0 ? base + '·' + s.pid : base;
+}
+
+/**
+ * The agent badge.
+ *
+ * Absent for Claude Code, and that asymmetry is deliberate: it is the agent
+ * whose reader is the scan itself, the one every other row is compared against,
+ * and labelling all of them would turn a signal into wallpaper. What the badge
+ * says is "this row came from somewhere else, and here is where".
+ */
+function agentBadge(s) {
+  const kind = s.agentKind;
+  if (!kind || kind === 'claude-code') return '';
+  return `<span class="agent" title="${tr('bu oturumu okuyan adaptör')}">${esc(kind)}</span>`;
+}
+
+function precision(s) {
+  return s.hooked
+    ? `<span class="prec hooked" title="${tr('durum hook olaylarından geliyor — ölçüm')}">◆</span>`
+    : `<span class="prec passive" title="${tr('durum transcript ve süreç ağacından çıkarıldı — tahmin')}">◇</span>`;
+}
+
+/**
+ * The progress row.
+ *
+ * Three visual states, never blurred together: a solid bar for a number
+ * counted from explicit items, a hatched bar with `~` for one inferred from
+ * ladder position, and an empty dashed channel with `—` plus the reason when
+ * we refused to produce one. Drawing "we do not know" in the same language as
+ * "we counted 8 of 13" is how a dashboard starts lying.
+ */
+function progressRow(p) {
+  if (!p) return '';
+  const bits = [];
+  if (p.phase) {
+    const total = p.phase.total > p.phase.ordinal ? ' / ' + p.phase.total : '';
+    const sub = p.phase.sub ? ' · ' + esc(p.phase.sub) : '';
+    bits.push(`<span class="phase" title="kaynak: ${esc(p.phase.basis)}">${esc(p.phase.labelRaw)}${total}${sub}</span>`);
+  }
+  if (!p.phase && p.phaseSuppressed) bits.push(`<span class="noprog">${esc(say(p.phaseSuppressed))}</span>`);
+  if (p.percent !== null && p.percent !== undefined) {
+    const cls = p.approximate ? 'bar approx' : 'bar';
+    bits.push(`<span class="${cls}"><i style="width:${Math.max(0, Math.min(100, p.percent))}%"></i></span>`);
+    bits.push(`<span class="pct">${fmtPercent(p.percent, p.approximate)}</span>`);
+  } else {
+    bits.push('<span class="bar none"></span><span class="pct">—</span>');
+    if (p.percentSuppressed) bits.push(`<span class="noprog">${esc(say(p.percentSuppressed))}</span>`);
+  }
+  for (const d of p.drift || []) {
+    bits.push(`<span class="drift" title="${esc(say(d.evidence))}">${esc(say(d.claim))}</span>`);
+  }
+  if (p.provenance) bits.push(`<span class="prov">${esc(say(p.provenance))}</span>`);
+  const next = p.nextAction
+    ? `<div class="prov">${t`sonraki: ${esc(p.nextAction.slice(0, 160))}`}</div>` : '';
+  return `<div class="prog">${bits.join('')}</div>${next}`;
+}
+
+function subagentBadge(s) {
+  return s.subagents ? `<span class="sub" title="${tr('çalışan alt-ajan')}">⑂${s.subagents}</span>` : '';
+}
+
+// Dwell is measured from when the state began, not from the last transcript
+// write — that is the number a human actually wants ("waiting 41 minutes").
+function dwellOf(s, now) {
+  const from = s.stateSince ?? s.lastActivityAt;
+  return from ? fmtAge(sinceMs(now, from)) : '—';
+}
+
+function render() {
+  if (!report) return;
+  const now = Date.now();
+  const c = report.counts;
+
+  document.getElementById('meta').textContent =
+    new Date(report.generatedAt).toLocaleTimeString() + ' · ' + report.platform +
+    ' · ' + report.probeKind + ' (' + report.probePrecision + ') · ' + report.claudeDir;
+
+  renderLoad();
+
+  document.getElementById('stats').innerHTML = [
+    [tr('canlı oturum'), c.live, false],
+    [tr('kayıt'), c.registryEntries, false],
+    [tr('ölü'), c.dead, false],
+    [tr('PID yeniden kullanım'), c.reused, c.reused > 0],
+    ['proje', c.projects, false],
+    ['seni bekliyor', c.needsYou, c.needsYou > 0],
+    ['IDE penceresi', c.ideWindows, false],
+  ].map(([label, v, alert]) =>
+    `<div class="stat${alert?' alert':''}"><b>${v}</b><span>${label}</span></div>`).join('');
+
+  document.getElementById('caps').innerHTML = Object.entries(report.capabilities)
+    .map(([k,v]) => `<span class="cap ${v.ok?'ok':'bad'}" title="${esc(v.detail||'')}">${v.ok?'✓':'!'} ${esc(k)}</span>`)
+    .join('');
+
+  document.getElementById('warnings').innerHTML =
+    report.warnings.map(w => `<div class="warn">${esc(w)}</div>`).join('');
+
+  const waiting = [];
+  for (const p of report.projects)
+    for (const s of p.sessions)
+      if (needsYou(s.state)) waiting.push({p, s});
+  waiting.sort((a,b) => urgency(b.s.state)-urgency(a.s.state) ||
+    (a.s.stateSince??a.s.lastActivityAt??0)-(b.s.stateSince??b.s.lastActivityAt??0));
+
+  document.getElementById('waitingWrap').hidden = waiting.length === 0;
+  document.getElementById('waiting').innerHTML = waiting.map(({p,s}) => `
+    <div class="wrow u${urgency(s.state)}">
+      <span>${GLYPH[s.state]||'?'}</span>
+      <span class="proj">${esc(p.displayName)}</span>
+      <span class="sess">${esc(sessionName(s))}</span>
+      ${agentBadge(s)}${precision(s)}${chip(s)}${subagentBadge(s)}
+      <span class="grow">${esc(s.title || s.lastPrompt || '')}</span>
+      <span class="dwell">${dwellOf(s, now)}</span>
+    </div>`).join('');
+
+  renderList();
+  if (view === 'detail') renderDetail();
+  renderMinibar();
+}
+
+/**
+ * Which projects the user follows, and which project is open.
+ *
+ * `view` lives in the URL hash so the pinned window can be launched straight
+ * into mini mode, and so a reload does not throw away what you were looking
+ * at. Nothing here is stored on the server: it is a viewing preference, and
+ * the daemon has no business remembering it.
+ */
+let view = 'list';
+let openProject = null;
+const MINI = location.hash.includes('mini');
+if (MINI) document.body.setAttribute('data-mini', '');
+
+function followed() {
+  return report ? report.projects.filter(p => p.tracked) : [];
+}
+
+/**
+ * The row summary comes from the engine, already computed.
+ *
+ * It used to be worked out here as well, which meant the same question had
+ * two answers written in two languages. They agreed today; the second time
+ * one of them changed they would not have, and a dashboard that disagrees
+ * with the terminal about the same project destroys trust in both.
+ */
+function summarize(p) {
+  return p.summary || { kind: 'none', waiting: 0, running: 0, live: 0, total: 0, urgency: 0 };
+}
+
+function rank(p) {
+  const a = summarize(p);
+  if (a.kind === 'waiting') return 1000 + a.urgency * 10 + Math.min(a.waiting, 9);
+  if (a.kind === 'running') return 500 + Math.min(a.running, 9);
+  if (a.kind === 'idle') return 100;
+  return 0;
+}
+
+/**
+ * Waiting and running, always both, in two fixed cells.
+ *
+ * See `agentCell` in the terminal renderer for why: naming one state hid the
+ * other, and the `live/total` pair beside it read as "running/total" while
+ * meaning something else entirely.
+ */
+function waitingText(a) {
+  return a.waiting > 0 ? t`${a.waiting} bekliyor` : '—';
+}
+
+function runningText(a) {
+  if (a.running > 0) return t`${a.running} çalışıyor`;
+  if (a.waiting === 0) return a.live > 0 ? tr('boşta') : tr('kapalı');
+  return '—';
+}
+
+/**
+ * The last twenty-four minutes as a line, or nothing.
+ *
+ * `-1` marks a minute before this project was being watched, and it breaks
+ * the line instead of grounding it. A daemon that restarted an hour ago would
+ * otherwise show every project sitting flat at zero for the hour before it —
+ * a claim about a period nobody observed.
+ */
+function sparkline(m) {
+  if (!Array.isArray(m) || m.length < 2) {
+    // Nothing recorded at all: a flat dotted rule, which says that and not
+    // "this project did nothing".
+    return '<svg class="spark" viewBox="0 0 54 16" aria-hidden="true">' +
+      '<path class="flat" d="M0 15 H54"/></svg>';
+  }
+  const max = Math.max(1, ...m);
+  const step = 54 / (m.length - 1);
+  let d = '';
+  let pen = false;
+  let segments = 0;
+  let last = null;
+  for (let i = 0; i < m.length; i++) {
+    if (m[i] < 0) { pen = false; continue; }
+    const x = (i * step).toFixed(1);
+    const y = (15 - 13 * (m[i] / max)).toFixed(1);
+    d += (pen ? 'L' : 'M') + x + ' ' + y + ' ';
+    if (pen) segments++;
+    pen = true;
+    last = [Number(x), Number(y)];
+  }
+  // One observed minute is a line with no length, and a line with no length
+  // draws nothing -- which looks exactly like "no data" for the first minute
+  // after every daemon restart. A tick mark says the difference.
+  if (segments === 0 && last) d = `M${(last[0] - 2).toFixed(1)} ${last[1]} L${last[0]} ${last[1]}`;
+  // The axis is always the full twenty-four minutes, so two rows can be
+  // compared -- a trace whose span changed with how much history it happened
+  // to have would be unreadable. The unwatched minutes get the dotted rule,
+  // the same thing the progress bar draws for "nobody measured this".
+  const first = m.findIndex((v) => v >= 0);
+  const gap = first > 0
+    ? `<path class="flat" d="M0 15 H${(Math.min(first, m.length - 1) * step).toFixed(1)}"/>`
+    : '';
+  return `<svg class="spark" viewBox="0 0 54 16" aria-hidden="true">${gap}<path d="${d.trim()}"/></svg>`;
+}
+
+/**
+ * Fleet load, rendered from the engine's own figure.
+ *
+ * Nothing alive is a dash and an empty dotted channel, not a zero-length bar:
+ * the same grammar the progress meters use for "nobody measured this".
+ */
+function renderLoad() {
+  const el = document.getElementById('load');
+  const l = report && report.load;
+  if (!l) { el.innerHTML = ''; return; }
+  const label = tr('sistem yükü');
+  if (l.percent == null || l.live === 0) {
+    el.innerHTML = `<span>${label}</span><span class="track none"></span><span class="pc">—</span>`;
+    return;
+  }
+  const run = Math.round(100 * Math.min(l.running, l.live) / l.live);
+  const wait = Math.min(100 - run, Math.round(100 * Math.min(l.waiting, l.live) / l.live));
+  el.innerHTML = `<span>${label}</span><span class="track">` +
+    `<i class="run" style="width:${run}%"></i><i class="wait" style="width:${wait}%"></i>` +
+    `</span><span class="pc">%${Math.round(l.percent)}</span>`;
+}
+
+/** The same bar the detailed card draws, at list scale. */
+function miniBar(pr) {
+  if (!pr || pr.percent == null) return '<span class="bar none"></span>';
+  const cls = pr.approximate ? 'bar approx' : 'bar';
+  return `<span class="${cls}" style="flex-basis:70px"><i style="width:${Math.max(0, Math.min(100, pr.percent))}%"></i></span>`;
+}
+
+function renderList() {
+  const list = followed();
+  const el = document.getElementById('projects');
+  if (list.length === 0) {
+    el.innerHTML = `<div class="prow"><span></span><span class="nm">${
+      report && report.counts.untracked > 0
+        ? tr('Hiçbir proje izlenmiyor — aşağıdan seç.')
+        : tr('Görünür oturum yok. Bir ajan oturumu başlat.')}</span></div>`;
+    return;
+  }
+  const now = Date.now();
+  el.innerHTML = list.slice().sort((a, b) => rank(b) - rank(a)).map(p => {
+    const a = summarize(p);
+    const glyph = a.kind === 'waiting' ? (a.urgency >= 3 ? '●' : '⏸')
+                : a.kind === 'running' ? '▶' : '·';
+    const dwell = a.leadSince ? fmtAge(sinceMs(now, a.leadSince)) : '';
+    const pct = p.progress && p.progress.percent != null
+      ? fmtPercent(p.progress.percent, p.progress.approximate) : '—';
+    const why = !MINI && a.leadTitle ? `<span class="why">${esc(a.leadTitle)}</span>` : '';
+    return `<button class="prow ${a.kind} u${a.urgency}" data-open="${esc(p.projectId)}">
+      <span>${glyph}</span>
+      <span class="nm">${esc(p.displayName)}</span>
+      ${sparkline(p.momentum)}
+      <span class="ag wait${a.waiting > 0 ? '' : ' off'}">${esc(waitingText(a))}</span>
+      <span class="ag run${a.running > 0 ? '' : ' off'}">${esc(runningText(a))}</span>
+      <span class="xy">${esc(dwell)}</span>
+      ${miniBar(p.progress)}
+      <span class="pc">${esc(pct)}</span>
+      ${why}
+    </button>`;
+  }).join('');
+}
+
+/** The full card, unchanged in content — only in when you see it. */
+function projectCard(p) {
+  const now = Date.now();
+  return `
+    <div class="card">
+      <h3>${esc(p.displayName)}
+        <span class="pid">${esc(p.projectId)}${p.identityKind !== 'git_root' ? ' · ' + esc(p.identityKind) : ''}</span>
+        ${p.flags.map(f => `<span class="flag">${esc(flagText(f))}</span>`).join('')}
+      </h3>
+      ${progressRow(p.progress)}
+      <button class="boardbtn" data-project="${esc(p.projectId)}">${tr('faz panosu')}</button>
+      <div class="board" id="board-${esc(p.projectId)}" hidden></div>
+      ${p.workspaces.map(w => {
+        const bits = [];
+        if (w.branch) bits.push(w.branch);
+        if (w.commitCount != null) bits.push(t`${w.commitCount} commit`);
+        if (w.dirtyCount != null) bits.push(t`${w.dirtyCount} kirli`);
+        if (w.isWorktree) bits.push('worktree');
+        if (w.storageKind !== 'local') bits.push(w.storageKind);
+        const lbl = p.workspaces.length > 1 && w.label ? '<b>' + esc(w.label) + '</b> · ' : '';
+        return `<div class="ws">${lbl}${esc(w.normPath)}${bits.length ? ' — ' + esc(bits.join(' · ')) : ''}</div>`;
+      }).join('')}
+      ${p.sessions.map(sv => `
+        <div class="sess-row">
+          <span>${GLYPH[sv.state] || '?'}</span>
+          <span class="sess-name">${esc(sessionName(sv))}</span>
+          ${agentBadge(sv)}${precision(sv)}${chip(sv)}${subagentBadge(sv)}
+          <span class="title">${esc(sv.title || '')}</span>
+          <span class="dwell">${dwellOf(sv, now)}</span>
+          <span class="ev">${esc((sv.evidence || []).join(' · '))}</span>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderDetail() {
+  const p = report && report.projects.find(x => x.projectId === openProject);
+  const el = document.getElementById('detail');
+  if (!p) {
+    // The project vanished between clicking and rendering — its last session
+    // ended, or it was just untracked. Saying so beats an empty pane.
+    el.innerHTML = `<p class="empty">${tr('Bu proje artık görünmüyor.')}</p>`;
+    return;
+  }
+  el.innerHTML = projectCard(p);
+}
+
+function setView(next, projectId) {
+  view = next;
+  openProject = projectId ?? openProject;
+  document.getElementById('listView').hidden = next !== 'list';
+  document.getElementById('detailView').hidden = next !== 'detail';
+  if (next === 'detail') renderDetail();
+}
+
+/** The pinned strip: one number, and a way back to the full page. */
+function renderMinibar() {
+  if (!MINI || !report) return;
+  const n = report.counts.needsYou;
+  document.getElementById('miniCount').innerHTML = n > 0
+    ? `<b>${n}</b> ${esc(tr('bekliyor'))}`
+    : esc(tr('bekleyen yok'));
+}
+
+// ── choosing what to follow ─────────────────────────────────────────────
+// The same decision `vt projects` makes, from the window you are already
+// looking at: needing a terminal to hide a project defeats a pinned panel.
+let picking = false;
+
+/**
+ * Candidates come from the daemon, not from the board.
+ *
+ * The board only ever holds projects with something running, so a chooser
+ * built from it could offer you only what happened to be live at that moment —
+ * and the project you want to add is usually the one you just closed. The
+ * daemon answers from what it has ever seen, and it decides `tracked` itself
+ * because that depends on the tracking *mode*, which the board does not carry.
+ */
+let candidates = null;
+
+async function loadCandidates() {
+  try {
+    const res = await fetch('/api/v1/candidates?t=' + encodeURIComponent(TOKEN), {
+      headers: { 'X-VT-Token': TOKEN },
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    candidates = (await res.json()).candidates || [];
+  } catch (e) {
+    // Fall back to the board rather than to an empty list: a partial chooser
+    // still works, an empty one looks broken.
+    candidates = (report ? report.projects : []).map(p => ({
+      projectId: p.projectId, displayName: p.displayName, tracked: p.tracked,
+    }));
+  }
+  renderPick();
+}
+
+function renderPick() {
+  const el = document.getElementById('pick');
+  el.hidden = !picking;
+  if (!picking) return;
+  if (!candidates) { el.innerHTML = `<div class="pickbar">${tr('yükleniyor…')}</div>`; return; }
+  el.innerHTML = candidates.map(p => `
+    <label>
+      <input type="checkbox" data-track="${esc(p.projectId)}" ${p.tracked ? 'checked' : ''}>
+      <span>${esc(p.displayName)}</span>
+      <span class="pid">${esc(p.projectId)}</span>
+    </label>`).join('') + `
+    <div class="pickbar">
+      <button id="pickSave">${tr('kaydet')}</button>
+      <button id="pickAll">${tr('hepsi')}</button>
+      <span class="msg" id="pickMsg"></span>
+    </div>`;
+}
+
+async function saveTracking(body) {
+  const msg = document.getElementById('pickMsg');
+  if (msg) msg.textContent = tr('kaydediliyor…');
+  try {
+    const res = await fetch('/api/v1/tracking?t=' + encodeURIComponent(TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-VT-Token': TOKEN },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    // The daemon notices the config change on its next scan; the board
+    // updates itself from the next push rather than from a guess made here.
+    if (msg) msg.textContent = tr('kaydedildi');
+  } catch (e) {
+    if (msg) msg.textContent = tr('kaydedilemedi');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const row = e.target.closest && e.target.closest('.prow[data-open]');
+  if (row) { setView('detail', row.dataset.open); return; }
+  const back = e.target.closest && e.target.closest('#back');
+  if (back) { setView('list'); return; }
+  const toggle = e.target.closest && e.target.closest('#pickToggle');
+  if (toggle) {
+    picking = !picking;
+    if (picking) { candidates = null; void loadCandidates(); }
+    renderPick();
+    return;
+  }
+  const all = e.target.closest && e.target.closest('#pickAll');
+  if (all) { void saveTracking({ mode: 'all', selected: [] }); return; }
+  const save = e.target.closest && e.target.closest('#pickSave');
+  if (save) {
+    const selected = [...document.querySelectorAll('#pick input[data-track]')]
+      .filter(i => i.checked).map(i => i.dataset.track);
+    void saveTracking({ mode: 'selected', selected });
+    return;
+  }
+  const full = e.target.closest && e.target.closest('#miniFull');
+  if (full) {
+    e.preventDefault();
+    // Leaving mini is a reload, because `MINI` is decided once at load. The
+    // token has to travel in the query for exactly that one navigation --
+    // carrying `location.search` forward stopped working the moment the page
+    // started stripping it, and the reload would have arrived unauthenticated.
+    // The page it lands on strips it again, so it is in the address bar for
+    // about as long as it was when you first opened the link.
+    location.href = location.pathname + '?t=' + encodeURIComponent(TOKEN);
+  }
+});
+
+// Re-render on a timer so dwell counters advance between server pushes.
+setInterval(() => { if (report) render(); }, 1000);
+
+function setConn(cls, text) {
+  const el = document.getElementById('conn');
+  el.className = 'conn ' + cls;
+  el.textContent = text;
+}
+
+function connect() {
+  const es = new EventSource('/api/v1/stream?t=' + encodeURIComponent(TOKEN));
+  es.addEventListener('open', () => setConn('live', tr('canlı')));
+  es.addEventListener('overview', e => {
+    report = JSON.parse(e.data);
+    setConn('live', tr('canlı'));
+    render();
+  });
+  es.addEventListener('alert', e => {
+    const c = JSON.parse(e.data);
+    notify(c);
+  });
+  // EventSource reconnects on its own and replays via Last-Event-ID; we only
+  // need to reflect the outage in the UI.
+  es.addEventListener('error', () => setConn('down', tr('bağlantı koptu — yeniden deneniyor')));
+}
+/**
+ * Phase board, on demand.
+ *
+ * Not loaded with the overview: it shells out to `git log` per project, and
+ * paying that on every three-second tick to render something nobody opened
+ * would be the most expensive thing in the loop. One click, one fetch, cached
+ * until the page reloads.
+ */
+const boardCache = new Map();
+const BOARD_WIDTH = 40;
+
+async function toggleBoard(projectId) {
+  const el = document.getElementById('board-' + projectId);
+  if (!el) return;
+  if (!el.hidden) { el.hidden = true; return; }
+  el.hidden = false;
+  if (boardCache.has(projectId)) { el.innerHTML = boardCache.get(projectId); return; }
+  el.textContent = tr('yükleniyor…');
+  try {
+    const res = await fetch('/api/v1/board?project=' + encodeURIComponent(projectId) +
+      '&t=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    const html = renderBoard(data);
+    boardCache.set(projectId, html);
+    el.innerHTML = html;
+  } catch (e) {
+    el.textContent = tr('faz panosu okunamadı');
+  }
+}
+
+function renderBoard(b) {
+  const spans = (b && b.reconstructed && b.reconstructed.spans) || [];
+  if (spans.length === 0) {
+    const why = b && b.reconstructed && b.reconstructed.reason === 'no-git'
+      ? tr('git yok — geçmiş çıkarılamaz')
+      : tr('commit başlıklarında faz adı geçmiyor');
+    return `<div class="note">${esc(why)}</div>`;
+  }
+  const min = Math.min(...spans.map(s => s.firstAt));
+  const max = Math.max(...spans.map(s => s.lastAt));
+  const width = Math.max(1, max - min);
+  const at = ms => Math.max(0, Math.min(BOARD_WIDTH - 1,
+    Math.round(((ms - min) / width) * (BOARD_WIDTH - 1))));
+
+  const rows = spans.map(s => {
+    const a = at(s.firstAt), z = at(s.lastAt), d = s.doneAt == null ? -1 : at(s.doneAt);
+    let bar = '';
+    for (let i = 0; i < BOARD_WIDTH; i++) {
+      if (i === d) bar += '\u2590';
+      else if (i === a && a === z) bar += '\u2502';
+      else if (i >= a && i <= z) bar += '\u2592';
+      else bar += '\u00b7';
+    }
+    const tail = s.afterDone > 0
+      ? `<span class="after">${esc(t` \u00b7 bitti denildikten sonra ${s.afterDone} commit`)}</span>`
+      : s.doneAt != null
+        ? `<span class="done">${esc(t` \u00b7 ${fmtAge(Date.now() - s.doneAt)} \u00f6nce bitti`)}</span>`
+        : `<span>${esc(tr(' \u00b7 a\u00e7\u0131k'))}</span>`;
+    const label = (s.unit + ' ' + s.ordinal).padEnd(10);
+    return `<div class="row"><span class="rung">${esc(label)}</span>${esc(bar)} ${tail}</div>`;
+  }).join('');
+
+  // The seam is stated rather than smoothed over: everything left of it is a
+  // reconstruction, everything right of it was watched.
+  const note = b.seam
+    ? t`\u25b2 ${new Date(b.seam).toISOString().slice(0, 10)} tarihinden itibaren \u00f6l\u00e7\u00fcld\u00fc; \u00f6ncesi commit ba\u015fl\u0131klar\u0131ndan \u00e7\u0131kar\u0131ld\u0131.`
+    : tr('Tamamı commit başlıklarından çıkarıldı (kaba).');
+  return rows + `<div class="note">${esc(note)}</div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest && e.target.closest('.boardbtn');
+  if (btn) toggleBoard(btn.dataset.project);
+});
+
+/** Flags travel as identifiers so scoring can match them; only display is translated. */
+function flagText(flag) {
+  const m = /^([a-z\u00e7\u011f\u0131\u00f6\u015f\u00fc-]+)\((\d+)\)$/.exec(flag);
+  return m ? tr(m[1]) + '(' + m[2] + ')' : tr(flag);
+}
+
+translateStatic();
+connect();
+
+/**
+ * Notifications.
+ *
+ * The whole point of this tool is the moment an agent stops in a window you are
+ * not looking at, so a notification that arrives late or not at all is the
+ * feature failing. Three rules keep it trustworthy:
+ *
+ * - Only WAITING_PERMISSION and ERRORED interrupt. WAITING_INPUT is the normal
+ *   end of every turn; notifying on it would train you to ignore all of them.
+ * - Nothing is notified twice for the same session and state.
+ * - The body names the project and the tool, because "a session is waiting" is
+ *   not enough to decide whether to switch windows.
+ */
+const notified = new Map();
+
+function labelFor(sessionId) {
+  if (!report) return sessionId.slice(0, 8);
+  for (const p of report.projects)
+    for (const s of p.sessions)
+      if (s.sessionId === sessionId) return p.displayName + ' · ' + (s.name || sessionId.slice(0, 8));
+  return sessionId.slice(0, 8);
+}
+
+function notify(c) {
+  const loud = c.to === 'WAITING_PERMISSION' || c.to === 'ERRORED';
+  if (!loud) return;
+  const key = c.sessionId + ':' + c.to;
+  if (notified.get(key) === c.subReason) return;
+  notified.set(key, c.subReason);
+
+  const title = c.to === 'WAITING_PERMISSION' ? tr('İzin bekleniyor') : tr('Ajan hata verdi');
+  const body = labelFor(c.sessionId) + (c.subReason ? ' · ' + c.subReason : '');
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    // `tag` collapses repeats into one notification rather than stacking them.
+    new Notification(title, { body, tag: key, requireInteraction: c.to === 'WAITING_PERMISSION' });
+  }
+  document.title = '● ' + title;
+  setTimeout(() => { document.title = 'VibeTracker'; }, 20000);
+}
+
+if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+  document.addEventListener('click', () => Notification.requestPermission(), { once: true });
+}
+</script>
+</body>
+</html>

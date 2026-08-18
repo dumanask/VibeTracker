@@ -1,0 +1,46 @@
+name: Yeni ajan desteği
+description: Okunmayan bir ajan CLI'ı ya da editörü
+labels: [adapter]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Bir adaptörün yazılabilmesi için ajanın diske **ne** yazdığını bilmek
+        gerekiyor. Aşağıdaki üç sorunun cevabı, işin çoğu.
+
+        Dosya **içeriği** yapıştırma — istem ve kod taşırlar. İstenen şey
+        şekiller: dizin düzeni, alan adları, kayıt tipleri.
+  - type: input
+    id: agent
+    attributes:
+      label: Ajan
+      description: Adı ve sürümü
+    validations:
+      required: true
+  - type: textarea
+    id: layout
+    attributes:
+      label: Durum dizini
+      description: |
+        Nerede duruyor, içinde ne var? `ls` çıktısı yeter.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: Kayıt şekilleri
+      description: |
+        JSONL ise satır tipleri ve alan **adları**; SQLite ise
+        `select sql from sqlite_master where type='table'` çıktısı.
+        Değerler değil, adlar.
+      render: text
+  - type: checkboxes
+    id: signals
+    attributes:
+      label: Bulabildiklerin
+      options:
+        - label: Bir süreç kimliği (pid) yazıyor
+        - label: Tur başlangıcı/bitişi ayırt edilebiliyor
+        - label: Araç çağrısı ve sonucu eşleştirilebiliyor
+        - label: Çalışma dizini (cwd) kayıtlı

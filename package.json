@@ -1,0 +1,20 @@
+{
+  "name": "vibetracker-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Mission control for multi-agent, multi-project vibe coding",
+  "engines": {
+    "node": ">=22.20"
+  },
+  "scripts": {
+    "vt": "node --no-warnings=ExperimentalWarning packages/cli/src/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --no-warnings=ExperimentalWarning --test \"packages/*/test/*.test.ts\"",
+    "pack": "node scripts/pack.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
+  }
+}

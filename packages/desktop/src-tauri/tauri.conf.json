@@ -1,0 +1,61 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VibeTracker",
+  "version": "0.1.0",
+  "identifier": "dev.vibetracker.desktop",
+  "build": {
+    "beforeBuildCommand": "node ../../scripts/make-icon.mjs && node ../../scripts/desktop-stage.mjs",
+    "beforeDevCommand": "node ../../scripts/make-icon.mjs && node ../../scripts/desktop-stage.mjs",
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [],
+    "security": {
+      "csp": null
+    },
+    "trayIcon": {
+      "id": "main",
+      "iconPath": "icons/icon.png",
+      "iconAsTemplate": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "app",
+      "dmg",
+      "deb",
+      "appimage"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [
+      "runtime/**/*"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Çok ajanlı vibe coding kontrol merkezi",
+    "longDescription": "Claude Code, Codex, opencode, Cline ve editör ajanlarını tek panoda izler. Hiçbir projeye dosya yazmaz, hiçbir ajanla konuşmaz, ağa çıkmaz.",
+    "copyright": "Copyright 2026 VibeTracker contributors. Apache-2.0.",
+    "licenseFile": "../../../LICENSE",
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

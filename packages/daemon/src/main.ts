@@ -1,0 +1,716 @@
+import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  scan,
+  ScanContext,
+  discoverProjects,
+  identifyDirectory,
+  type ScanOptions,
+} from '@vibetracker/engine';
+import { dataDir, configPath, claudeDir, loadConfig, writeConfig } from '@vibetracker/platform';
+import {
+  t,
+  MAINTENANCE_INTERVAL_MS,
+  redactSnippet,
+  tr,
+  configuredRoots,
+  isTracked,
+  defaultConfig,
+  setTomlValues,
+  type TrackingConfig,
+} from '@vibetracker/core';
+import type { StatusReport } from '@vibetracker/shared';
+import { Store, type MaintenanceResult, type StateChange } from './store.ts';
+import { DaemonServer } from './server.ts';
+import { generateToken } from './security.ts';
+import { enableFileLog, log } from './log.ts';
+import { HookRing } from './hooks/ring.ts';
+import { HookIngest } from './hooks/ingest.ts';
+import { buildBoard, type Board } from './board.ts';
+import { Momentum } from './momentum.ts';
+import { loadOrCreateHookToken } from './hooks/token.ts';
+
+export const DEFAULT_PORT = 47823;
+
+/**
+ * How far back D5 looks. Matches the detector's own window in the engine: a
+ * ratio frozen for three weeks while work continues is a pattern, and a
+ * shorter window would fire on any project that took a holiday.
+ */
+const D5_WINDOW_MS = 21 * 24 * 3600_000;
+export const VERSION = '0.1.0';
+
+/**
+ * The port is fixed rather than negotiated.
+ *
+ * Claude Code hook URLs are static strings in settings.json with no
+ * interpolation, and a hook cannot read a port file. So a daemon that quietly
+ * moved to another port would keep serving a dashboard that looks alive while
+ * being blind to every permission prompt — the worst possible failure, because
+ * it is invisible. If the port is taken by something that is not us, we fail
+ * loudly instead.
+ */
+
+export interface DaemonOptions {
+  port?: number;
+  host?: string;
+  scanIntervalMs?: number;
+  scan?: Partial<ScanOptions>;
+  /** Override the database location; ':memory:' for tests. */
+  dbPath?: string;
+}
+
+export interface RuntimeInfo {
+  schemaVersion: 1;
+  daemonId: string;
+  port: number;
+  pid: number;
+  token: string;
+  startedAt: number;
+  version: string;
+}
+
+export function runtimeFilePath(): string {
+  return join(dataDir(), 'daemon.json');
+}
+
+export function logFilePath(): string {
+  return join(dataDir(), 'daemon.log');
+}
+
+export function readRuntimeInfo(): RuntimeInfo | null {
+  try {
+    const raw = readFileSync(runtimeFilePath(), 'utf8');
+    const info = JSON.parse(raw) as RuntimeInfo;
+    return typeof info?.port === 'number' && typeof info?.token === 'string' ? info : null;
+  } catch {
+    return null;
+  }
+}
+
+export class Daemon {
+  #opts: Required<Pick<DaemonOptions, 'port' | 'host' | 'scanIntervalMs'>>;
+  #scanOpts: ScanOptions;
+  /** Which non-Claude agents to read, from `[agents] enabled`. */
+  #agents: readonly string[] | undefined;
+  #agentRecencyMs: number | undefined;
+  /** Hand-named project directories, refreshed with the tracking config. */
+  #roots: Array<{ projectId: string; path: string }> = [];
+  #ctx = new ScanContext();
+  #store: Store;
+  #server: DaemonServer;
+  #latest: StatusReport | null = null;
+  #timer: NodeJS.Timeout | null = null;
+  #watchdog: NodeJS.Timeout | null = null;
+  #maintenance: NodeJS.Timeout | null = null;
+  #lastMaintenance: (MaintenanceResult & { at: number }) | null = null;
+  #scanning = false;
+  #stopped = false;
+  #daemonId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  #token = generateToken();
+  #hookToken = loadOrCreateHookToken();
+  #ring = new HookRing();
+  #momentum = new Momentum();
+  #hooks = new HookIngest();
+  #oversize = 0;
+  #startedAt = Date.now();
+  #scanCount = 0;
+  #lastScanMs = 0;
+  #lastError: string | null = null;
+  /** Last few event-loop phases, so a watchdog kill can explain itself. */
+  #tracking: TrackingConfig = defaultConfig().tracking;
+  #trackingStamp = 0;
+  #phase = 'idle';
+  #phaseSince = Date.now();
+
+  constructor(opts: DaemonOptions = {}) {
+    this.#opts = {
+      port: opts.port ?? DEFAULT_PORT,
+      host: opts.host ?? '127.0.0.1',
+      scanIntervalMs: opts.scanIntervalMs ?? 3000,
+    };
+    this.#scanOpts = {
+      cpuSample: true,
+      cpuSampleMs: 700,
+      includeDead: false,
+      includeTemp: false,
+      tailBytes: 256 * 1024,
+      ...opts.scan,
+    };
+    this.#store = new Store(opts.dbPath ? { path: opts.dbPath } : {});
+    this.#server = new DaemonServer({
+      port: this.#opts.port,
+      host: this.#opts.host,
+      token: this.#token,
+      daemonId: this.#daemonId,
+      version: VERSION,
+      latest: () => this.#latest,
+      health: () => this.health(),
+      hookToken: this.#hookToken,
+      onHook: (raw) => this.#ring.push(raw),
+      // `vt daemon stop` arrives here. We stop ourselves rather than being
+      // killed, so the database closes cleanly and the runtime file is removed
+      // instead of being left behind pointing at a pid that no longer exists.
+      onShutdown: () => {
+        log(t`durdurma istendi`);
+        void this.stop().then(
+          () => process.exit(0),
+          () => process.exit(0),
+        );
+      },
+      onOversize: () => this.#oversize++,
+      board: (projectId) => this.#board(projectId),
+      setTracking: (mode, selected) => this.#setTracking(mode, selected),
+      changeTracking: (add, remove) => this.#changeTracking(add, remove),
+      candidates: () =>
+        this.#store.candidates().map((c) => ({
+          ...c,
+          tracked: isTracked(this.#tracking, c.projectId),
+        })),
+      addPath: (path) => this.#addPath(path),
+    });
+  }
+
+  get token(): string {
+    return this.#token;
+  }
+  get hookToken(): string {
+    return this.#hookToken;
+  }
+  get port(): number {
+    return this.#opts.port;
+  }
+
+  health(): Record<string, unknown> {
+    const stats = this.#store.stats();
+    return {
+      uptimeMs: Date.now() - this.#startedAt,
+      scans: this.#scanCount,
+      lastScanMs: this.#lastScanMs,
+      lastError: this.#lastError,
+      clients: this.#server.clientCount,
+      rssMb: Math.round(process.memoryUsage().rss / 1048576),
+      db: { path: this.#store.path, ...stats },
+      transcripts: this.#ctx.tail().stats(),
+      hooks: this.hookHealth(),
+      maintenance: this.#lastMaintenance,
+      phase: this.#phase,
+    };
+  }
+
+  /**
+   * Hook health is reported per event, because "hooks are installed" and
+   * "hooks are firing" are different claims and only the second one is useful.
+   * An event that was bound but has never arrived is the signature of a
+   * settings file the agent is not reading, or an event name that drifted.
+   */
+  hookHealth(): Record<string, unknown> {
+    const s = this.#hooks.stats;
+    return {
+      received: this.#ring.received,
+      dropped: this.#ring.dropped,
+      oversize: this.#oversize,
+      pending: this.#ring.pending,
+      parsed: s.parsed,
+      unparsable: s.unparsable,
+      ignored: s.ignored,
+      sessions: s.bySession,
+      lastAt: s.lastAt,
+      byEvent: Object.fromEntries(s.events),
+    };
+  }
+
+  /**
+   * Record every project the agent has ever worked in, once, at startup.
+   *
+   * The board only ever sees projects with a live agent, so the database only
+   * learned about a project while it was running — and the chooser, which
+   * reads that database, could offer you nothing you were not running at that
+   * moment. The session registry is barely better: six projects against the
+   * twenty-three the transcript directory remembers.
+   *
+   * So the source is the transcript directory, read through
+   * `discoverProjects`: a few kilobytes per project for the path, then one git
+   * probe per directory. Measured at 11 projects in under a second, once per
+   * daemon.
+   *
+   * Deliberately not part of the poll loop. This answers "what exists", which
+   * changes when you start a project, not every two seconds.
+   */
+  async #seedProjects(): Promise<void> {
+    try {
+      // Once per daemon, not per poll — so the other agents' directory lists
+      // are affordable here too, and the panel's chooser offers a project you
+      // last touched with opencode instead of pretending it does not exist.
+      const known = await discoverProjects(claudeDir(), { agents: ['all'] });
+      this.#store.rememberProjects(known);
+    } catch (err) {
+      // A chooser missing a few rows is a small loss; a daemon that will not
+      // start is not. This is the one place that failure is genuinely optional.
+      log(`proje listesi tohumlanamadı: ${String(err)}`);
+    }
+  }
+
+  async start(): Promise<void> {
+    mkdirSync(dataDir(), { recursive: true });
+    enableFileLog(logFilePath());
+
+    // Single instance: if the port is busy, ask who is there.
+    const existing = await probeExisting(this.#opts.port);
+    if (existing?.ok) {
+      throw new AlreadyRunningError(existing.daemonId ?? 'bilinmiyor', this.#opts.port);
+    }
+
+    try {
+      await this.#server.listen();
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code === 'EADDRINUSE') {
+        throw new PortTakenError(this.#opts.port);
+      }
+      throw err;
+    }
+
+    this.#writeRuntimeInfo();
+    this.#startWatchdog();
+
+    // Run one scan immediately so the dashboard has content, then settle into
+    // the interval. The first scan pays the probe host startup (~2.2 s).
+    await this.#seedProjects();
+    await this.#tick();
+    this.#timer = setInterval(() => void this.#tick(), this.#opts.scanIntervalMs);
+
+    // Retention runs at startup too: the interesting case is a daemon that was
+    // off for a month, where waiting an hour to notice the database is over the
+    // cap would be the wrong hour to wait.
+    this.#runMaintenance();
+    this.#maintenance = setInterval(() => this.#runMaintenance(), MAINTENANCE_INTERVAL_MS);
+    this.#maintenance.unref();
+
+    log(
+      t`başladı · pid ${process.pid} · port ${this.#opts.port} · v${VERSION} · ` +
+        t`node ${process.version} · db ${this.#store.path}`,
+    );
+  }
+
+  /**
+   * Write a new project selection to the config file.
+   *
+   * The file is the single source of truth, shared with `vt projects`, so the
+   * dashboard and the command line cannot drift apart. The edit preserves
+   * comments — the config is TOML precisely so a human can annotate it — and
+   * the next scan picks the change up through the same mtime check any other
+   * edit goes through.
+   */
+  /**
+   * Apply a follow/unfollow delta on top of whatever is configured now.
+   *
+   * Read-modify-write against the file rather than against `this.#tracking`,
+   * which is a cached copy refreshed on a timer: two clicks in the same second
+   * would otherwise both start from the same stale set and the second would
+   * undo the first.
+   */
+  async #changeTracking(add: string[], remove: string[]): Promise<number> {
+    await this.#refreshTracking();
+    const base =
+      this.#tracking.mode === 'all'
+        ? // Coming from `all`, everything on the board is followed, so
+          // unfollowing one means following the rest.
+          (this.#latest?.projects ?? []).map((p) => p.projectId)
+        : [...this.#tracking.selected];
+    const next = base.filter((id) => !remove.includes(id));
+    for (const id of add) if (!next.includes(id)) next.push(id);
+    await this.#setTracking('selected', next);
+    return next.length;
+  }
+
+  /**
+   * Follow a directory the user named.
+   *
+   * Three writes in a deliberate order. The path goes into the config first,
+   * so the project can never be followed by an id nothing on this machine can
+   * resolve back to a directory. Then the tracking delta, which is what puts
+   * it on the board. Then the project row, so the chooser lists it with a tick
+   * on the very next open rather than after the next restart.
+   *
+   * A directory already known simply becomes followed — naming a project you
+   * already have is not an error, it is a way of saying "this one".
+   */
+  async #addPath(
+    path: string,
+  ): Promise<
+    { ok: true; projectId: string; displayName: string } | { ok: false; reason: 'notdir' | 'failed' }
+  > {
+    const found = await identifyDirectory(path);
+    if (!found) return { ok: false, reason: 'notdir' };
+    try {
+      await this.#rememberRoot(found.projectId, found.path);
+      await this.#changeTracking([found.projectId], []);
+      this.#store.rememberProjects([
+        {
+          projectId: found.projectId,
+          identityKind: found.projectId.startsWith('git:')
+            ? 'git_root'
+            : found.projectId.startsWith('pkg:')
+              ? 'package'
+              : 'path',
+          displayName: found.displayName,
+        },
+      ]);
+      log(t`elle eklendi · ${found.displayName} · ${found.path}`);
+      return { ok: true, projectId: found.projectId, displayName: found.displayName };
+    } catch {
+      return { ok: false, reason: 'failed' };
+    }
+  }
+
+  /** Record where a hand-named project lives, leaving the rest of its table alone. */
+  async #rememberRoot(projectId: string, path: string): Promise<void> {
+    const file = configPath();
+    let text = '';
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      text = '';
+    }
+    await writeConfig(setTomlValues(text, `projects."${projectId}"`, { path }), file);
+    // The mtime check in `#refreshTracking` normally picks this up a moment
+    // later. Applied here as well because if that read fails — a config the
+    // user is halfway through editing — the project would still be followed,
+    // with no directory to look in.
+    this.#roots = [
+      ...this.#roots.filter((r) => r.projectId !== projectId),
+      { projectId, path },
+    ];
+  }
+
+  async #setTracking(mode: string, selected: string[]): Promise<void> {
+    const path = configPath();
+    let text = '';
+    try {
+      text = readFileSync(path, 'utf8');
+    } catch {
+      // No config yet: writing this one table beats materialising a template
+      // the user never asked for.
+    }
+    await writeConfig(setTomlValues(text, 'tracking', { mode, selected }), path);
+    // Apply immediately rather than waiting for the mtime check, so the very
+    // next push already reflects the click that caused it.
+    this.#tracking = { mode: mode === 'selected' ? 'selected' : 'all', selected };
+    try {
+      this.#trackingStamp = statSync(path).mtimeMs;
+    } catch {
+      this.#trackingStamp = 0;
+    }
+    log(t`izlenen projeler güncellendi · ${mode} · ${selected.length}`);
+  }
+
+  /**
+   * Pick up a changed project selection without a restart.
+   *
+   * `vt projects add` writes the config while this process is running, and a
+   * dashboard that ignores the change until the next restart would look
+   * broken. One `stat` per scan is cheaper than parsing, and the file only
+   * changes when a human changes it.
+   */
+  async #refreshTracking(): Promise<void> {
+    let stamp = 0;
+    try {
+      stamp = statSync(configPath()).mtimeMs;
+    } catch {
+      stamp = 0; // No config file: defaults, which means everything.
+    }
+    if (stamp === this.#trackingStamp) return;
+    this.#trackingStamp = stamp;
+    try {
+      const cfg = (await loadConfig()).config;
+      this.#tracking = cfg.tracking;
+      // Read from the same file at the same moment: a selection that names a
+      // hand-added project while its path is still the previous read's would
+      // put the project on the board with no directory to look in.
+      this.#roots = configuredRoots(cfg);
+      // Picked up on the same read: turning an agent on should not need a
+      // restart, and the file's mtime is already the trigger.
+      this.#agents = cfg.agents.enabled;
+      this.#agentRecencyMs = cfg.thresholds.agent_recency_sec * 1000;
+      log(t`izlenen projeler yeniden okundu · ${this.#tracking.mode}`);
+    } catch {
+      // A broken config must not stop the daemon; the previous selection
+      // stands and `vt config check` is where the error belongs.
+    }
+  }
+
+  async stop(): Promise<void> {
+    if (!this.#stopped) log(t`durduruluyor · ${this.#scanCount} tarama yapıldı`);
+    this.#stopped = true;
+    if (this.#timer) clearInterval(this.#timer);
+    if (this.#watchdog) clearInterval(this.#watchdog);
+    if (this.#maintenance) clearInterval(this.#maintenance);
+    await this.#server.close();
+    await this.#ctx.close();
+    this.#store.close();
+    try {
+      unlinkSync(runtimeFilePath());
+    } catch {
+      /* already gone */
+    }
+  }
+
+  #writeRuntimeInfo(): void {
+    const info: RuntimeInfo = {
+      schemaVersion: 1,
+      daemonId: this.#daemonId,
+      port: this.#opts.port,
+      pid: process.pid,
+      token: this.#token,
+      startedAt: this.#startedAt,
+      version: VERSION,
+    };
+    // 0600: the token in this file is the only thing standing between a local
+    // process and the dashboard.
+    writeFileSync(runtimeFilePath(), JSON.stringify(info, null, 2), { mode: 0o600 });
+  }
+
+  async #tick(): Promise<void> {
+    if (this.#scanning || this.#stopped) return;
+    this.#scanning = true;
+    this.#phase = 'scan';
+    this.#phaseSince = Date.now();
+    const t0 = Date.now();
+    try {
+      // Drain hooks *before* scanning so an event that arrived during the last
+      // interval is already reflected in the state we are about to persist.
+      this.#phase = 'hooks';
+      const raws = this.#ring.drain();
+      if (raws.length > 0) this.#hooks.apply(raws);
+
+      // The daemon is the only caller that can answer "has this moved?", so
+      // it hands the engine what it remembers. `vt status` passes nothing and
+      // the history-dependent detectors stay quiet rather than guess.
+      await this.#refreshTracking();
+
+      const report = await scan(
+        {
+          ...this.#scanOpts,
+          isTracked: (projectId) => isTracked(this.#tracking, projectId),
+          keepClosed:
+            this.#tracking.mode === 'selected'
+              ? (projectId) => isTracked(this.#tracking, projectId)
+              : undefined,
+          extraRoots: this.#roots,
+          agents: this.#agents,
+          agentRecencyMs: this.#agentRecencyMs,
+          history: (projectId) => ({
+            prior: this.#store.priorProgress(projectId, D5_WINDOW_MS, Date.now()),
+            activitySince: this.#store.activitySince(projectId, Date.now() - D5_WINDOW_MS),
+          }),
+        },
+        this.#ctx,
+      );
+
+      // Hook facts outrank inference: `PermissionRequest` states outright what
+      // the passive layer can only deduce from an unusually long-lived tool.
+      this.#phase = 'overlay';
+      let hookedSessions = 0;
+      for (const p of report.projects) {
+        for (const s of p.sessions) {
+          if (this.#hooks.overlay(s)) hookedSessions++;
+        }
+      }
+      report.capabilities.hooks = {
+        ok: this.#ring.received > 0,
+        detail:
+          this.#ring.received > 0
+            ? t`${this.#ring.received} olay · ${hookedSessions} oturum hook'lu` +
+              (this.#ring.dropped > 0 ? t` · ${this.#ring.dropped} DÜŞTÜ` : '')
+            : tr('hiç hook olayı gelmedi (kurulu değil ya da devre dışı)'),
+      };
+      if (this.#ring.dropped > 0) {
+        report.warnings.push(
+          t`${this.#ring.dropped} hook olayı düştü: tampon doldu. Durumlar eksik olabilir.`,
+        );
+      }
+
+      // Dwell timers come from the store, not from this scan: "waiting for 41
+      // minutes" is only answerable because we remember when the state began.
+      this.#phase = 'store';
+      const changes = this.#store.apply(report);
+      // Record what the plans said, so the next scan can tell whether it moved.
+      // Only actual changes are written — see `recordProgress`.
+      for (const p of report.projects) {
+        const pr = p.progress;
+        if (!pr) continue;
+        this.#store.recordProgress(
+          p.projectId,
+          {
+            percent: pr.percent,
+            doneWeight: pr.doneWeight ?? null,
+            totalWeight: pr.totalWeight ?? null,
+            ordinal: pr.phase?.ordinal ?? null,
+            basis: pr.basis,
+            phaseLabel: pr.phase?.labelRaw ?? null,
+          },
+          Date.now(),
+        );
+      }
+      // Momentum: sampled for every project the scan saw, tracked or not, so
+      // a project you start following already has a past to draw.
+      const now = Date.now();
+      for (const p of report.projects) {
+        this.#momentum.sample(p.projectId, p.summary.waiting + p.summary.running, now);
+        p.momentum = this.#momentum.series(p.projectId, now);
+      }
+
+      const since = this.#store.sinceMap();
+      for (const p of report.projects) {
+        for (const s of p.sessions) {
+          const st = since.get(s.sessionId);
+          if (st) s.stateSince = st;
+        }
+      }
+
+      this.#latest = report;
+      this.#lastError = null;
+      this.#scanCount++;
+      this.#lastScanMs = Date.now() - t0;
+
+      this.#phase = 'broadcast';
+      this.#server.broadcast('overview', report);
+      for (const c of changes) this.#emitChange(c);
+    } catch (err) {
+      // Redacted before it is kept. This string is served by `/health`, shown
+      // by `vt doctor` and pasted into issues, and a scan failure is usually a
+      // filesystem or child-process error carrying whatever it was handed.
+      this.#lastError = redactSnippet((err as Error).message, 200);
+    } finally {
+      this.#scanning = false;
+      this.#phase = 'idle';
+      this.#phaseSince = Date.now();
+    }
+  }
+
+  /**
+   * Phase board for one project. The root comes from the latest report rather
+   * than from the database, because the board reads git and git lives at a
+   * path — one that can move between runs.
+   */
+  async #board(projectId: string): Promise<Board | null> {
+    const proj = this.#latest?.projects.find((p) => p.projectId === projectId);
+    if (this.#latest && !proj) return null;
+    return buildBoard(this.#store, projectId, proj?.workspaces[0]?.normPath ?? null);
+  }
+
+  #runMaintenance(): void {
+    if (this.#stopped) return;
+    this.#phase = 'maintenance';
+    try {
+      this.#hooks.prune();
+      this.#momentum.prune(Date.now());
+      const result = this.#store.maintain();
+      this.#lastMaintenance = { ...result, at: Date.now() };
+      if (result.hardCapTriggered) {
+        log(
+          t`veritabanı sert tavanı aştı; agresif saklama uygulandı ` +
+            t`(${result.transitionsDropped} geçiş, ${result.sessionsDropped} oturum silindi)`,
+        );
+      } else if (result.transitionsDropped > 0 || result.sessionsDropped > 0) {
+        log(
+          t`bakım: ${result.transitionsDropped} geçiş, ${result.sessionsDropped} oturum ` +
+            t`silindi · ${result.ms} ms`,
+        );
+      }
+    } catch (err) {
+      // Maintenance failing must never take the daemon down with it: the
+      // dashboard is still correct, it just keeps more history than intended.
+      this.#lastError = t`bakım: ${(err as Error).message}`;
+    } finally {
+      this.#phase = 'idle';
+    }
+  }
+
+  #emitChange(c: StateChange): void {
+    // Only transitions that a human would want to know about become alerts.
+    const interesting =
+      c.to === 'WAITING_PERMISSION' || c.to === 'ERRORED' || c.to === 'STALLED';
+    if (interesting) this.#server.broadcast('alert', c);
+  }
+
+  /**
+   * Better dead than hung.
+   *
+   * A daemon that stops responding while still holding the port is far worse
+   * than one that exits: with hooks installed (M2) an unresponsive HTTP
+   * endpoint stalls every agent session, whereas a dead daemon refuses the
+   * connection instantly and costs nothing. So we measure event-loop lag and
+   * exit if it goes unresponsive — after logging what we were doing, because an
+   * unexplained exit in someone else's daemon is its own kind of failure.
+   */
+  #startWatchdog(): void {
+    let last = Date.now();
+    const period = 250;
+    this.#watchdog = setInterval(() => {
+      const now = Date.now();
+      const lag = now - last - period;
+      last = now;
+      if (lag > 2000) {
+        const stuckFor = now - this.#phaseSince;
+        log(
+          t`event-loop ${lag}ms bloklandı, faz="${this.#phase}" ` +
+            t`(${stuckFor}ms'dir bu fazda) · tarama #${this.#scanCount} · ` +
+            t`${Math.round(process.memoryUsage().rss / 1048576)} MB RSS. ` +
+            t`Asılı kalmaktansa çıkılıyor.`,
+        );
+        process.exit(1);
+      }
+    }, period);
+    this.#watchdog.unref();
+  }
+}
+
+// Plain fields rather than parameter properties: parameter properties emit
+// runtime code from a type position, which Node's type-stripping loader cannot
+// handle. `erasableSyntaxOnly` in tsconfig is what caught this.
+export class AlreadyRunningError extends Error {
+  daemonId: string;
+  port: number;
+  constructor(daemonId: string, port: number) {
+    super(t`VibeTracker zaten çalışıyor (port ${port}, id ${daemonId})`);
+    this.daemonId = daemonId;
+    this.port = port;
+  }
+}
+
+export class PortTakenError extends Error {
+  port: number;
+  constructor(port: number) {
+    super(
+      t`Port ${port} başka bir program tarafından kullanılıyor. ` +
+        t`Hook URL'leri sabit olduğu için VibeTracker sessizce başka bir porta geçmez.`,
+    );
+    this.port = port;
+  }
+}
+
+/** Ask whatever holds the port whether it is one of ours. */
+async function probeExisting(
+  port: number,
+): Promise<{ ok: boolean; daemonId?: string } | null> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`, {
+      signal: AbortSignal.timeout(1500),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { ok?: boolean; daemonId?: string };
+    return body?.ok === true && typeof body.daemonId === 'string'
+      ? { ok: true, daemonId: body.daemonId }
+      : null;
+  } catch {
+    return null; // Nothing there, or not speaking our protocol.
+  }
+}
+
+export { Store };
+export { existsSync };
+export { loadOrCreateHookToken, readHookToken, hookTokenPath } from './hooks/token.ts';
+export { HookRing } from './hooks/ring.ts';
+export { HookIngest, type SessionHookState } from './hooks/ingest.ts';

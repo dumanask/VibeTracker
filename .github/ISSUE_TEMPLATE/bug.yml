@@ -1,0 +1,52 @@
+name: Hata
+description: Yanlış bir şey gösteriyor, çöküyor ya da bir yeteneği çalışmıyor
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Önce `vt doctor` çalıştır.** Çıktısı, "bu makinede neyin çalışıp
+        neyin çalışmadığı" sorusunun cevabıdır ve çoğu hatayı tek bakışta
+        yerine oturtur.
+
+        Prompt, kod ya da dosya içeriği yapıştırma. Bir teşhis paketine
+        ihtiyaç varsa `vt doctor --bundle` beyaz listeyle toplar, redaksiyondan
+        geçirir ve paketi yazmadan önce içindekileri sana gösterir.
+  - type: textarea
+    id: what
+    attributes:
+      label: Ne oldu
+      description: Ekranda ne gördün, ne görmeyi bekliyordun?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: vt doctor çıktısı
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Sürüm
+      description: "`vt --version` ve işletim sistemi"
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Hangi ajan
+      multiple: true
+      options:
+        - Claude Code
+        - Codex
+        - opencode
+        - Kilo
+        - Cline
+        - Gemini
+        - VS Code / Copilot
+        - Cursor
+        - Antigravity
+        - Trae
+        - Hiçbiri / genel

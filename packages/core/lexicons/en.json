@@ -1,0 +1,181 @@
+{
+  "lang": "en",
+  "version": 1,
+  "status": {
+    "done": [
+      "done",
+      "complete",
+      "completed",
+      "finished",
+      "shipped",
+      "implemented",
+      "merged",
+      "closed",
+      "fixed",
+      "added",
+      "ready",
+      "passing",
+      "green",
+      "yes"
+    ],
+    "partial": [
+      "partial",
+      "partially",
+      "in progress",
+      "wip",
+      "ongoing",
+      "started",
+      "mostly"
+    ],
+    "todo": [
+      "todo",
+      "not started",
+      "pending",
+      "planned",
+      "open",
+      "backlog",
+      "missing",
+      "no"
+    ],
+    "blocked": [
+      "blocked",
+      "stuck",
+      "waiting",
+      "on hold",
+      "blocker"
+    ],
+    "dropped": [
+      "cancelled",
+      "canceled",
+      "dropped",
+      "deferred",
+      "out of scope",
+      "wontfix",
+      "removed"
+    ]
+  },
+  "roles": {
+    "plan": [
+      "plan",
+      "roadmap",
+      "development plan",
+      "implementation plan",
+      "backlog",
+      "tasks",
+      "todo",
+      "milestones",
+      "work plan"
+    ],
+    "status": [
+      "current status",
+      "status",
+      "progress",
+      "where we are",
+      "state of play"
+    ],
+    "changelog": [
+      "changelog",
+      "history",
+      "archive",
+      "release notes",
+      "what we did",
+      "done today",
+      "journal",
+      "log"
+    ],
+    "research": [
+      "competitor",
+      "comparison",
+      "benchmark",
+      "market",
+      "research",
+      "analysis",
+      "inventory",
+      "audit",
+      "report",
+      "brief",
+      "strategy",
+      "findings",
+      "survey"
+    ],
+    "design": [
+      "architecture",
+      "design",
+      "data model",
+      "contract",
+      "spec",
+      "specification",
+      "standards",
+      "conventions",
+      "decision",
+      "adr"
+    ],
+    "index": [
+      "index",
+      "contents",
+      "readme",
+      "overview"
+    ]
+  },
+  "phaseWords": [
+    "phase",
+    "stage",
+    "sprint",
+    "milestone",
+    "slice",
+    "step",
+    "iteration",
+    "increment",
+    "release"
+  ],
+  "completionVerbs": [
+    "completed",
+    "implemented",
+    "shipped",
+    "merged",
+    "released",
+    "closed",
+    "delivered"
+  ],
+  "question": [
+    "should i",
+    "which",
+    "do you want",
+    "shall i",
+    "can you confirm"
+  ],
+  "statusLineKeys": [
+    "status",
+    "state",
+    "progress",
+    "durum"
+  ],
+  "selfDeclaredRoles": {
+    "plan": [
+      "plan"
+    ],
+    "changelog": [
+      "report",
+      "log",
+      "history",
+      "archive"
+    ],
+    "research": [
+      "analysis",
+      "inventory",
+      "audit",
+      "research"
+    ]
+  },
+  "completionStems": [
+    "complet",
+    "implement",
+    "ship",
+    "merge",
+    "releas",
+    "close",
+    "deliver",
+    "finish",
+    "land"
+  ]
+}

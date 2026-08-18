@@ -1,0 +1,28 @@
+[package]
+name = "vibetracker-desktop"
+version = "0.1.0"
+description = "VibeTracker masaüstü kabuğu"
+edition = "2021"
+rust-version = "1.77"
+license = "Apache-2.0"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Blocking HTTP, on a background thread. The alternative is an async runtime for
+# one request every three seconds to 127.0.0.1.
+ureq = { version = "2", default-features = false }
+
+[profile.release]
+# The bundle already carries an 85 MB Node runtime; the shell should not add to
+# it carelessly. These cost build time, not correctness.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,0 +1,54 @@
+VibeTracker
+Copyright 2026 VibeTracker contributors
+
+This product includes software developed by the VibeTracker contributors.
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+
+NOT AN OFFICIAL TOOL
+--------------------
+
+VibeTracker is an independent, unofficial project. It is not affiliated with,
+endorsed by, or supported by Anthropic, OpenAI, Google, Microsoft, Cursor,
+Cline, opencode, or any other vendor whose software it observes.
+
+It reads files those programs write to the local filesystem. Those file formats
+are undocumented and belong to their authors, who may change them at any time
+and are under no obligation to keep this tool working. Where a format is
+described in this repository -- in `packages/core/dialects/` -- it is a record
+of what was observed on a real machine at a stated version, not a specification
+anyone has agreed to.
+
+The names of those products are used only to say which program's files are
+being read, which is the "reasonable and customary use in describing the origin
+of the Work" that Section 6 of the License permits. No trademark rights are
+claimed or granted.
+
+
+WHAT THIS SOFTWARE DOES NOT DO
+------------------------------
+
+Stated here because these are guarantees, not features, and a fork that removes
+them should have to do so deliberately:
+
+  * It never writes to a project directory.
+  * It never writes to, deletes from, or modifies an agent's state directory.
+  * It never opens credential files.
+  * It never captures process command lines.
+  * It makes no network request of its own. The LLM digest is off by default
+    and, when enabled, sends only what it shows you first.
+
+See PRIVACY.md for the full account.
+
+
+THIRD-PARTY CONTENT
+-------------------
+
+This distribution has no runtime dependencies. Nothing is vendored, bundled, or
+statically linked into the published package.
+
+Development dependencies (TypeScript, and the Node.js toolchain) are not
+redistributed and carry their own licenses.
+
+Desktop builds, where produced, bundle a Node.js runtime and the Tauri
+framework; their licenses travel with those artifacts.

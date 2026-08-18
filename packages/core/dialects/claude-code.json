@@ -1,0 +1,69 @@
+{
+  "_note": "Shapes of files VibeTracker does not own. Data, not code: a new agent release that only moves a field should be a JSON patch, never a code release. Everything here was read off real files on a machine running the version in appliesTo.",
+  "dialectVersion": 1,
+  "agent": "claude-code",
+  "appliesTo": ">=2.0.0 <3.0.0",
+
+  "entryTypes": {
+    "user": "message",
+    "assistant": "message",
+    "system": "ignore",
+    "ai-title": "meta.title",
+    "last-prompt": "meta.lastPrompt",
+    "mode": "ignore",
+    "queue-operation": "ignore",
+    "attachment": "ignore",
+    "file-history-snapshot": "ignore",
+    "file-history-delta": "ignore",
+    "summary": "ignore"
+  },
+
+  "fields": {
+    "type": "type",
+    "timestamp": "timestamp",
+    "branch": "gitBranch",
+    "sidechain": "isSidechain",
+    "aiTitle": "aiTitle",
+    "lastPrompt": "lastPrompt",
+    "messageContent": "message.content"
+  },
+
+  "content": {
+    "toolUse": "tool_use",
+    "toolResult": "tool_result",
+    "toolUseId": "id",
+    "toolResultId": "tool_use_id",
+    "toolName": "name"
+  },
+
+  "registry": {
+    "path": "sessions/*.json",
+    "fields": {
+      "pid": "pid",
+      "sessionId": "sessionId",
+      "cwd": "cwd",
+      "startedAt": "startedAt",
+      "startTime": "procStart",
+      "version": "version",
+      "kind": "kind",
+      "entrypoint": "entrypoint",
+      "name": "name"
+    },
+    "startTimeKind": "filetime"
+  },
+
+  "ide": {
+    "path": "ide/*.lock",
+    "fields": {
+      "pid": "pid",
+      "workspaceFolders": "workspaceFolders",
+      "ideName": "ideName",
+      "transport": "transport"
+    }
+  },
+
+  "dead": {
+    "_note": "Files this agent version no longer writes. Reading them makes weeks-old data look current, so they are named here and never used.",
+    "paths": ["history.jsonl", "stats-cache.json"]
+  }
+}

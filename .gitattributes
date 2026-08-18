@@ -1,0 +1,14 @@
+# LF in the repository, on every platform.
+#
+# Two files here care about this more than style. `note.ps1` must stay pure
+# ASCII and its parser is fussy; and the source-hygiene test asserts on exact
+# bytes, so a checkout that silently rewrote line endings would fail a test that
+# has nothing to do with line endings and send someone hunting.
+* text=auto eol=lf
+
+# Binary, whatever the content sniffing thinks.
+*.png binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.tgz binary
