@@ -58,6 +58,22 @@ jobs:
             if (p.scripts && p.scripts.prepublishOnly) { console.error('yayın hâlâ engelli'); process.exit(1) }
             if (Object.keys(p.dependencies || {}).length) { console.error('bağımlılık var'); process.exit(1) }
           "
+      # The one check that would have caught the worst bug this package ever
+      # had. Sources ship as `.ts` in the repository and Node runs them
+      # directly, but an installed package lives under `node_modules`, where
+      # Node refuses to strip types — so a tarball of TypeScript installs
+      # cleanly and dies on first run. CI has asserted this since it was
+      # written; it had simply never run, because the repository had never been
+      # pushed. Asserted here too, because a release is the last place to find
+      # out.
+      - name: kurulan paket gerçekten açılıyor mu
+        run: |
+          npm pack ./.pack --pack-destination /tmp
+          mkdir -p /tmp/probe && cd /tmp/probe && npm init -y > /dev/null
+          npm install /tmp/vibetracker-*.tgz
+          node node_modules/vibetracker/bin/vt.mjs --help | head -3
+          node node_modules/vibetracker/bin/vt.mjs --lang en demo --json > /dev/null
+
       - name: tarball
         run: cd .pack && npm pack --pack-destination ..
       - uses: actions/upload-artifact@v4
@@ -167,11 +183,21 @@ jobs:
 
             ### Bu paketler imzalı değil
 
-            Windows SmartScreen uyarısı gösterecek ("Daha fazla bilgi" →
-            "Yine de çalıştır"). macOS Gatekeeper doğrudan açtırmayacak; sağ
-            tık → Aç gerekiyor. Kod imzalama sertifikası gerektiriyor ve henüz
-            alınmadı — bu, dürüstçe söylenmesi gereken bir eksik, gizlenecek
-            bir şey değil.
+            **Windows** — SmartScreen uyarısı gösterecek: "Daha fazla bilgi" →
+            "Yine de çalıştır".
+
+            **macOS** — paketler ne imzalı ne de notarize edilmiş. Eski
+            sürümlerde anlatılan "sağ tık → Aç" yolu macOS 15'ten itibaren
+            çalışmıyor: uygulamayı bir kez açmayı dene, reddedilince
+            **Sistem Ayarları → Gizlilik ve Güvenlik**'e git ve oradaki
+            "Yine de Aç" düğmesine bas.
+
+            **Linux** — `.deb` WebKitGTK 4.1 istiyor (Ubuntu 22.04+, Debian
+            12+). Daha eski bir dağıtımdaysan `.AppImage` kullan;
+            indirdikten sonra `chmod +x`.
+
+            İmzalama sertifikası gerektiriyor ve henüz alınmadı — dürüstçe
+            söylenmesi gereken bir eksik, gizlenecek bir şey değil.
 
             Paketin ne yaptığını doğrulamak istersen: kaynak Apache-2.0 ve
             uygulamanın taşıdığı kod, derlenmiş değil, okunabilir hâlde

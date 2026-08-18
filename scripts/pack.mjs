@@ -21,6 +21,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripTypeScriptTypes } from 'node:module';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const STAGE = process.argv.includes('--out')
@@ -71,16 +72,55 @@ function rewrite(text, fileDirInStage) {
   });
 }
 
+/**
+ * TypeScript goes in, JavaScript comes out — and it has to.
+ *
+ * The repository has no build step and runs its own `.ts` directly, which is
+ * the whole reason it has no bundler and no dependencies. But an installed npm
+ * package lives under `node_modules`, and Node **refuses** to strip types
+ * there: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, deliberately, so that
+ * what a package does cannot depend on a loader feature. Shipping `.ts`
+ * therefore produced a package that installs cleanly and then dies on first
+ * run with an internal Node error. Reproduced: copy the tarball into a
+ * `node_modules` directory, run `bin/vt.mjs`, and that is the entire output.
+ *
+ * The stripper is Node's own — `module.stripTypeScriptTypes`, the same code
+ * that runs at load time — so this adds no dependency and introduces no second
+ * opinion about what the syntax means. It replaces types with blanks rather
+ * than reformatting, so a line number in a stack trace is still the line
+ * number in the source, and `erasableSyntaxOnly` in the tsconfig is what
+ * guarantees there is nothing left to emit beyond that.
+ *
+ * The staging step was always a transform — it rewrites workspace specifiers —
+ * so this completes the transform rather than adding a build.
+ */
+function toJs(text) {
+  return stripTypeScriptTypes(text, { mode: 'strip' });
+}
+
+/** `./x.ts` and `../y/z.ts` become `.js`, in static and dynamic imports alike. */
+function retarget(text) {
+  return text.replace(
+    /((?:from|import)\s*\(?\s*['"])(\.[^'"]*)\.ts(['"])/g,
+    (_m, head, path, tail) => `${head}${path}.js${tail}`,
+  );
+}
+
 function copySources() {
   let files = 0;
   for (const pkg of PACKAGES) {
     const src = join(ROOT, 'packages', pkg, 'src');
     const dst = join(STAGE, 'src', pkg);
     for (const file of walk(src)) {
-      const target = join(dst, relative(src, file));
+      const isTs = file.endsWith('.ts');
+      const target = join(dst, relative(src, file)).replace(/\.ts$/, '.js');
       mkdirSync(dirname(target), { recursive: true });
       const text = readFileSync(file, 'utf8');
-      writeFileSync(target, rewrite(text, dirname(target)), 'utf8');
+      // Specifiers are rewritten while they still end in `.ts`, then
+      // retargeted, then stripped. Stripping last keeps the rewrite operating
+      // on the source the repository actually contains.
+      const staged = retarget(rewrite(text, dirname(target)));
+      writeFileSync(target, isTs ? toJs(staged) : staged, 'utf8');
       files++;
     }
   }
@@ -152,7 +192,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const entry = join(here, '..', 'src', 'cli', 'index.ts');
+const entry = join(here, '..', 'src', 'cli', 'index.js');
 
 const [major, minor] = process.versions.node.split('.').map(Number);
 if (major < 22 || (major === 22 && minor < 20)) {
