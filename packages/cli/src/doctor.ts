@@ -409,6 +409,10 @@ async function checkDaemon(): Promise<Check[]> {
   let foreign = false;
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/v1/health`, {
+      // The identity half of this endpoint is open; the diagnostic half is not,
+      // and a doctor that could not show it would be reporting on a daemon it
+      // was refusing to ask. The token is in the runtime file we just read.
+      headers: info ? { 'X-VT-Token': info.token } : {},
       signal: AbortSignal.timeout(1500),
     });
     const body = (await res.json()) as Record<string, unknown>;
@@ -541,7 +545,9 @@ async function checkHooks(): Promise<Check[]> {
   }
   let health: HookHealthShape | null = null;
   try {
-    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/v1/health`, {
+    const info = readRuntimeInfo();
+    const res = await fetch(`http://127.0.0.1:${info?.port ?? DEFAULT_PORT}/api/v1/health`, {
+      headers: info ? { 'X-VT-Token': info.token } : {},
       signal: AbortSignal.timeout(1500),
     });
     health = (await res.json()) as HookHealthShape;

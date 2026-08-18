@@ -116,6 +116,23 @@ export interface NoteLabels {
   /** Said by the strip, not by the voice: which voice answered, and whether it fits. */
   voiceNone: string;
   voiceMismatch: string;
+  /**
+   * What each title-bar button does, said in the strip while the pointer is
+   * over it.
+   *
+   * The buttons are 14 pixels square and their glyphs are a plus, a note, an
+   * arrow, a dash, a square and a cross — legible as marks, not as meanings.
+   * The command line printed the key once at launch, which helps the first
+   * time and never again. A tooltip would be the usual answer and the wrong
+   * one here: a floating yellow box over a chromeless instrument, in a window
+   * that already has a line for saying what just happened.
+   */
+  btnPick: string;
+  btnSpeak: string;
+  btnFull: string;
+  btnShade: string;
+  btnBadge: string;
+  btnClose: string;
 }
 
 export interface StartNoteOptions {

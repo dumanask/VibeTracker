@@ -7,12 +7,24 @@ import { buildFixture } from '../src/index.ts';
 import { readRegistry, readIdeLocks, TailReader, scan, ScanContext } from '@vibetracker/engine';
 import type { ScanOptions } from '@vibetracker/engine';
 
-/** No CPU sampling, no docs tree: these tests are about which rows exist. */
+/**
+ * No CPU sampling, no docs tree: these tests are about which rows exist.
+ *
+ * `includeTemp` is on, and it has to be. The generator builds its tree under
+ * the system temp directory — that is what a fixture is — and the scan
+ * deliberately archives projects that live there, because on a real machine
+ * `%TEMP%` is where scratch checkouts go and a third of the reference board
+ * was noise from them. So with it off, every scan against a fixture returned
+ * *zero* projects and every assertion about which rows exist was being made
+ * against whatever `~/.claude` the developer happened to have. Locally that
+ * looked like passing tests; on a runner with no agent installed it was a red
+ * build with no relation to the code.
+ */
 const LIGHT: ScanOptions = {
   cpuSample: false,
   cpuSampleMs: 0,
   includeDead: false,
-  includeTemp: false,
+  includeTemp: true,
   tailBytes: 32 * 1024,
   progress: false,
 };
@@ -197,7 +209,17 @@ async function findFacts(reader: TailReader, projectsDir: string, sessionId: str
  * picked, and only for what they picked.
  */
 test('a hand-picked project survives with no live agent, and says it is closed', async () => {
-  const f = await build();
+  // One live session across four project roots, so three of them have nothing
+  // but dead entries — which is the whole situation under test. With the
+  // default spread every root has a live session, `projects.has(projectId)`
+  // short-circuits, and the case never arises.
+  //
+  // It passed anyway for a while, because the fixture did not point
+  // `$CLAUDE_CONFIG_DIR` at itself: `scan()` was reading the developer's real
+  // `~/.claude`, where closed projects are plentiful. On a runner with no
+  // agent installed it would have failed, and the reason would have looked
+  // like a platform difference.
+  const f = await build({ live: 1, dead: 6, reused: 0 });
   const ctx = new ScanContext();
   try {
     const open = await scan(
@@ -243,6 +265,87 @@ test('without a pick, a project with nothing running stays off the board', async
     for (const p of r.projects) {
       assert.ok(p.summary.live > 0, `${p.displayName}: canlı ajanı yokken listelenmiş`);
     }
+  } finally {
+    await ctx.close();
+    f.cleanup();
+  }
+});
+
+/**
+ * The counts on the front of the board.
+ *
+ * A naive reading of the registry counts every file, and the product exists
+ * because most of them are lies: a PID that no longer exists is dead, and a
+ * PID that exists but whose recorded start time does not match belongs to
+ * somebody else now. On the reference machine that was 50 records, 13 live and
+ * 3 recycled — the first number the tool ever got right.
+ */
+test('the scan separates live, dead and reused registry entries', async () => {
+  const f = await build({ live: 2, dead: 3, reused: 1 });
+  const ctx = new ScanContext();
+  try {
+    const r = await scan({ ...LIGHT, includeDead: true }, ctx);
+    assert.equal(r.counts.registryEntries, 6);
+    assert.equal(r.counts.dead, 3);
+    assert.equal(r.counts.reused, 1);
+    assert.equal(r.counts.live, 2);
+  } finally {
+    await ctx.close();
+    f.cleanup();
+  }
+});
+
+/**
+ * A recycled PID has to say it was recycled.
+ *
+ * The closed-session branch used to write `state`, `evidence` and `confidence`
+ * by hand — `deriveState`'s *dead* branch, copied out. That list holds every
+ * entry whose liveness is not `live`, `reused` included, so a PID that now
+ * belongs to a stranger was displayed as a process that had ended. PID reuse
+ * is the one thing this tool measures that a directory listing cannot; showing
+ * the wrong reason on the row that proves it is the worst possible place for a
+ * second opinion.
+ */
+test('a recycled PID is reported as reused, not as a process that ended', async () => {
+  const f = await build({ live: 1, dead: 2, reused: 1 });
+  const ctx = new ScanContext();
+  try {
+    const r = await scan({ ...LIGHT, isTracked: () => true, keepClosed: () => true }, ctx);
+    const sessions = r.projects.flatMap((p) => p.sessions);
+    const reused = sessions.filter((s) => s.liveness === 'reused');
+    const dead = sessions.filter((s) => s.liveness === 'dead');
+    assert.ok(reused.length > 0, 'fixture geri dönüşmüş PID üretmedi');
+    assert.ok(dead.length > 0, 'fixture ölü PID üretmedi');
+    for (const s of reused) {
+      assert.deepEqual(s.evidence, ['proc:pid-reused'], 'geri dönüşmüş PID "süreç gitti" diyor');
+      assert.equal(s.state, 'ORPHANED');
+    }
+    for (const s of dead) assert.deepEqual(s.evidence, ['proc:gone']);
+  } finally {
+    await ctx.close();
+    f.cleanup();
+  }
+});
+
+/**
+ * Two scans through one context must not reopen what they already hold.
+ *
+ * The held descriptor is the only reason a poll is cheap — an open measured
+ * ~310 ms under Defender, regardless of file size — and both ways the cache
+ * can silently switch itself off look identical from outside: the board is
+ * correct, just paid for again every three seconds.
+ */
+test('a second scan through the same context reuses its open transcripts', async () => {
+  const f = await build({ live: 2, dead: 1 });
+  const ctx = new ScanContext();
+  try {
+    await scan({ ...LIGHT }, ctx);
+    const first = ctx.tail().stats();
+    await scan({ ...LIGHT }, ctx);
+    const second = ctx.tail().stats();
+    assert.ok(first.opens > 0, 'ilk tarama hiç transcript açmadı');
+    assert.equal(second.opens, first.opens, 'ikinci tarama transcriptleri yeniden açtı');
+    assert.ok(second.skipped > first.skipped, 'büyümemiş transcript yine okundu');
   } finally {
     await ctx.close();
     f.cleanup();

@@ -151,16 +151,70 @@ fn run_cli(app: &AppHandle, args: &[&str]) -> Option<Child> {
 /// was typing `vt mini` in a terminal. A tray app whose smaller surface is
 /// reachable only from a terminal has not really shipped it.
 ///
-/// Nothing is tracked about it here. `vt mini` already refuses to open a second
-/// one and says which window is holding the place, and the note closes itself
-/// from its own ×, so a menu entry that only ever opens is the whole of it.
+/// **Which note you get depends on the platform, and that is the honest part.**
+///
+/// On Windows there is a real one: a painted, chromeless, always-on-top panel
+/// with its own chooser, three shapes and a voice. It is fifteen hundred lines
+/// of WinForms reached through PowerShell and it is never going to run anywhere
+/// else.
+///
+/// Everywhere else `vt mini` falls back to a Chromium `--app` window that it
+/// cannot pin, because pinning is `SetWindowPos` and that is Win32. So on macOS
+/// and Linux the tool's whole premise -- a corner of the screen that answers
+/// "is anything waiting for me" while you work on something else -- did not
+/// hold: the window went behind the editor and stayed there, and the command
+/// line said so politely and left it at that.
+///
+/// This process can fix it, and it is the only part of the product that can.
+/// Tauri gives a small, undecorated, genuinely always-on-top window on all
+/// three platforms, and the page it needs already exists: the dashboard's own
+/// `#mini` view, which is now drawn in the note's grammar rather than as a
+/// narrow web page. So the sticky note on macOS and Linux is a real sticky
+/// note, showing the same numbers drawn the same way as the Windows one.
 fn open_note(app: &AppHandle) {
     let app = app.clone();
-    // Spawned, like the panel: this runs on the event loop, and `vt mini`
-    // waits on a window handshake before it returns.
+    // Spawned, like the panel: window creation must not happen on the event
+    // loop, and `vt mini` waits on a window handshake before it returns.
     std::thread::spawn(move || {
-        let _ = run_cli(&app, &["mini"]);
+        #[cfg(windows)]
+        {
+            // The native panel is strictly better where it exists.
+            let _ = run_cli(&app, &["mini"]);
+        }
+        #[cfg(not(windows))]
+        {
+            build_note(&app);
+        }
     });
+}
+
+/// The post-it, as a window this process owns.
+///
+/// Undecorated on purpose: a title bar on a 260-pixel readout spends a fifth of
+/// its height on a name you already know. The page carries its own strip with
+/// the drag region on it, which is what `-webkit-app-region: drag` in the
+/// minibar rule is for.
+#[cfg(not(windows))]
+fn build_note(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("note") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return;
+    }
+    let Some(rt) = read_runtime() else { return };
+    // The fragment never reaches the server -- it is a view preference, and the
+    // daemon has no business knowing which shape of the page you are reading.
+    let url = format!("http://127.0.0.1:{}/?t={}#mini", rt.port, rt.token);
+    let Ok(parsed) = url.parse() else { return };
+    let _ = WebviewWindowBuilder::new(app, "note", WebviewUrl::External(parsed))
+        .title("VibeTracker")
+        .inner_size(380.0, 260.0)
+        .min_inner_size(300.0, 90.0)
+        .always_on_top(true)
+        .decorations(false)
+        .resizable(true)
+        .visible(true)
+        .build();
 }
 
 fn health(rt: &Runtime) -> Option<()> {

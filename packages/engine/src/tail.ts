@@ -160,10 +160,19 @@ export class TailReader {
     let entry = this.#entries.get(path);
     if (!entry) {
       entry = newEntry(path, opts.apply ?? applyLines);
+      // Stamped *before* the trim, not after. `#trim` evicts by `lastUsed`
+      // ascending and a fresh entry is born at 0, so the coldest thing in the
+      // map was always the one just added — the trim deleted it every time,
+      // which turned the cache off entirely once the map was full and leaked
+      // the descriptor `#ensureOpen` had already counted. Measured before the
+      // fix: 513 files, then five reads of one new file gave opens 513→518 and
+      // skipped 0.
+      entry.lastUsed = ++this.#clock;
       this.#entries.set(path, entry);
       if (this.#entries.size > MAX_TRACKED) await this.#trim();
+    } else {
+      entry.lastUsed = ++this.#clock;
     }
-    entry.lastUsed = ++this.#clock;
 
     const handle = await this.#ensureOpen(entry);
     if (!handle) {

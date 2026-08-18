@@ -196,14 +196,24 @@ export class DaemonServer {
     const path = url.pathname;
 
     // `/api/v1/health` answers without a token so a second instance can ask
-    // "is that you?" before deciding to exit. It reveals only an id and version.
+    // "is that you?" before deciding to exit — it cannot know the running
+    // daemon's token, and a single-instance check that needed one would let two
+    // daemons share a port.
+    //
+    // But it used to spread `health()` into that unauthenticated answer while
+    // the comment above it said "only an id and version". It was neither: the
+    // body carried the database path, the last error, resident memory, hook
+    // counters and transcript statistics to anything that could reach loopback,
+    // and every call ran three `COUNT(*)` and two pragmas with no rate limit.
+    //
+    // So the identity half stays open and the diagnostic half moves behind the
+    // guard, on the same path. `vt doctor` reads the runtime file anyway and
+    // now sends the token it finds there; anything that cannot is answered with
+    // exactly what the comment always promised.
     if (path === '/api/v1/health') {
-      return json(res, 200, {
-        ok: true,
-        daemonId: this.#deps.daemonId,
-        version: this.#deps.version,
-        ...this.#deps.health(),
-      });
+      const known = guard(req, url, this.boundPort, this.#deps.token);
+      const id = { ok: true, daemonId: this.#deps.daemonId, version: this.#deps.version };
+      return json(res, 200, known.ok ? { ...id, ...this.#deps.health() } : id);
     }
 
     // Hook ingest is handled before the dashboard guard, with its own rules:
@@ -228,17 +238,36 @@ export class DaemonServer {
       }
       // The page needs the token to open its own SSE stream; it is same-origin
       // and already authenticated to be reading this response at all.
-      html = html.replace('__VT_TOKEN__', this.#deps.token);
+      // Function replacers throughout. In a *string* replacement `$&`, `$'`,
+      // ``$` `` and `$$` are substitution patterns, so a catalog entry that
+      // happened to contain one would splice a piece of the page into itself —
+      // silently, and differently in each language. A function replacement has
+      // no such syntax.
+      html = html.replace('__VT_TOKEN__', () => this.#deps.token);
       // The dashboard cannot read locales/ from a browser, so the catalog
       // travels with the page. One JSON file still drives both surfaces.
-      html = html
-        .replace('"__VT_I18N__"', JSON.stringify(catalogEntries()))
-        .replace('__VT_LANG__', getLang());
+      const catalog = JSON.stringify(catalogEntries());
+      html = html.replace('"__VT_I18N__"', () => catalog).replace('__VT_LANG__', () => getLang());
       res.writeHead(200, {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
         'referrer-policy': 'no-referrer',
+        // The page is one file: its script and style are inline and it fetches
+        // nothing but its own origin. Saying so costs a header and turns a
+        // whole class of injection into a console error. `frame-ancestors` is
+        // the one that matters most here — it stops any page from framing a
+        // dashboard that is authenticated by a query parameter.
+        'content-security-policy': [
+          "default-src 'none'",
+          "script-src 'unsafe-inline'",
+          "style-src 'unsafe-inline'",
+          "img-src data:",
+          "connect-src 'self'",
+          "base-uri 'none'",
+          "form-action 'none'",
+          "frame-ancestors 'none'",
+        ].join('; '),
       });
       return void res.end(html);
     }

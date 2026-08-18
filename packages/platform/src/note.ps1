@@ -279,6 +279,15 @@ public class Note : Form {
 
   Font fName, fMono, fSmall, fLcd;
   Rectangle rShade, rBadge, rClose, rFull, rPick, rSpeak, rAdd;
+  /// <summary>
+  /// Which title-bar button the pointer is over, by label key. Empty for none.
+  ///
+  /// The buttons are fourteen pixels square with a mark in them, and until now
+  /// they gave no sign of being buttons at all: no lift under the pointer and
+  /// no name anywhere. Both are answered by this one field -- the mark
+  /// brightens, and the strip says the word.
+  /// </summary>
+  string hover = "";
   int scroll = 0;
   bool sizing;
   Point sizeFrom;
@@ -372,7 +381,14 @@ public class Note : Form {
         return;
       }
       Cursor = InGrip(e.Location) ? Cursors.SizeWE : Cursors.Default;
+      string was = hover;
+      hover = ButtonAt(e.Location);
+      if (hover != was) Invalidate();
     };
+    // Leaving by the edge never produces a move inside, so without this the
+    // last button stays lit and the strip keeps naming it after the pointer
+    // has gone somewhere else entirely.
+    MouseLeave += (s, e) => { if (hover.Length > 0) { hover = ""; Invalidate(); } };
     MouseUp += (s, e) => {
       if (sizing) { sizing = false; if (OnShape != null) OnShape(Form_); return; }
       if (badgeDrag) {
@@ -481,6 +497,18 @@ public class Note : Form {
   bool InGrip(Point p) {
     if (Form_ == Shape.Badge) return false;
     return p.X >= ClientSize.Width - Grip && p.Y >= ClientSize.Height - Grip;
+  }
+
+  /// <summary>Which button is under this point, by label key. Empty for none.</summary>
+  string ButtonAt(Point p) {
+    if (Form_ == Shape.Badge) return "";
+    if (rClose.Contains(p)) return "btnClose";
+    if (rBadge.Contains(p)) return "btnBadge";
+    if (rShade.Contains(p)) return "btnShade";
+    if (rFull.Contains(p))  return "btnFull";
+    if (rSpeak.Contains(p)) return "btnSpeak";
+    if (rPick.Contains(p))  return "btnPick";
+    return "";
   }
 
   void OnMouseDownH(object sender, MouseEventArgs e) {
@@ -694,32 +722,51 @@ public class Note : Form {
     // Glyphs as escapes, never as literal bytes: this file has to stay pure
     // ASCII on disk, because PowerShell 5.1 reads a BOM-less script as the
     // system codepage and would mangle anything else.
-    Btn(g, rPick,  Picking ? "\u2713" : "+", Picking ? Phosphor : Dim);
-    Btn(g, rSpeak, Speaking ? "\u266a" : "\u00b7", Speaking ? Cyan : Dim);
-    Btn(g, rFull,  "\u2197", Dim);                                   // the full dashboard
-    Btn(g, rShade, Form_ == Shape.Shade ? "\u25a1" : "\u2500", Dim); // windowshade
-    Btn(g, rBadge, "\u25aa", Dim);
-    Btn(g, rClose, "\u00d7", Dim);
+    Btn(g, rPick,  Picking ? "\u2713" : "+", Picking ? Phosphor : Dim, "btnPick");
+    Btn(g, rSpeak, Speaking ? "\u266a" : "\u00b7", Speaking ? Cyan : Dim, "btnSpeak");
+    Btn(g, rFull,  "\u2197", Dim, "btnFull");                                   // the full dashboard
+    Btn(g, rShade, Form_ == Shape.Shade ? "\u25a1" : "\u2500", Dim, "btnShade"); // windowshade
+    Btn(g, rBadge, "\u25aa", Dim, "btnBadge");
+    Btn(g, rClose, "\u00d7", Dim, "btnClose");
 
     // Between the title and the buttons: whatever just happened, or how many
     // agents are waiting. The notice wins while it lasts, because it answers
     // something the user did a second ago.
+    // What the strip says, in falling order of how recently it became true:
+    // something that just happened, then what the pointer is resting on, then
+    // the standing count. A notice wins because the user caused it a second
+    // ago; hovering wins over the count because it is a question being asked
+    // right now.
     string right = Notice.Length > 0
       ? Notice
+      : hover.Length > 0 ? T(hover, "")
       : NeedsYou > 0 ? NeedsYou + " " + T("waiting", "bekliyor") : "";
     if (right.Length > 0) {
       SizeF sz = g.MeasureString(right, fSmall);
       float rx = rPick.X - GapX - sz.Width;
-      if (rx > PadX + 60)
-        g.DrawString(right, fSmall, new SolidBrush(Notice.Length > 0 ? Cyan : Amber), rx, 6f);
+      if (rx > PadX + 60) {
+        Color rc = Notice.Length > 0 ? Cyan : hover.Length > 0 ? Ink : Amber;
+        using (Brush rb = new SolidBrush(rc)) g.DrawString(right, fSmall, rb, rx, 6f);
+      }
     }
   }
 
-  void Btn(Graphics g, Rectangle r, string glyph, Color c) {
-    using (Brush b = new SolidBrush(Base)) g.FillRectangle(b, r);
-    using (Pen p = new Pen(c == Dim ? Bevel : c)) g.DrawRectangle(p, r);
+  /// <summary>
+  /// One title-bar button.
+  ///
+  /// `key` is its label key, and a button whose key matches the pointer is
+  /// drawn lit: the well fills with the trough colour, the frame takes the
+  /// button's own colour instead of the bevel, and the mark goes to full ink.
+  /// Fourteen pixels is too small to grow on hover without the whole row
+  /// shifting, so the feedback is entirely in brightness.
+  /// </summary>
+  void Btn(Graphics g, Rectangle r, string glyph, Color c, string key) {
+    bool lit = key.Length > 0 && hover == key;
+    using (Brush b = new SolidBrush(lit ? Trough : Base)) g.FillRectangle(b, r);
+    using (Pen p = new Pen(lit ? (c == Dim ? Ink : c) : (c == Dim ? Bevel : c)))
+      g.DrawRectangle(p, r);
     SizeF sz = g.MeasureString(glyph, fSmall);
-    using (Brush b = new SolidBrush(c))
+    using (Brush b = new SolidBrush(lit && c == Dim ? Ink : c))
       g.DrawString(glyph, fSmall, b,
         r.X + (r.Width - sz.Width) / 2f, r.Y + (r.Height - sz.Height) / 2f);
   }

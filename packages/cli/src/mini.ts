@@ -105,6 +105,13 @@ function noteLabels(): NoteLabels {
     speakManyAlt: trInto(altLang(), 'proje beklemeye geçti'),
     voiceNone: tr('ses yok'),
     voiceMismatch: tr('dil eşleşmedi'),
+    // Shown in the title strip while the pointer rests on a button.
+    btnPick: tr('izlenecekleri seç'),
+    btnSpeak: tr('sesli haber'),
+    btnFull: tr('tam pano'),
+    btnShade: tr('şerit'),
+    btnBadge: tr('rozet'),
+    btnClose: tr('kapat'),
   };
 }
 
@@ -240,13 +247,22 @@ export async function runMini(args: MiniArgs): Promise<number> {
   // Saying which part failed is the difference between a limitation and a bug.
   const why =
     pinned.reason === 'unsupported'
-      ? tr('Üstte tutma şimdilik yalnızca Windows üzerinde çalışıyor.')
+      ? tr('Bir tarayıcı penceresini üstte tutmak yalnızca Windows üzerinde yapılabiliyor.')
       : pinned.reason === 'no-window'
         ? tr('Pencere zamanında görünmedi — üstte tutulamadı.')
         : pinned.reason === 'process-gone'
           ? tr('Pencere açılır açılmaz kapandı.')
           : tr('Üstte tutulamadı.');
   process.stdout.write(`${why}\n`);
+  // The honest alternative, not a shrug. Pinning a *browser* window needs
+  // SetWindowPos, and that is Win32 -- but the desktop app owns its own
+  // windows and can ask for always-on-top on all three platforms. Saying so
+  // here is the difference between a limitation and a dead end.
+  if (pinned.reason === 'unsupported') {
+    process.stdout.write(
+      tr('Gerçek bir üstte-kalan post-it için masaüstü uygulamasını kur: tepsi menüsü → Post-it.\n'),
+    );
+  }
   process.stdout.write(tr('Pencere yine de açık; elle üstte tutabilirsin.\n'));
   return 0;
 }

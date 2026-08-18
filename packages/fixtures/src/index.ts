@@ -230,6 +230,20 @@ export async function buildFixture(opts: FixtureOptions): Promise<Fixture> {
   const reused = opts.reused ?? 2;
 
   const claudeDir = join(opts.root, '.claude');
+  // The fixture *is* a `<claudeDir>`, so it points the resolver at itself.
+  //
+  // Every reader in the engine finds its tree through `$CLAUDE_CONFIG_DIR`,
+  // and a test that built a fixture and then called `scan()` without setting
+  // it was silently reading the developer's own `~/.claude`. Locally that made
+  // the tests pass; on a runner with no agent installed one of them failed,
+  // for a reason that had nothing to do with the code under test. Measured:
+  // `CLAUDE_CONFIG_DIR=<empty dir>` turned one green test red.
+  //
+  // Setting an environment variable from a builder is a side effect and worth
+  // a sentence, but the alternative is a trap that every future test walks
+  // into, and whose one symptom is a red CI run on a machine you do not have.
+  const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = claudeDir;
   const projectsDir = join(claudeDir, 'projects');
   const sessionsDir = join(claudeDir, 'sessions');
   const ideDir = join(claudeDir, 'ide');
@@ -361,6 +375,8 @@ export async function buildFixture(opts: FixtureOptions): Promise<Fixture> {
     projectRoots: roots,
     hugeTranscript,
     cleanup: () => {
+      if (previousConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
       for (const kid of helpers) {
         try {
           kid.kill();

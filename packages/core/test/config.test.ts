@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import { parseToml, tomlValue, TomlError } from '../src/toml.ts';
 import { loadConfigText, validateConfig, defaultConfig } from '../src/config.ts';
 
+/**
+ * Parsed tables have no prototype, so `deepEqual` against an object literal
+ * fails on the prototype alone. That is the parser doing its job — see the
+ * `#FORBIDDEN` note in toml.ts — and these assertions are about shape, so they
+ * compare shape.
+ */
+function plain(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(plain);
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = plain(x);
+    return out;
+  }
+  return v;
+}
+
 // ── parser ──────────────────────────────────────────────────────────────
 
 test('parses the shapes the real config file uses', () => {
@@ -31,13 +47,13 @@ archived = false
 nested = { a = 1, b = [true, false] }
 `);
   assert.equal(t.config_version, 1);
-  assert.deepEqual(t.server, { port: 47823, bind: '127.0.0.1', lang: 'tr' });
-  assert.deepEqual(t.agents, { enabled: ['claude-code', 'codex'] });
+  assert.deepEqual(plain(t.server), { port: 47823, bind: '127.0.0.1', lang: 'tr' });
+  assert.deepEqual(plain(t.agents), { enabled: ['claude-code', 'codex'] });
   assert.equal((t.digest as Record<string, unknown>).daily_usd_cap, 1.5);
   assert.equal((t.digest as Record<string, unknown>).hex, 255);
   const proj = (t.projects as Record<string, Record<string, unknown>>)['git:c02462b9'];
   assert.equal(proj.display_name, 'AITool');
-  assert.deepEqual(proj.nested, { a: 1, b: [true, false] });
+  assert.deepEqual(plain(proj.nested), { a: 1, b: [true, false] });
 });
 
 test('a repeated section is an error, not a silent merge', () => {
@@ -71,10 +87,32 @@ line1
 line2"""
 lit = 'C:\\dev\\x'
 `);
-  assert.deepEqual(t.a, { b: { c: 1 } });
+  assert.deepEqual(plain(t.a), { b: { c: 1 } });
   assert.equal(t.s, 'tab\there' + 'A');
   assert.equal(t.m, 'line1\nline2');
   assert.equal(t.lit, 'C:\\dev\\x');
+});
+
+/**
+ * A config file is data the user edits, and the parser was writing its keys
+ * straight onto plain objects — so `[__proto__]` walked into Object.prototype
+ * and every assignment under it landed on every object in the process.
+ * Reproduced before the fix: `loadConfigText('[__proto__]\nbad = true')`
+ * returned ok, its own result had no such key, and `({} as any).bad` was true
+ * afterwards. Nothing complained, which is what makes it worth a test.
+ */
+test('a config file cannot reach Object.prototype', () => {
+  const attempts = ['[__proto__]\nbad = true', '[a]\nconstructor = 1', 'x.__proto__.y = 2'];
+  for (const src of attempts) {
+    assert.throws(() => parseToml(src), TomlError, src);
+  }
+  assert.equal(({} as Record<string, unknown>).bad, undefined);
+  assert.equal(({} as Record<string, unknown>).y, undefined);
+  // And the front door reports rather than throwing: a broken config must not
+  // stop the daemon, it must be said out loud.
+  const { issues } = loadConfigText('[__proto__]\nbad = true');
+  assert.ok(issues.length > 0, 'kirletme denemesi sessizce yutuldu');
+  assert.equal(({} as Record<string, unknown>).bad, undefined);
 });
 
 test('windows paths round-trip through the writer as literal strings', () => {

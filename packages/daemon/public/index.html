@@ -6,228 +6,458 @@
 <meta name="referrer" content="no-referrer">
 <title>VibeTracker</title>
 <style>
+  /* ── the instrument ─────────────────────────────────────────────────────
+     One product, one surface.
+
+     The note window is a painted WinForms panel and this is a web page, and
+     for a while they looked like two different products: rounded pills, system
+     sans and a light theme here; sharp rectangles, phosphor and scanlines
+     there. Same numbers, two personalities — and the one you glance at all day
+     is the note.
+
+     So the note is the source, not the inspiration. Every colour below is
+     lifted from its palette (note.ps1 §208–218) under the same names, every
+     metric from its layout constants, and its three drawing habits — the
+     scanline wash, the one-pixel bevel, the ten-segment meter — are rebuilt
+     here rather than reinvented. What the two share is now a grammar.
+
+     Dark only, and that is a decision rather than an omission. The note has no
+     light mode and cannot have one: phosphor on black is the whole idea. A
+     dashboard that turned white in the morning would break the resemblance at
+     exactly the moment both are on screen. */
   :root {
-    color-scheme: light dark;
-    --bg:#fff; --fg:#16181d; --muted:#5b6270; --line:#e3e6ec; --card:#f7f8fa; --raise:#fff;
-    --busy:#1f8b4c; --wait:#2563c9; --perm:#c3311f; --warn:#9a6300; --idle:#6b7280;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+
+    /* Lifted from note.ps1. Same names, same values. */
+    --base:#070a0f; --panel:#0d121a; --trough:#161e29;
+    --edge:#1d2633; --bevel:#2a3646;
+    --ink:#e6f2ec; --dim:#6b7a8c;
+    --phos:#3fe89c; --amber:#ffb24a; --alarm:#ff5c4a; --cyan:#4ae8d0;
+
+    /* The names the markup already speaks, mapped onto that palette so every
+       rule below reads in one vocabulary and the renderers need no edit to
+       follow. The mapping is the note's own: running is phosphor, waiting is
+       amber, urgency 3 is alarm (note.ps1 KindColor), and cyan is reserved for
+       measurement — the progress meter and nothing else, so a lit segment
+       never has to compete with a state for the same colour. */
+    --bg:var(--base); --fg:var(--ink); --muted:var(--dim);
+    --line:var(--edge); --card:var(--panel); --raise:var(--trough);
+    --busy:var(--phos); --wait:var(--amber); --perm:var(--alarm);
+    --warn:var(--amber); --idle:var(--dim);
+
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+
+    /* note.ps1: RowH 34, BarH 26, LoadH 22, PadX 10, GapX 10. */
+    --row:34px; --pad:10px; --gap:10px;
+    /* MeterW 78 = ten segments of 6 with 2 between. Kept as three variables
+       because the meter is rebuilt from them in three places, and a meter
+       whose segments did not line up with the note's would be the one detail
+       that gave away that these are two programs. */
+    --seg:6px; --seggap:2px; --meter:78px;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg:#0f1116; --fg:#e6e8ee; --muted:#98a0b0; --line:#262a33; --card:#161922; --raise:#1c2029;
-      --busy:#4ade80; --wait:#7aa7ff; --perm:#ff8a75; --warn:#ffc266; --idle:#8b93a3;
-    }
-  }
+
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg);
-    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-  .wrap { max-width:1180px; margin:0 auto; padding:24px 18px 72px; }
 
-  header { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
-  h1 { font-size:19px; margin:0; letter-spacing:-.01em; }
-  .conn { font-size:12px; font-family:var(--mono); padding:2px 9px; border-radius:999px;
-    border:1px solid var(--line); color:var(--muted); }
-  .conn.live { color:var(--busy); border-color:currentColor; }
-  .conn.down { color:var(--perm); border-color:currentColor; }
-  .meta { color:var(--muted); font-size:12px; font-family:var(--mono); margin-top:4px; }
+  body {
+    margin:0; background:var(--base); color:var(--ink);
+    font:13px/1.45 var(--mono);
+    -webkit-font-smoothing:antialiased;
+  }
 
-  .stats { display:flex; flex-wrap:wrap; gap:6px 22px; margin:18px 0 6px; }
-  .stat b { font-size:23px; font-weight:650; letter-spacing:-.02em; }
-  .stat span { color:var(--muted); font-size:12.5px; margin-inline-start:6px; }
-  .stat.alert b { color:var(--perm); }
+  /* The scanline wash.
+     note.ps1 draws one line every 3px at alpha 14/255 — 0.055 — and the
+     comment there is the specification: enough that the surface reads as a
+     readout rather than a small web page, far too little to interfere with
+     text. Fixed rather than tiled per element so it does not scroll with the
+     content, which would make it a texture on the page instead of a property
+     of the glass in front of it. */
+  body::before {
+    content:''; position:fixed; inset:0; z-index:9; pointer-events:none;
+    background:repeating-linear-gradient(
+      180deg, rgba(255,255,255,.055) 0 1px, transparent 1px 3px);
+  }
+  @media print { body::before { display:none; } }
 
-  .caps { display:flex; flex-wrap:wrap; gap:5px; margin:12px 0 4px; }
-  .cap { font-size:11px; font-family:var(--mono); padding:2px 8px; border-radius:999px;
-    border:1px solid var(--line); color:var(--muted); cursor:help; }
-  .cap.ok { color:var(--busy); } .cap.bad { color:var(--warn); border-color:var(--warn); }
+  .wrap { max-width:1020px; margin:0 auto; padding:18px 16px 56px; }
 
-  .warn { border-inline-start:3px solid var(--warn); background:var(--card);
-    padding:9px 13px; margin:7px 0; border-radius:0 6px 6px 0; font-size:13px; }
+  /* ── the title strip ───────────────────────────────────────────────────
+     note.ps1 paints a 26px strip with the product name letter-spaced by 1.6px
+     (Spaced()) and the waiting count in amber at its right. Same here. */
+  header {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--panel); border:1px solid var(--edge);
+    padding:0 var(--pad); min-height:30px;
+  }
+  /* Letter-spaced, never uppercased. note.ps1 draws the title the same way and
+     for the same reason: casing a brand is a decision the locale should not be
+     making. Under lang="tr" the browser correctly turns "VibeTracker" into
+     "VİBETRACKER", which is the right transformation of the wrong string. */
+  h1 { font-size:12.5px; margin:0; font-weight:700; letter-spacing:.14em;
+       color:var(--ink); font-family:var(--mono); }
+  .conn { font-size:10.5px; font-family:var(--mono); padding:1px 7px;
+          border:1px solid var(--bevel); color:var(--dim); letter-spacing:.04em; }
+  .conn.live { color:var(--phos); border-color:currentColor; }
+  .conn.down { color:var(--alarm); border-color:currentColor; }
+  .meta { color:var(--dim); font-size:10.5px; font-family:var(--mono);
+          padding:6px var(--pad) 0; letter-spacing:.02em; }
 
-  h2 { font-size:11.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted);
-    margin:32px 0 10px; font-weight:600; }
+  /* ── fleet load ────────────────────────────────────────────────────────
+     Of the sessions alive right now, what share is engaged. Deliberately not
+     an average of the progress meters below it: a plan that grows makes that
+     number fall while work is being done. Two colours in one track, because
+     "everything is running" and "everything is blocked" are the same load and
+     opposite situations.
 
-  .waiting { display:grid; gap:8px; }
-  .wrow { display:flex; align-items:center; gap:12px; padding:11px 14px; border-radius:9px;
-    background:var(--card); border:1px solid var(--line); border-inline-start-width:3px; }
-  .wrow.u3 { border-inline-start-color:var(--perm); }
-  .wrow.u2 { border-inline-start-color:var(--warn); }
-  .wrow.u1 { border-inline-start-color:var(--wait); }
-  .wrow .proj { font-weight:600; min-width:130px; }
-  .wrow .sess { font-family:var(--mono); font-size:12px; color:var(--muted); min-width:160px; }
-  .wrow .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    color:var(--muted); font-size:13px; }
-  .dwell { font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap; }
+     Segmented like every other bar on both surfaces — the mask below is the
+     note's 6-and-2 grammar applied to a track of arbitrary width. */
+  .load { display:flex; align-items:center; gap:var(--gap); margin:0;
+          padding:5px var(--pad); background:var(--panel);
+          border:1px solid var(--edge); border-top:0;
+          font-size:10.5px; font-family:var(--mono); color:var(--dim);
+          letter-spacing:.04em; }
+  .load .track { flex:0 1 360px; height:8px; display:flex; background:var(--trough);
+    -webkit-mask:repeating-linear-gradient(90deg,#000 0 var(--seg),
+      transparent var(--seg) calc(var(--seg) + var(--seggap)));
+    mask:repeating-linear-gradient(90deg,#000 0 var(--seg),
+      transparent var(--seg) calc(var(--seg) + var(--seggap))); }
+  .load .track.none { background:none; border:1px dotted var(--bevel);
+                      -webkit-mask:none; mask:none; }
+  .load .run  { background:var(--phos); }
+  .load .wait { background:var(--amber); }
+  .load .pc { color:var(--ink); min-width:34px; text-align:start;
+              font-variant-numeric:tabular-nums; }
 
-  .card { border:1px solid var(--line); border-radius:11px; background:var(--card);
-    padding:14px 16px; margin:11px 0; }
-  .card h3 { margin:0 0 2px; font-size:16px; display:flex; align-items:center; gap:9px;
-    flex-wrap:wrap; }
-  .pid { font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:400; }
-  .flag { font-size:10.5px; padding:1px 7px; border-radius:999px; border:1px solid var(--warn);
-    color:var(--warn); }
-  .ws { font-family:var(--mono); font-size:11.5px; color:var(--muted); margin:6px 0 0;
-    overflow-x:auto; white-space:nowrap; }
-  .sess-row { display:flex; align-items:center; gap:10px; padding:7px 0; flex-wrap:wrap;
-    border-top:1px solid var(--line); margin-top:8px; }
-  .sess-row:first-of-type { border-top:none; }
-  .sess-name { font-family:var(--mono); font-size:12px; min-width:170px; }
-  .chip { font-size:11px; font-family:var(--mono); padding:2px 8px; border-radius:999px;
-    border:1px solid currentColor; white-space:nowrap; }
-  .chip.unsure { border-style:dashed; opacity:.72; }
-  /* Filled = measured from hooks, hollow = inferred. Same shape so the eye
-     compares them, different fill so it can tell them apart at a glance. */
-  /* Which agent produced a row. Drawn only when it is not the default one:
-     a badge on every session would be a column of the same word, and the
-     interesting case is the exception. */
-  .agent { font-size:10px; letter-spacing:.02em; padding:1px 5px; border-radius:3px;
-           background:var(--card); color:var(--muted); margin-right:4px;
-           border:1px solid var(--line); white-space:nowrap; }
-  .prec { font-size:10px; margin-right:4px; cursor:default; }
-  .prec.hooked { color:var(--busy); }
-  .prec.passive { color:var(--muted); }
-  .sub { font-size:10.5px; font-family:var(--mono); margin-left:5px; color:var(--muted);
-         border:1px solid var(--line); border-radius:999px; padding:1px 6px; }
-  /* Progress. A counted number and an inferred one are drawn differently on
-     purpose: same bar, different fill, so the eye can compare them without
-     being told they are equally solid. */
-  .prog { display:flex; align-items:center; gap:9px; margin:7px 0 2px; flex-wrap:wrap; }
-  .phase { font-size:11.5px; font-family:var(--mono); padding:2px 9px; border-radius:999px;
-           border:1px solid var(--line); background:var(--raise); }
-  .bar { flex:0 0 132px; height:7px; border-radius:999px; background:var(--line);
-         overflow:hidden; border:1px solid transparent; }
-  .bar > i { display:block; height:100%; background:var(--busy); }
-  .bar.approx { border-color:var(--line); background:transparent; }
-  .bar.approx > i { background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px); }
-  .bar.none { border:1px dashed var(--line); background:transparent; }
-  .pct { font-size:12px; font-family:var(--mono); min-width:46px; }
-  .prov { font-size:10.5px; color:var(--muted); }
-  .drift { font-size:10.5px; padding:1px 7px; border-radius:999px;
-           border:1px solid var(--perm); color:var(--perm); }
-  .noprog { font-size:10.5px; color:var(--muted); font-style:italic; }
-  .s-BUSY{color:var(--busy)} .s-WAITING_INPUT{color:var(--wait)}
-  .s-WAITING_PERMISSION{color:var(--perm)} .s-STALLED,.s-ERRORED{color:var(--warn)}
-  .s-ORPHANED,.s-ENDED,.s-STARTING,.s-UNKNOWN{color:var(--idle)}
-  .ev { font-family:var(--mono); font-size:11px; color:var(--muted); flex-basis:100%;
-    opacity:.85; }
-  .title { font-size:13px; color:var(--fg); opacity:.8; flex:1; min-width:0;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .empty { color:var(--muted); font-style:italic; }
-  .boardbtn { background:none; border:1px solid var(--line); color:var(--muted);
-    font:inherit; font-size:11px; padding:2px 9px; border-radius:999px; cursor:pointer;
-    margin:2px 0 6px; }
-  .boardbtn:hover { color:var(--fg); border-color:var(--muted); }
-  .board { font-family:var(--mono); font-size:11.5px; color:var(--muted);
-    border-left:2px solid var(--line); padding:6px 0 6px 10px; margin:0 0 8px; }
-  .board .row { white-space:pre; }
-  .board .rung { color:var(--fg); }
-  .board .done { color:var(--ok-ish, #7ec699); }
-  .board .after { color:var(--warn); }
-  .board .note { font-family:var(--sans, inherit); font-style:italic; margin-top:4px; }
-  footer { margin-top:44px; color:var(--muted); font-size:11.5px; border-top:1px solid var(--line);
-    padding-top:12px; }
+  /* ── counters ──────────────────────────────────────────────────────────
+     The note sets its one number in Consolas 20 bold (fLcd). The web
+     equivalent is a tabular monospace at a size nothing else on the page
+     uses, so the eye finds the counts without needing a heading to point. */
+  .stats { display:flex; flex-wrap:wrap; gap:4px 20px; padding:10px var(--pad) 8px; }
+  .stat b { font-size:21px; font-weight:700; font-family:var(--mono);
+            font-variant-numeric:tabular-nums; letter-spacing:-.02em;
+            color:var(--ink); }
+  .stat span { color:var(--dim); font-size:10.5px; margin-inline-start:6px;
+               letter-spacing:.04em; }
+  .stat.alert b { color:var(--alarm); }
 
-  /* ── the compact list ──────────────────────────────────────────────────
-     One row per project: who, what its agents are doing, how far it has got.
-     A grid rather than flexbox so the columns line up down the whole list —
-     a ragged left edge is what makes twelve rows unreadable. */
-  .plist { border:1px solid var(--line); border-radius:11px; overflow:hidden; }
-  .prow { display:grid; align-items:center; gap:10px; width:100%; text-align:start;
-    grid-template-columns:16px minmax(0,1fr) 54px 96px 96px 56px 78px 52px;
-    padding:9px 13px; background:var(--card); border:0; border-top:1px solid var(--line);
-    color:inherit; font:inherit; cursor:pointer; }
-  .prow:first-child { border-top:0; }
-  .prow:hover { background:var(--raise); }
-  .prow:focus-visible { outline:2px solid var(--wait); outline-offset:-2px; }
-  .prow .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .prow .ag { font-size:12px; font-family:var(--mono); white-space:nowrap;
-    overflow:hidden; text-overflow:ellipsis; }
-  .prow .xy { font-size:11.5px; font-family:var(--mono); color:var(--muted); text-align:end; }
-  .prow .pc { font-size:12px; font-family:var(--mono); text-align:end; }
+  /* ── capability chips ──────────────────────────────────────────────────
+     Square, one pixel, monospace: the note's button grammar at label width. */
+  .caps { display:flex; flex-wrap:wrap; gap:4px; padding:0 var(--pad) 10px; }
+  .cap { font-size:10px; font-family:var(--mono); padding:1px 6px;
+         border:1px solid var(--edge); color:var(--dim); cursor:help;
+         letter-spacing:.02em; }
+  .cap.ok  { color:var(--phos); border-color:color-mix(in srgb,var(--phos) 34%,transparent); }
+  .cap.bad { color:var(--amber); border-color:var(--amber); }
+
+  .warn { border-inline-start:2px solid var(--amber); background:var(--panel);
+          padding:7px 11px; margin:6px var(--pad); font-size:11.5px; }
+
+  /* Section headings as instrument labels: a word, spaced out, and a rule
+     that runs to the edge of the panel it names. */
+  h2 { font-size:10px; text-transform:uppercase; letter-spacing:.22em;
+       color:var(--dim); margin:22px 0 7px; font-weight:600;
+       font-family:var(--mono); display:flex; align-items:center; gap:10px; }
+  h2::after { content:''; flex:1; height:1px; background:var(--edge); }
+
+  /* ── the beat ──────────────────────────────────────────────────────────
+     note.ps1 advances one phase angle by 0.22 rad every 90ms, so a cycle is
+     2π/0.22 × 90ms ≈ 2.57s — and it runs *only* while something is waiting or
+     working, because an idle board that burned a core to look alive would be
+     a worse tool than a still one. The same restraint applies here: the
+     animation is attached to the waiting and running classes and to nothing
+     else, so a quiet board is a still page. */
+  @keyframes vt-breath { 0%,100% { opacity:.55 } 50% { opacity:1 } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation:none !important; }
+    body::before { background:none; }
+  }
+
+  /* ── seni bekleyenler ──────────────────────────────────────────────────
+     One row per blocked session, most urgent first. The left rule carries the
+     urgency, and an alarm row is the only thing on the page allowed to
+     breathe: if everything pulsed, nothing would. */
+  .waiting { display:grid; gap:1px; background:var(--edge);
+             border:1px solid var(--edge); }
+  .wrow { display:flex; align-items:center; gap:var(--gap);
+          padding:0 var(--pad); min-height:var(--row); background:var(--panel);
+          border-inline-start:2px solid var(--bevel); }
+  .wrow.u1 { border-inline-start-color:var(--amber); }
+  .wrow.u2 { border-inline-start-color:var(--amber); }
+  .wrow.u3 { border-inline-start-color:var(--alarm);
+             animation:vt-breath 2.57s ease-in-out infinite; }
+  .wrow .proj { font-family:var(--sans); font-weight:700; font-size:12.5px;
+                min-width:120px; color:var(--ink); }
+  .wrow .sess { font-family:var(--mono); font-size:10.5px; color:var(--dim);
+                min-width:150px; }
+  .wrow .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+                white-space:nowrap; color:var(--dim); font-size:11.5px; }
+  .dwell { font-family:var(--mono); font-size:11.5px; font-weight:700;
+           white-space:nowrap; color:var(--ink);
+           font-variant-numeric:tabular-nums; }
+
+  /* ── the project list ──────────────────────────────────────────────────
+     A grid rather than flexbox so the columns line up down the whole list — a
+     ragged left edge is what makes twelve rows unreadable. */
+  .plist { border:1px solid var(--edge); background:var(--edge);
+           display:grid; gap:1px; }
+  .prow { display:grid; align-items:center; gap:var(--gap); width:100%;
+    text-align:start;
+    grid-template-columns:12px minmax(0,1fr) 110px 92px 92px 56px var(--meter) 46px;
+    padding:0 var(--pad); min-height:var(--row); background:var(--panel);
+    border:0; color:inherit; font:inherit; font-family:var(--mono);
+    cursor:pointer; }
+  .prow:hover { background:var(--trough); }
+  .prow:focus-visible { outline:1px solid var(--cyan); outline-offset:-1px; }
+  .prow .nm { font-family:var(--sans); font-weight:700; font-size:12.5px;
+              color:var(--ink); overflow:hidden; text-overflow:ellipsis;
+              white-space:nowrap; }
+  .prow .ag { font-size:11px; font-family:var(--mono); white-space:nowrap;
+              overflow:hidden; text-overflow:ellipsis; }
+  .prow .xy { font-size:10.5px; font-family:var(--mono); color:var(--dim);
+              text-align:end; font-variant-numeric:tabular-nums; }
+  .prow .pc { font-size:11px; font-family:var(--mono); text-align:end;
+              color:var(--ink); font-variant-numeric:tabular-nums; }
   /* Colour follows the cell, not the row. Waiting is always the waiting
      colour and running always the running one, so a project doing both reads
      as doing both instead of taking one colour for the whole line. */
-  .prow .ag.wait { color:var(--wait); }
-  .prow.u3 .ag.wait { color:var(--perm); font-weight:600; }
-  .prow .ag.run { color:var(--busy); }
-  .prow .ag.wait.off, .prow .ag.run.off { color:var(--muted); font-weight:400; }
+  .prow .ag.wait { color:var(--amber); }
+  .prow.u3 .ag.wait { color:var(--alarm); font-weight:700; }
+  .prow .ag.run { color:var(--phos); }
+  .prow .ag.wait.off, .prow .ag.run.off { color:var(--dim); font-weight:400; }
+  /* Only the live cell breathes, and only the cell — not the row. A pulsing
+     line would drag the eye to a project rather than to the fact about it. */
+  .prow.u3 .ag.wait { animation:vt-breath 2.57s ease-in-out infinite; }
+
   /* The last half hour. Minutes nobody watched are simply not drawn, which
      is why this is a polyline with breaks rather than an area chart: a filled
      shape has to sit on a floor, and inventing that floor is the one thing
      this picture must not do. */
-  .prow .spark { display:block; width:54px; height:16px; overflow:visible; }
-  .prow .spark path { fill:none; stroke-width:1.4; stroke-linejoin:round;
-    stroke:var(--muted); opacity:.5; }
-  .prow.waiting .spark path { stroke:var(--wait); opacity:1; }
-  .prow.u3 .spark path { stroke:var(--perm); }
-  .prow.running .spark path { stroke:var(--busy); opacity:1; }
-  .prow .spark .flat { stroke-dasharray:2 3; opacity:.5; stroke:var(--line); }
-  body[data-mini] .prow .spark { display:none; }
+  /* The trace takes the slack.
+     note.ps1 pins it to 48px because its window is 400 wide; a dashboard that
+     did the same left a name, four hundred pixels of nothing, and a cluster of
+     readings off to the right. Stretching it is not decoration — the trace is
+     twenty-four minutes wide either way, and more pixels per minute is simply
+     more of the shape you are trying to read. `preserveAspectRatio="none"`
+     does the stretching and `non-scaling-stroke` keeps the line one pixel
+     while it happens, so a wide row does not also get a fat line.
 
-  /* ── fleet load ────────────────────────────────────────────────────────
-     Of the sessions alive right now, what share is engaged. Deliberately not
-     an average of the progress bars below it: a plan that grows makes that
-     number fall while work is being done. Two colours in one bar, because
-     "everything is running" and "everything is blocked" are the same load and
-     opposite situations. */
-  .load { display:flex; align-items:center; gap:10px; margin:10px 0 0;
-    font-size:11.5px; font-family:var(--mono); color:var(--muted); }
-  .load .track { flex:1; height:7px; border-radius:4px; background:var(--raise);
-    display:flex; overflow:hidden; }
-  .load .track.none { background:none; border:1px dotted var(--line); }
-  .load .run { background:var(--busy); }
-  .load .wait { background:var(--wait); }
-  .load .pc { color:var(--fg); min-width:38px; text-align:end; }
-  body[data-mini] .load { display:none; }
+     Twice the note's width and no more. Given the whole slack it became a
+     two-hundred-pixel rule across every row, and since most traces are flat
+     most of the time, the loudest thing on the board was the absence of
+     activity. */
+  .prow .spark { display:block; width:100%; height:16px; overflow:visible; }
+  .prow .spark path { fill:none; stroke-width:1.3; stroke-linejoin:round;
+    stroke:var(--dim); opacity:.5; vector-effect:non-scaling-stroke; }
+  .prow.waiting .spark path { stroke:var(--amber); opacity:1; }
+  .prow.u3 .spark path { stroke:var(--alarm); }
+  .prow.running .spark path { stroke:var(--phos); opacity:1; }
+  .prow .spark .flat { stroke-dasharray:2 3; opacity:.5; stroke:var(--edge); }
 
-  .prow .why { grid-column:2 / -1; font-size:11px; color:var(--muted);
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-top:-2px; }
+  .prow .why { grid-column:2 / -1; font-size:10.5px; color:var(--dim);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    padding-bottom:5px; margin-top:-6px; }
 
-  .backbtn { background:none; border:1px solid var(--line); color:var(--muted); font:inherit;
-    font-size:12px; padding:3px 11px; border-radius:999px; cursor:pointer; margin:0 0 12px; }
-  .backbtn:hover { color:var(--fg); border-color:var(--muted); }
+  /* ── the meter ─────────────────────────────────────────────────────────
+     note.ps1 PaintMeter: ten segments, 6 wide and 8 tall, 2 apart, in cyan;
+     lit is round(percent/100 × 10) so a segment is never half on. An
+     approximate reading is outlined instead of filled and an unknown one is a
+     dotted box — how sure we are, said in shape rather than in a word, which
+     is what lets a column of them be read at a glance.
+
+     Built with a mask so the fill stays a plain percentage width; the
+     renderer rounds to the nearest tenth, exactly as the note rounds to a
+     whole segment. */
+  .bar { flex:0 0 var(--meter); width:var(--meter); height:8px;
+         background:repeating-linear-gradient(90deg, var(--trough) 0 var(--seg),
+           transparent var(--seg) calc(var(--seg) + var(--seggap)));
+         overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--cyan);
+    -webkit-mask:repeating-linear-gradient(90deg,#000 0 var(--seg),
+      transparent var(--seg) calc(var(--seg) + var(--seggap)));
+    mask:repeating-linear-gradient(90deg,#000 0 var(--seg),
+      transparent var(--seg) calc(var(--seg) + var(--seggap))); }
+  /* Outlined segments: a hairline along the top and bottom, and one down each
+     side of every segment. Hollow means inferred. */
+  .bar.approx > i {
+    background:
+      linear-gradient(var(--cyan),var(--cyan)) 0 0/100% 1px no-repeat,
+      linear-gradient(var(--cyan),var(--cyan)) 0 100%/100% 1px no-repeat,
+      repeating-linear-gradient(90deg, var(--cyan) 0 1px,
+        transparent 1px calc(var(--seg) - 1px),
+        var(--cyan) calc(var(--seg) - 1px) var(--seg),
+        transparent var(--seg) calc(var(--seg) + var(--seggap))); }
+  .bar.none { background:none; border:1px dotted var(--bevel); }
+
+  /* ── detail card ───────────────────────────────────────────────────────*/
+  .card { border:1px solid var(--edge); background:var(--panel);
+          padding:10px var(--pad); margin:9px 0; position:relative; }
+  /* Corner brackets. The note draws them on the badge to say "this is a
+     folded window, not a picture"; here they say the same about a panel — an
+     instrument face rather than a box with a border. */
+  .card::before, .card::after {
+    content:''; position:absolute; width:7px; height:7px;
+    border:1px solid var(--bevel); pointer-events:none; }
+  .card::before { inset-block-start:-1px; inset-inline-start:-1px;
+                  border-inline-end:0; border-block-end:0; }
+  .card::after  { inset-block-end:-1px; inset-inline-end:-1px;
+                  border-inline-start:0; border-block-start:0; }
+  .card h3 { margin:0 0 2px; font-size:14px; font-family:var(--sans);
+             font-weight:700; display:flex; align-items:center; gap:8px;
+             flex-wrap:wrap; color:var(--ink); }
+  .pid { font-family:var(--mono); font-size:10px; color:var(--dim); font-weight:400; }
+  .flag { font-size:10px; padding:0 6px; border:1px solid var(--amber);
+          color:var(--amber); font-family:var(--mono); }
+  .ws { font-family:var(--mono); font-size:10.5px; color:var(--dim);
+        margin:5px 0 0; overflow-x:auto; white-space:nowrap; }
+  .sess-row { display:flex; align-items:center; gap:9px; padding:6px 0;
+              flex-wrap:wrap; border-top:1px solid var(--edge); margin-top:7px; }
+  .sess-row:first-of-type { border-top:none; }
+  .sess-name { font-family:var(--mono); font-size:11px; min-width:160px;
+               color:var(--ink); }
+  .chip { font-size:10px; font-family:var(--mono); padding:1px 6px;
+          border:1px solid currentColor; white-space:nowrap; letter-spacing:.03em; }
+  /* Filled = measured from hooks, hollow = inferred. Same shape so the eye
+     compares them, different fill so it can tell them apart at a glance. */
+  .chip.unsure { border-style:dashed; opacity:.72; }
+  /* Which agent produced a row. Drawn only when it is not the default one:
+     a badge on every session would be a column of the same word, and the
+     interesting case is the exception. */
+  .agent { font-size:9.5px; letter-spacing:.03em; padding:0 4px;
+           background:var(--trough); color:var(--dim); margin-right:4px;
+           border:1px solid var(--edge); white-space:nowrap;
+           font-family:var(--mono); }
+  .prec { font-size:10px; margin-right:4px; cursor:default; }
+  .prec.hooked { color:var(--phos); }
+  .prec.passive { color:var(--dim); }
+  .sub { font-size:10px; font-family:var(--mono); margin-left:5px;
+         color:var(--dim); border:1px solid var(--edge); padding:0 5px; }
+
+  .prog { display:flex; align-items:center; gap:8px; margin:6px 0 2px;
+          flex-wrap:wrap; }
+  .phase { font-size:10.5px; font-family:var(--mono); padding:1px 7px;
+           border:1px solid var(--edge); background:var(--trough); color:var(--ink); }
+  .pct { font-size:11px; font-family:var(--mono); min-width:42px;
+         font-variant-numeric:tabular-nums; }
+  .prov { font-size:10px; color:var(--dim); }
+  .drift { font-size:10px; padding:0 6px; border:1px solid var(--alarm);
+           color:var(--alarm); font-family:var(--mono); }
+  .noprog { font-size:10px; color:var(--dim); font-style:italic; }
+
+  /* Hue says how loud; dashes say how sure. Stalled and errored are drawn
+     dashed because both are inferences about a process that has stopped
+     saying anything, and a solid chip would claim more than we know. */
+  .s-BUSY { color:var(--phos); }
+  .s-WAITING_INPUT { color:var(--amber); }
+  .s-WAITING_PERMISSION { color:var(--alarm); }
+  .s-STALLED { color:var(--amber); border-style:dashed; }
+  .s-ERRORED { color:var(--alarm); border-style:dashed; }
+  .s-ORPHANED, .s-ENDED, .s-STARTING, .s-UNKNOWN { color:var(--dim); }
+
+  .ev { font-family:var(--mono); font-size:10px; color:var(--dim);
+        flex-basis:100%; opacity:.85; }
+  .title { font-size:11.5px; color:var(--ink); opacity:.8; flex:1; min-width:0;
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .empty { color:var(--dim); font-style:italic; padding:9px var(--pad); }
+
+  /* ── buttons: the note's square, one-pixel grammar at label width ──────*/
+  .backbtn, .boardbtn, .pickbar button {
+    background:var(--trough); border:1px solid var(--bevel); color:var(--dim);
+    font:inherit; font-family:var(--mono); font-size:10.5px; padding:2px 9px;
+    cursor:pointer; letter-spacing:.04em; }
+  .backbtn:hover, .boardbtn:hover, .pickbar button:hover {
+    color:var(--ink); border-color:var(--cyan); }
+  .backbtn { margin:0 0 10px; }
+  .boardbtn { margin:2px 0 6px; }
+
+  .board { font-family:var(--mono); font-size:10.5px; color:var(--dim);
+           border-inline-start:1px solid var(--edge); padding:5px 0 5px 9px;
+           margin:0 0 7px; }
+  .board .row { white-space:pre; }
+  .board .rung { color:var(--ink); }
+  .board .done { color:var(--phos); }
+  .board .after { color:var(--amber); }
+  .board .note { font-family:var(--sans); font-style:italic; margin-top:4px; }
 
   /* ── choosing what to follow ───────────────────────────────────────── */
-  .pickwrap { margin:10px 0 0; }
-  .pick { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line);
-    border-radius:9px; padding:9px 12px; background:var(--card); margin-top:8px; }
-  .pick label { display:flex; align-items:center; gap:9px; font-size:13px; padding:3px 0;
-    cursor:pointer; }
+  .pickwrap { margin:9px 0 0; }
+  .pick { display:flex; flex-direction:column; gap:0; border:1px solid var(--edge);
+          padding:0; background:var(--panel); margin-top:7px; }
+  .pick label { display:flex; align-items:center; gap:9px; font-size:11.5px;
+                padding:4px var(--pad); cursor:pointer;
+                border-block-start:1px solid var(--edge); font-family:var(--mono); }
+  .pick label:first-child { border-block-start:0; }
+  .pick label:hover { background:var(--trough); }
   .pick .pid { margin-inline-start:auto; }
-  .pickbar { display:flex; gap:8px; align-items:center; margin-top:9px; }
-  .pickbar button { font:inherit; font-size:12px; padding:3px 12px; border-radius:999px;
-    border:1px solid var(--line); background:var(--raise); color:var(--fg); cursor:pointer; }
-  .pickbar button:hover { border-color:var(--muted); }
-  .pickbar .msg { font-size:11.5px; color:var(--muted); }
+  .pickbar { display:flex; gap:7px; align-items:center; padding:8px var(--pad);
+             border-block-start:1px solid var(--edge); background:var(--trough); }
+  .pickbar .msg { font-size:10.5px; color:var(--dim); }
+
+  footer { margin-top:34px; color:var(--dim); font-size:10px;
+           border-top:1px solid var(--edge); padding-top:10px;
+           font-family:var(--mono); letter-spacing:.02em; }
 
   /* ── pinned mode ───────────────────────────────────────────────────────
      Same page, same data, less of it. Everything explanatory is dropped
      because the window is two centimetres tall and sits over other work; what
-     survives is the answer to "is anything waiting for me". */
-  body[data-mini] { font-size:13px; }
+     survives is the answer to "is anything waiting for me".
+
+     This is also the note window on every platform that does not have one.
+     The painted WinForms panel is Windows-only and always will be, so on
+     macOS and Linux *this* is the sticky note — which is why it is held to the
+     same grammar rather than treated as a narrow version of a web page. */
+  body[data-mini] { font-size:12px; }
   body[data-mini] .wrap { padding:0; max-width:none; }
   body[data-mini] header, body[data-mini] .meta, body[data-mini] .stats,
   body[data-mini] .caps, body[data-mini] footer, body[data-mini] #warnings,
-  body[data-mini] h2, body[data-mini] #waitingWrap, body[data-mini] .pickwrap { display:none; }
-  body[data-mini] .plist { border-radius:0; border:0; }
+  body[data-mini] h2, body[data-mini] #waitingWrap,
+  body[data-mini] .pickwrap { display:none; }
+  body[data-mini] .plist { border:0; }
   /* One column per cell the row actually emits. Declaring four for a
      six-cell row pushed the percentage onto a wrapped second line under the
      project name — which is exactly where it showed up. */
-  body[data-mini] .prow { grid-template-columns:14px minmax(0,1fr) 72px 64px 44px 40px;
-    padding:5px 9px; gap:7px; font-size:12.5px; }
-  body[data-mini] .prow .bar, body[data-mini] .prow .why { display:none; }
+  body[data-mini] .prow {
+    grid-template-columns:12px minmax(0,1fr) 68px 60px var(--meter) 38px;
+    padding:0 8px; gap:7px; font-size:11.5px; min-height:26px; }
+  /* Which cells go, and why these. note.ps1's own row is name, spark,
+     waiting, running, meter, percent — it has never had an age column, and at
+     360 pixels the meter is worth more than "how long ago". The trace goes
+     because the note drops it too once the name would fall under 70px.
+     A hidden grid item claims no track, so the template above is shorter by
+     exactly this many cells; the panel test counts both and fails if they
+     drift apart. */
+  body[data-mini] .prow .spark,
+  body[data-mini] .prow .xy { display:none; }
+  body[data-mini] .prow .why { display:none; }
+  body[data-mini] .load { display:none; }
   body[data-mini] .minibar { display:flex; }
-  /* The strip is the only chrome left: a drag handle and the one number that
-     justifies the window being on top of everything else. */
-  .minibar { display:none; align-items:center; gap:8px; padding:4px 9px;
-    border-bottom:1px solid var(--line); background:var(--raise);
-    font-size:11.5px; font-family:var(--mono); color:var(--muted);
-    position:sticky; top:0; -webkit-app-region:drag; app-region:drag; }
-  .minibar b { color:var(--perm); }
+
+  /* The strip is the only chrome left: a drag handle, the one number that
+     justifies the window being on top of everything else, and the way back.
+     Deliberately the note's own title strip — 26px tall, letter-spaced, amber
+     count — so the two read as one window on two operating systems. */
+  .minibar { display:none; align-items:center; gap:8px; padding:0 9px;
+    min-height:26px; border-bottom:1px solid var(--edge); background:var(--panel);
+    font-size:10.5px; font-family:var(--mono); color:var(--dim);
+    letter-spacing:.06em; position:sticky; top:0; z-index:10;
+    -webkit-app-region:drag; app-region:drag; }
+  .minibar b { color:var(--amber); font-variant-numeric:tabular-nums; }
   .minibar .sp { margin-inline-start:auto; -webkit-app-region:no-drag; app-region:no-drag; }
-  .minibar a { color:var(--muted); text-decoration:none; border:1px solid var(--line);
-    border-radius:999px; padding:1px 8px; -webkit-app-region:no-drag; app-region:no-drag; }
-  .minibar a:hover { color:var(--fg); }
+  .minibar a { color:var(--dim); text-decoration:none; border:1px solid var(--bevel);
+    padding:0 7px; -webkit-app-region:no-drag; app-region:no-drag; }
+  .minibar a:hover { color:var(--ink); border-color:var(--cyan); }
+
+  /* ── narrow ────────────────────────────────────────────────────────────
+     The list is a grid of fixed columns and below roughly 640px there is no
+     honest way to keep eight of them. The counts and the meter are what the
+     page is for; the rest folds away rather than being squeezed into slivers
+     too narrow to read. */
+  @media (max-width: 640px) {
+    .prow { grid-template-columns:12px minmax(0,1fr) 84px var(--meter) 44px; }
+    .prow .spark, .prow .xy { display:none; }
+    .wrow { flex-wrap:wrap; padding:6px var(--pad); }
+    .wrow .sess { min-width:0; }
+    .stat b { font-size:18px; }
+  }
 </style>
 </head>
 <body>
@@ -341,6 +571,20 @@ const U = { s: tr('sn'), m: tr('dk'), h: tr('sa'), d: tr('g') };
 // message here, so the sign has to move around it rather than be a catalog
 // entry of its own.
 const PCT_FIRST = tr('%{0}') !== '%{0}';
+/**
+ * The width of a lit run of segments.
+ *
+ * The meter is ten discrete segments, so a fill of 63% would light six and a
+ * third of them — a sliver that reads as a rendering artefact rather than as a
+ * number. note.ps1 rounds to a whole segment (`lit = round(pct/100 * segs)`)
+ * and so does this, which is also what keeps the two surfaces showing the same
+ * picture of the same project.
+ */
+function segWidth(pct) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return Math.round(clamped / 10) * 10;
+}
+
 function fmtPercent(v, approximate) {
   const tilde = approximate ? '~' : '';
   return PCT_FIRST ? tilde + v + '%' : tilde + '%' + v;
@@ -439,7 +683,7 @@ function progressRow(p) {
   if (!p.phase && p.phaseSuppressed) bits.push(`<span class="noprog">${esc(say(p.phaseSuppressed))}</span>`);
   if (p.percent !== null && p.percent !== undefined) {
     const cls = p.approximate ? 'bar approx' : 'bar';
-    bits.push(`<span class="${cls}"><i style="width:${Math.max(0, Math.min(100, p.percent))}%"></i></span>`);
+    bits.push(`<span class="${cls}"><i style="width:${segWidth(p.percent)}%"></i></span>`);
     bits.push(`<span class="pct">${fmtPercent(p.percent, p.approximate)}</span>`);
   } else {
     bits.push('<span class="bar none"></span><span class="pct">—</span>');
@@ -583,7 +827,7 @@ function sparkline(m) {
   if (!Array.isArray(m) || m.length < 2) {
     // Nothing recorded at all: a flat dotted rule, which says that and not
     // "this project did nothing".
-    return '<svg class="spark" viewBox="0 0 54 16" aria-hidden="true">' +
+    return '<svg class="spark" viewBox="0 0 54 16" preserveAspectRatio="none" aria-hidden="true">' +
       '<path class="flat" d="M0 15 H54"/></svg>';
   }
   const max = Math.max(1, ...m);
@@ -613,7 +857,7 @@ function sparkline(m) {
   const gap = first > 0
     ? `<path class="flat" d="M0 15 H${(Math.min(first, m.length - 1) * step).toFixed(1)}"/>`
     : '';
-  return `<svg class="spark" viewBox="0 0 54 16" aria-hidden="true">${gap}<path d="${d.trim()}"/></svg>`;
+  return `<svg class="spark" viewBox="0 0 54 16" preserveAspectRatio="none" aria-hidden="true">${gap}<path d="${d.trim()}"/></svg>`;
 }
 
 /**
@@ -642,7 +886,7 @@ function renderLoad() {
 function miniBar(pr) {
   if (!pr || pr.percent == null) return '<span class="bar none"></span>';
   const cls = pr.approximate ? 'bar approx' : 'bar';
-  return `<span class="${cls}" style="flex-basis:70px"><i style="width:${Math.max(0, Math.min(100, pr.percent))}%"></i></span>`;
+  return `<span class="${cls}"><i style="width:${segWidth(pr.percent)}%"></i></span>`;
 }
 
 function renderList() {

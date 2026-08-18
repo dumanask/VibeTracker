@@ -49,7 +49,7 @@ class Parser {
   #i = 0;
   #line = 1;
   #lineStart = 0;
-  #root: TomlTable = {};
+  #root: TomlTable = Parser.#table();
   #current: TomlTable = this.#root;
   #currentPath: string[] = [];
   #headerTables = new Set<TomlTable>();
@@ -145,6 +145,9 @@ class Parser {
     let t = this.#root;
     for (let k = 0; k < path.length - 1; k++) t = this.#descend(t, path[k]!, startLine);
     const last = path[path.length - 1]!;
+    // The final segment never goes through `#descend`, so a one-segment header
+    // -- `[__proto__]` exactly -- would otherwise walk straight past the guard.
+    this.#checkKey(last, startLine);
 
     if (isArray) {
       let arr = t[last];
@@ -155,14 +158,14 @@ class Parser {
       } else if (!Array.isArray(arr) || !this.#arrays.has(arr)) {
         throw this.#err(`"${path.join('.')}" bir dizi tablosu değil`);
       }
-      const entry: TomlTable = {};
+      const entry: TomlTable = Parser.#table();
       this.#headerTables.add(entry);
       (arr as TomlValue[]).push(entry);
       this.#current = entry;
     } else {
       const existing = t[last];
       if (existing === undefined) {
-        const entry: TomlTable = {};
+        const entry: TomlTable = Parser.#table();
         this.#headerTables.add(entry);
         t[last] = entry;
         this.#current = entry;
@@ -182,11 +185,41 @@ class Parser {
     this.#currentPath = path;
   }
 
+  /**
+   * Keys a config file is not allowed to name.
+   *
+   * A TOML document is data from a file the user edits, and the parser was
+   * writing its keys straight onto plain objects. `[__proto__]` therefore
+   * walked into `Object.prototype` and every assignment under it landed on
+   * every object in the process. Measured, not theorised:
+   * `loadConfigText('[__proto__]
+bad = true')` returned ok, its own result
+   * had no such key, and `({}).bad` was `true` afterwards.
+   *
+   * Two defences rather than one, because either alone is a single line from
+   * being wrong. Tables are made with a null prototype so there is nothing
+   * underneath to reach, and these three names are refused outright so a
+   * document that tries says so instead of quietly doing nothing.
+   */
+  static readonly #FORBIDDEN = new Set(['__proto__', 'constructor', 'prototype']);
+
+  /** A table with no prototype, so a key can never reach through it. */
+  static #table(): TomlTable {
+    return Object.create(null) as TomlTable;
+  }
+
+  #checkKey(key: string, line: number): void {
+    if (Parser.#FORBIDDEN.has(key)) {
+      throw new TomlError(`"${key}" anahtar olarak kullanılamaz`, line, 1);
+    }
+  }
+
   /** Walk into (or create) an intermediate table named by a header path. */
   #descend(t: TomlTable, key: string, line: number): TomlTable {
+    this.#checkKey(key, line);
     const v = t[key];
     if (v === undefined) {
-      const made: TomlTable = {};
+      const made: TomlTable = Parser.#table();
       t[key] = made;
       return made;
     }
@@ -215,9 +248,10 @@ class Parser {
     let t = table;
     for (let k = 0; k < path.length - 1; k++) {
       const key = path[k]!;
+      this.#checkKey(key, this.#line);
       const v = t[key];
       if (v === undefined) {
-        const made: TomlTable = {};
+        const made: TomlTable = Parser.#table();
         this.#dottedTables.add(made);
         t[key] = made;
         t = made;
@@ -232,6 +266,7 @@ class Parser {
       }
     }
     const last = path[path.length - 1]!;
+    this.#checkKey(last, this.#line);
     const id = `${scope} ${path.join('.')}`;
     if (Object.hasOwn(t, last) || this.#assigned.has(id)) {
       throw this.#err(`"${path.join('.')}" anahtarı iki kez atanmış`);
@@ -419,7 +454,7 @@ class Parser {
 
   #inlineTable(): TomlTable {
     this.#i++;
-    const t: TomlTable = {};
+    const t: TomlTable = Parser.#table();
     const scope = `inline@${this.#i}`;
     this.#skipInline();
     if (this.#s[this.#i] === '}') {

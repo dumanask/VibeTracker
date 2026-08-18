@@ -350,9 +350,23 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
 
   // Ended sessions must not keep a descriptor open just because the daemon is
   // still running.
+  //
+  // The set has to name *everything* still being followed, and for a while it
+  // named only Claude Code's registry paths. The adapters share this reader
+  // (`enabledAdapters(() => ctx.tail(), …)` above) and Codex reads its rollouts
+  // through it, so every scan dropped every Codex entry and the next scan
+  // reopened it: the offset discipline this class exists for was switched off
+  // for one agent in particular. Measured — three polls of one rollout with an
+  // open `shell` call gave `["shell"], [], []` and four opens instead of
+  // `["shell"]` three times and two. A tool that scrolled out of the 256 KB
+  // window was simply forgotten, which is how `BUSY(tool:…)` went missing on
+  // Codex sessions while looking like an agent difference.
   const activePaths = new Set(
     scanned.filter((s) => s.facts).map((s) => s.transcriptPath as string),
   );
+  for (const s of observed.sessions) {
+    if (s.facts.path) activePaths.add(s.facts.path);
+  }
   await ctx.tail().retain(activePaths);
 
   const tailStats = ctx.tail().stats();
@@ -695,14 +709,26 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       if (!proj.workspaces.some((w) => w.normPath === wsPath)) {
         proj.workspaces.push(buildWorkspace(wsPath, entry.cwd, ident.git, storageKind));
       }
+      // The state machine decides, here as everywhere else.
+      //
+      // These three fields were written by hand — `'ORPHANED'`, `['proc:gone']`,
+      // `0.95` — which is `deriveState`'s dead branch copied out. But this list
+      // holds every entry whose liveness is not `live`, and that includes
+      // `reused`: a PID that now belongs to a stranger. For those the machine
+      // says `proc:pid-reused`, and the copy said the process was gone. PID
+      // reuse is the one thing this tool can measure that a directory listing
+      // cannot — printing the wrong reason for it on the row that shows it is
+      // the worst place in the product to have a second opinion.
+      const liveness = batch.verdicts.get(entry.pid) ?? 'unknown';
+      const derived = deriveState({ liveness, facts: null, cpuPct: null, descendants: null, now });
       proj.sessions.push({
         sessionId: entry.sessionId,
         name: entry.name,
         pid: entry.pid,
-        liveness: batch.verdicts.get(entry.pid) ?? 'unknown',
-        state: 'ORPHANED',
-        evidence: ['proc:gone'],
-        confidence: 0.95,
+        liveness,
+        state: derived.state,
+        evidence: derived.evidence,
+        confidence: derived.confidence,
         cwd: entry.cwd,
         normPath: normPath(entry.cwd),
         entrypoint: entry.entrypoint,
