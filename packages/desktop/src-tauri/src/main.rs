@@ -164,6 +164,14 @@ fn overview(rt: &Runtime) -> Option<Overview> {
 /// in a title or a history entry.
 fn open_panel(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("panel") {
+        // `unminimize` before `show`, and both before `set_focus`. Closing the
+        // window only hides it, so the one being reopened is usually hidden --
+        // but it can also be minimised, and a hidden window that is also
+        // minimised comes back at -32000,-32000 with a zero-sized client area,
+        // which looks exactly like a window that failed to open. Observed, not
+        // guessed: the first build did precisely that when the icon was clicked
+        // from the overflow flyout.
+        let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
         return;
@@ -171,11 +179,20 @@ fn open_panel(app: &AppHandle) {
     let Some(rt) = read_runtime() else { return };
     let url = format!("http://127.0.0.1:{}/?t={}", rt.port, rt.token);
     let Ok(parsed) = url.parse() else { return };
-    let _ = WebviewWindowBuilder::new(app, "panel", WebviewUrl::External(parsed))
+    if let Ok(w) = WebviewWindowBuilder::new(app, "panel", WebviewUrl::External(parsed))
         .title("VibeTracker")
         .inner_size(1100.0, 760.0)
         .min_inner_size(420.0, 320.0)
-        .build();
+        .visible(true)
+        .focused(true)
+        .build()
+    {
+        // Asked for again after the build. The window is created while a tray
+        // flyout owns the foreground, and on Windows that is enough for it to
+        // arrive iconified however it was configured.
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
 }
 
 fn main() {
@@ -206,10 +223,19 @@ fn main() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click { button, .. } = event {
-                        if button == tauri::tray::MouseButton::Left {
-                            open_panel(tray.app_handle());
-                        }
+                    // `button_state` matters: `Click` fires for both the press
+                    // and the release, so ignoring it acts twice on one click.
+                    // Measured consequence -- the window was created by the
+                    // first call and then arrived iconified at -32000,-32000
+                    // while the second raced its creation. Acting on release is
+                    // also simply what every other button in the OS does.
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        open_panel(tray.app_handle());
                     }
                 })
                 .build(app)?;
