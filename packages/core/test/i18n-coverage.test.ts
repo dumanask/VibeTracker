@@ -47,7 +47,14 @@ function allKeys(): Map<string, string> {
   const keys = new Map<string, string>();
   for (const file of sources(PACKAGES)) {
     const src = readFileSync(file, 'utf8');
-    if (!src.includes('t`') && !src.includes('tr(')) continue;
+    // `ph(` belongs in this list too. Without it a file whose only translated
+    // strings are phrases — `progress/percent.ts`, three of them — never
+    // entered the gate at all, and `engine/src/progress/scan.ts` passed only
+    // because a doc comment happened to contain a backtick after a `t`. The
+    // filter saves microseconds and cost the gate twenty-four keys, so it is
+    // now generous rather than clever.
+    if (!src.includes('t`') && !src.includes('tr(') && !src.includes('ph(') && !src.includes('data-tr'))
+      continue;
     for (const k of keysInSource(src, relative(ROOT, file))) {
       if (!keys.has(k.key)) keys.set(k.key, k.file);
     }

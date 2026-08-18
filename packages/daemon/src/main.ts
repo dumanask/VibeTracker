@@ -18,6 +18,7 @@ import {
   defaultConfig,
   setTomlValues,
   type TrackingConfig,
+  setCustomPatterns,
 } from '@vibetracker/core';
 import type { StatusReport } from '@vibetracker/shared';
 import { Store, type MaintenanceResult, type StateChange } from './store.ts';
@@ -482,6 +483,10 @@ export class Daemon {
     this.#trackingStamp = stamp;
     try {
       const cfg = (await loadConfig()).config;
+      // The user's own secret shapes. Re-applied on every config read rather
+      // than once at boot, because adding a pattern to protect something you
+      // just noticed should not need a restart to take effect.
+      setCustomPatterns(cfg.privacy.custom_patterns);
       this.#trackingRaw = cfg.tracking;
       this.#tracking = this.#followMoves(cfg.tracking);
       // Read from the same file at the same moment: a selection that names a

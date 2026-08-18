@@ -25,7 +25,14 @@ export {
   labelWorkspaces,
   displayNameFor,
 } from './project.ts';
-export { redact, redactDetailed, redactSnippet, entropy, type RedactResult } from './redact.ts';
+export {
+  redact,
+  redactDetailed,
+  redactSnippet,
+  setCustomPatterns,
+  entropy,
+  type RedactResult,
+} from './redact.ts';
 export {
   parseWithPositions,
   hasComments,

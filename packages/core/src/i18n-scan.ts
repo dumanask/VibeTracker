@@ -197,8 +197,32 @@ function templateKey(body: string): string {
 }
 
 /** Every key requested by one source file. */
+/** The four entities an attribute value can carry. */
+function htmlUnescape(s: string): string {
+  return s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+}
+
 export function keysInSource(src: string, file = ''): FoundKey[] {
   const found: FoundKey[] = [];
+
+  // Markup, before the script.
+  //
+  // The dashboard translates its own static text through `data-tr` attributes,
+  // and those are HTML — not JavaScript string literals, so the scanner below
+  // walked straight past them. Nine strings on the one surface that is always
+  // on screen were outside the gate the project relies on, and an untranslated
+  // one there would have shipped silently.
+  //
+  // (Written without an example value on purpose: this file is scanned too,
+  // and a sample attribute in a comment becomes a key nobody can translate.)
+  for (const m of src.matchAll(/\bdata-tr="([^"]*)"/g)) {
+    if (m[1]) found.push({ key: htmlUnescape(m[1]), file, kind: 'tr' });
+  }
+
   for (const span of scanStrings(src)) {
     const before = src.slice(0, span.start).trimEnd();
     const body = src.slice(span.start, span.end);

@@ -184,3 +184,32 @@ test('the ring survives interleaved push and drain', () => {
   assert.deepEqual(r.drain(), ['c', 'd', 'e']);
   assert.equal(r.dropped, 1);
 });
+
+/**
+ * Every free-text field the agent hands us, not only the error text.
+ *
+ * The rule is that agent output is redacted at the single point where it
+ * enters, and for a while `error` and `tool_input` were the only fields
+ * obeying it. But `tool_name` is chosen by whoever wrote the MCP server, and
+ * `notification_type`, `source` and `reason` are the same kind of string. All
+ * four end up in `sub_reason`, on the board and in evidence — so an odd one is
+ * text from somewhere else appearing on the dashboard, and later in the
+ * `--json` somebody pastes into an issue.
+ */
+test('a secret in any hook field is redacted before it is kept', () => {
+  const key = 'sk-ant-api03-' + 'A1b2C3d4E5f6G7h8'.repeat(4);
+  const h = new HookIngest();
+  h.apply([
+    ev('PermissionRequest', { tool_name: key }),
+    ev('SessionStart', { source: key }),
+    ev('SessionEnd', { reason: key }),
+    ev('Notification', { notification_type: key }),
+  ]);
+  const dump = JSON.stringify(h.get(SID) ?? {});
+  assert.ok(!dump.includes('sk-ant-api03'), `hook alanindaki sir tutuldu: ${dump}`);
+  assert.ok(dump.includes('«redacted:'), 'redaksiyon hic calismamis');
+
+  const v = view({});
+  h.overlay(v);
+  assert.ok(!JSON.stringify(v).includes('sk-ant-api03'), 'sir overlay ile disari cikti');
+});

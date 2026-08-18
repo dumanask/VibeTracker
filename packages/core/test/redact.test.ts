@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { redact, redactDetailed, redactSnippet, entropy } from '../src/redact.ts';
+import {
+  redact,
+  redactDetailed,
+  redactSnippet,
+  setCustomPatterns,
+  entropy,
+} from '../src/redact.ts';
 
 /**
  * The fixtures below are synthetic but shaped like the real thing. Never put a
@@ -86,4 +92,47 @@ test('snippets are redacted before they are shortened', () => {
   const out = redactSnippet(`hata: ${key} reddedildi`, 60);
   assert.ok(!out.includes('sk-ant-api03'));
   assert.ok(out.length <= 60);
+});
+
+/**
+ * The user's own patterns.
+ *
+ * `[privacy].custom_patterns` was validated, reported by `vt config show` and
+ * covered by a config test — and reached no redactor. A privacy setting that
+ * reads back correctly and does nothing is worse than a missing one, because
+ * the missing one does not tell you it is protecting you.
+ *
+ * Redaction is deliberately not the only defence (the LLM digest is off by
+ * default and previews what it sends), and it will always miss shapes it has
+ * never seen. This is the hatch for exactly that: an in-house token format
+ * nobody outside the company has heard of.
+ */
+test('a pattern the user added actually redacts', () => {
+  const bad = setCustomPatterns(['ACME-[0-9]{4}-[A-Z]{4}']);
+  try {
+    assert.deepEqual(bad, []);
+    const out = redactDetailed('key ACME-1234-WXYZ end');
+    assert.equal(out.text, 'key «redacted:custom» end');
+    assert.ok(out.hits.includes('custom'));
+  } finally {
+    setCustomPatterns([]);
+  }
+});
+
+test('a pattern that does not compile is dropped and named, not thrown', () => {
+  const bad = setCustomPatterns(['ACME-[0-9]{4}', '([unclosed']);
+  try {
+    assert.deepEqual(bad, ['([unclosed']);
+    // The good one still installed: one broken line must not disarm the rest.
+    assert.equal(redact('ACME-1234'), '«redacted:custom»');
+  } finally {
+    setCustomPatterns([]);
+  }
+});
+
+test('clearing custom patterns leaves the built-in detectors alone', () => {
+  setCustomPatterns(['zzz']);
+  setCustomPatterns([]);
+  assert.equal(redact('zzz'), 'zzz');
+  assert.match(redact('sk-ant-abcdefgh12345678'), /«redacted:anthropic_key»/);
 });

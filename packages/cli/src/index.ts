@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { scan, type ScanOptions } from '@vibetracker/engine';
-import { loadLang, missingKeys, resolveLang, t } from '@vibetracker/core';
+import { loadLang, missingKeys, resolveLang, setCustomPatterns, t } from '@vibetracker/core';
 import { usage } from './usage.ts';
 import { loadConfig } from '@vibetracker/platform';
 import { configuredRoots, isTracked } from '@vibetracker/core';
@@ -219,7 +219,12 @@ async function main(): Promise<number> {
   // broken config simply leaves the source language in place.
   let configLang: string | undefined;
   try {
-    configLang = (await loadConfig()).config.server.lang;
+    const { config } = await loadConfig();
+    configLang = config.server.lang;
+    // The user's own secret shapes, installed before anything can be printed.
+    // Every CLI surface redacts through the same module, so this is the one
+    // place it has to happen for all of them.
+    setCustomPatterns(config.privacy.custom_patterns);
   } catch {
     configLang = undefined;
   }

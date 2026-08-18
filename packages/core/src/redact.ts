@@ -91,9 +91,53 @@ export interface RedactResult {
   hits: string[];
 }
 
+/**
+ * Patterns the user added, compiled once.
+ *
+ * `[privacy].custom_patterns` has been in the config, validated, reported by
+ * `vt config show` and covered by a test since the config existed — and it
+ * reached no redactor at all. A privacy setting that reads back correctly and
+ * does nothing is worse than one that is missing, because the missing one does
+ * not tell you it is protecting you.
+ *
+ * Held in a module-level slot rather than threaded through forty call sites:
+ * redaction is a property of the process, every surface wants the same answer,
+ * and the alternative is a parameter that some caller eventually forgets.
+ */
+let custom: Detector[] = [];
+
+/**
+ * Install the user's own patterns. Invalid ones are dropped and named, because
+ * a regex that does not compile must not take the redactor down with it — and
+ * must not be silently ignored either.
+ */
+export function setCustomPatterns(patterns: readonly string[]): string[] {
+  const bad: string[] = [];
+  const made: Detector[] = [];
+  for (const p of patterns) {
+    try {
+      made.push({ name: 'custom', re: new RegExp(p, 'g') });
+    } catch {
+      bad.push(p);
+    }
+  }
+  custom = made;
+  return bad;
+}
+
 export function redactDetailed(input: string): RedactResult {
   const hits: string[] = [];
   let text = input;
+
+  // The user's own patterns run first. Somebody adding a pattern is telling us
+  // about a secret shape we do not know, and the built-in detectors cannot
+  // have a better claim on the same span than the person whose secret it is.
+  for (const d of custom) {
+    text = text.replace(d.re, () => {
+      hits.push('custom');
+      return '«redacted:custom»';
+    });
+  }
 
   for (const d of DETECTORS) {
     text = text.replace(d.re, () => {

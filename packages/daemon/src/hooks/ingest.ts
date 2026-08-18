@@ -157,7 +157,7 @@ export class HookIngest {
 
     switch (event) {
       case 'PermissionRequest':
-        s.pendingTool = p.tool_name ?? 'bilinmeyen araç';
+        s.pendingTool = safeField(p.tool_name, 'bilinmeyen araç');
         this.#set(
           s,
           SessionState.WaitingPermission,
@@ -169,11 +169,11 @@ export class HookIngest {
 
       case 'PermissionDenied':
         s.pendingTool = undefined;
-        this.#set(s, SessionState.Busy, 'denied', `hook:izin reddedildi (${p.tool_name ?? '?'})`, now);
+        this.#set(s, SessionState.Busy, 'denied', `hook:izin reddedildi (${safeField(p.tool_name, '?')})`, now);
         return;
 
       case 'Notification': {
-        const kind = p.notification_type ?? '';
+        const kind = safeField(p.notification_type, '');
         if (/permission/i.test(kind)) {
           this.#set(
             s,
@@ -197,19 +197,26 @@ export class HookIngest {
       case 'PreToolUse':
         // Only bound under --high-fidelity.
         s.pendingTool = undefined;
-        this.#set(s, SessionState.Busy, `tool:${p.tool_name ?? '?'}`, `hook:araç başladı (${p.tool_name ?? '?'})`, now);
+        const started = safeField(p.tool_name, '?');
+        this.#set(s, SessionState.Busy, `tool:${started}`, `hook:araç başladı (${started})`, now);
         return;
 
       case 'PostToolUse':
-        if (p.tool_name && s.pendingTool === p.tool_name) s.pendingTool = undefined;
+        // Compared in the same form it was stored in, or a name that needed
+        // redacting would never match the one waiting and the pending tool
+        // would stay pending forever.
+        if (p.tool_name && s.pendingTool === safeField(p.tool_name, '')) s.pendingTool = undefined;
         if (s.state === SessionState.WaitingPermission) {
           this.#set(s, SessionState.Busy, 'thinking', 'hook:araç bitti, izin verilmişti', now);
         }
         return;
 
       case 'PostToolUseFailure':
-        s.lastError = p.error ? truncateReason(p.error) : (p.tool_name ?? 'araç hatası');
-        if (p.tool_name && s.pendingTool === p.tool_name) s.pendingTool = undefined;
+        s.lastError = p.error ? truncateReason(p.error) : safeField(p.tool_name, 'araç hatası');
+        // Compared in the same form it was stored in, or a name that needed
+        // redacting would never match the one waiting and the pending tool
+        // would stay pending forever.
+        if (p.tool_name && s.pendingTool === safeField(p.tool_name, '')) s.pendingTool = undefined;
         // A single tool failure is normal; the agent usually recovers. Only
         // record it, never flip the session into ERRORED on its own.
         return;
@@ -239,11 +246,11 @@ export class HookIngest {
 
       case 'SessionStart':
         s.ended = undefined;
-        this.#set(s, SessionState.Starting, p.source ?? 'start', 'hook:oturum başladı', now);
+        this.#set(s, SessionState.Starting, safeField(p.source, 'start'), 'hook:oturum başladı', now);
         return;
 
       case 'SessionEnd':
-        s.ended = p.reason ?? 'end';
+        s.ended = safeField(p.reason, 'end');
         this.#set(s, SessionState.Ended, s.ended, `hook:oturum bitti (${s.ended})`, now);
         return;
 
@@ -324,4 +331,23 @@ export class HookIngest {
  */
 function truncateReason(text: string): string {
   return redactSnippet(text, 140);
+}
+
+/**
+ * Any short field the agent handed us, made safe to keep.
+ *
+ * The rule for this product is that free text from an agent goes through
+ * redaction at the single point where it enters, and error text was the only
+ * field obeying it. But `tool_name` is a name the agent chose — an MCP tool is
+ * named by whoever wrote the server — and `notification_type`, `source` and
+ * `reason` are the same kind of thing. They are stored in `sub_reason`, drawn
+ * on the board and written into evidence, so an odd one is a string from
+ * somewhere else appearing on the dashboard unfiltered.
+ *
+ * Short, because these are identifiers rather than prose: a 48-character
+ * "tool name" is already something other than a tool name.
+ */
+function safeField(value: string | undefined, fallback: string): string {
+  if (!value) return fallback;
+  return redactSnippet(value, 48) || fallback;
 }

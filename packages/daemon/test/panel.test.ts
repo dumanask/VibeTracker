@@ -222,27 +222,52 @@ test('every cell in a project row has a column to sit in', () => {
     .map((l) => l.trim())
     .filter((l) => (l.startsWith('<span') || l.startsWith('${')) && l !== '${why}');
 
-  const full = /\n  \.prow \{[^}]*?grid-template-columns:([^;]+);/s.exec(html);
-  const mini = /data-mini\] \.prow \{[^}]*?grid-template-columns:([^;]+);/s.exec(html);
-  assert.ok(full && mini, 'both row templates must declare their columns');
+  // Every declaration, not the two that happened to sit at the top level.
+  //
+  // These were two hand-written regexes, and a third `.prow` template later
+  // appeared inside a `@media` block for narrow windows — where the test could
+  // not see it, which is precisely where a wrong column count is least likely
+  // to be caught by eye. Collected by scanning now, so the next breakpoint is
+  // covered the moment it is written.
+  const NARROW = html.search(/@media \(max-width/);
+  const scopeAt = (selector: string, at: number): 'base' | 'mini' | 'narrow' =>
+    /data-mini/.test(selector) ? 'mini' : NARROW >= 0 && at > NARROW ? 'narrow' : 'base';
 
-  const tracks = (m: RegExpExecArray): number => m[1]!.trim().split(/\s+/).length;
-  assert.equal(tracks(full), cells.length, `tam satır: ${full[1]!.trim()}`);
+  const templates = [...html.matchAll(/([^{}]*\.prow\b[^{}]*)\{([^}]*)\}/g)]
+    .filter((m) => /grid-template-columns:/.test(m[2]!))
+    .map((m) => ({ selector: m[1]!.trim(), body: m[2]!, at: m.index! }));
+  assert.ok(templates.length >= 3, `satır şablonu sayısı: ${templates.length}`);
 
-  // Mini drops cells rather than shrinking them: at that width the progress
-  // bar and the activity trace are the two things worth losing. A
-  // `display:none` grid item claims no track, so mini's template is shorter
-  // by exactly the number of cells it hides — counted here rather than
-  // written down, so hiding one more does not silently go out of step.
-  const hidden = [...html.matchAll(/body\[data-mini\][^{]*\.prow[^{]*\{[^}]*display:none/g)]
-    .flatMap((m) => [...m[0].matchAll(/\.prow \.(\w+)/g)].map((x) => x[1]!))
-    .filter((c) => c !== 'why');
-  assert.ok(hidden.length > 0, 'mini hides nothing: the two templates cannot both be right');
-  assert.equal(
-    tracks(mini),
-    cells.length - new Set(hidden).size,
-    `mini satır: ${mini[1]!.trim()} · gizlenen: ${[...new Set(hidden)].join(', ')}`,
-  );
+  const tracksOf = (body: string): number =>
+    /grid-template-columns:([^;]+);/.exec(body)![1]!.trim().split(/\s+/).length;
+
+  /**
+   * Cells hidden in a given context. A `display:none` grid item claims no
+   * track, so a template is shorter by exactly the number of cells its own
+   * context hides — counted rather than written down, so hiding one more does
+   * not silently put the two out of step.
+   */
+  const hiddenIn = (scope: 'base' | 'mini' | 'narrow'): Set<string> => {
+    const out = new Set<string>();
+    for (const m of html.matchAll(/([^{}]*\.prow \.\w+[^{}]*)\{([^}]*display:none[^}]*)\}/g)) {
+      if (scopeAt(m[1]!, m.index!) !== scope) continue;
+      for (const c of m[1]!.matchAll(/\.prow \.(\w+)/g)) {
+        if (c[1] !== 'why') out.add(c[1]!);
+      }
+    }
+    return out;
+  };
+
+  for (const tpl of templates) {
+    const scope = scopeAt(tpl.selector, tpl.at);
+    const hidden = hiddenIn(scope);
+    const declared = /grid-template-columns:([^;]+);/.exec(tpl.body)![1]!.trim();
+    assert.equal(
+      tracksOf(tpl.body),
+      cells.length - hidden.size,
+      `${scope} satırı: ${declared} · gizlenen: ${[...hidden].join(', ') || '(yok)'}`,
+    );
+  }
 });
 
 /**
@@ -316,4 +341,37 @@ test('a session from another agent is badged, and Claude Code is not', () => {
 
   const badges = [...html.matchAll(/class="agent"[^>]*>([^<]+)</g)].map((m) => m[1]);
   assert.deepEqual(badges.sort(), ['codex', 'opencode']);
+});
+
+/**
+ * The one-second tick must not rebuild the page.
+ *
+ * It used to call the whole of `render()`, which reassigns `innerHTML` for the
+ * counters, the waiting strip and the project list — so keyboard focus was
+ * dropped, any text selection cleared and anything open closed, once a second,
+ * for as long as the page was up. The only thing that actually changes between
+ * server pushes is an elapsed time, so every node showing one carries the
+ * timestamp it is measured from and the tick writes text into those and
+ * nothing else.
+ */
+test('the timer advances clocks instead of rebuilding the list', () => {
+  const html = readFileSync(PANEL, 'utf8');
+
+  assert.match(html, /setInterval\(tickClocks, 1000\)/, 'saniyelik tik hâlâ render çağırıyor');
+  assert.doesNotMatch(
+    html,
+    /setInterval\(\(\) => \{ if \(report\) render\(\); \}/,
+    'tam yeniden çizim hâlâ zamanlayıcıya bağlı',
+  );
+
+  // Every elapsed-time cell has to carry its own reference point, or the tick
+  // has nothing to recompute from and the clocks quietly stop.
+  const dwellCells = [...html.matchAll(/<span class="(dwell|xy)"([^>]*)>/g)];
+  assert.ok(dwellCells.length >= 3, `geçen süre hücresi bulunamadı: ${dwellCells.length}`);
+  for (const [, cls, attrs] of dwellCells) {
+    assert.match(attrs!, /data-since=/, `${cls} hücresi referans zamanı taşımıyor`);
+  }
+
+  // And the tick reads exactly that attribute.
+  assert.match(html, /querySelectorAll\('\[data-since\]'\)/);
 });

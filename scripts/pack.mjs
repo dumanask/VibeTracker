@@ -237,6 +237,29 @@ if (leftovers.length > 0) {
   process.exit(1);
 }
 
+// And every relative import a rewrite produced has to name a file that is here.
+//
+// The check above only asks whether a bare specifier survived; a rewrite that
+// pointed confidently at the wrong file passed it. Its twin in
+// `desktop-stage.mjs` did exactly that — `@vibetracker/daemon` became
+// `daemon/src/index.ts`, which has never existed — and the desktop package
+// shipped a `vt mini` that died on ERR_MODULE_NOT_FOUND on a user's machine.
+// This script reads each package's real entry from its `exports`, so that
+// particular mistake is not available here; the guard is for the next one.
+const missing = [];
+for (const f of walk(join(STAGE, 'src'))) {
+  if (!/\.(ts|mjs|js)$/.test(f)) continue;
+  const dir = dirname(f);
+  for (const m of readFileSync(f, 'utf8').matchAll(/(?:from|import)\s*\(?\s*(['"])(\.[^'"]+)\1/g)) {
+    const target = resolve(dir, m[2]);
+    if (!existsSync(target)) missing.push(`${relative(STAGE, f)} -> ${m[2]}`);
+  }
+}
+if (missing.length > 0) {
+  console.error(`Var olmayan dosyayı gösteren içe aktarım:\n  ${missing.join('\n  ')}`);
+  process.exit(1);
+}
+
 const bytes = [...walk(STAGE)].reduce((n, f) => n + statSync(f).size, 0);
 console.log(
   `\nPaket hazır: ${STAGE}\n` +

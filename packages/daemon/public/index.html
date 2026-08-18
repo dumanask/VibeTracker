@@ -452,7 +452,7 @@
      page is for; the rest folds away rather than being squeezed into slivers
      too narrow to read. */
   @media (max-width: 640px) {
-    .prow { grid-template-columns:12px minmax(0,1fr) 84px var(--meter) 44px; }
+    .prow { grid-template-columns:12px minmax(0,1fr) 76px 72px var(--meter) 42px; }
     .prow .spark, .prow .xy { display:none; }
     .wrow { flex-wrap:wrap; padding:6px var(--pad); }
     .wrow .sess { min-width:0; }
@@ -753,7 +753,7 @@ function render() {
       <span class="sess">${esc(sessionName(s))}</span>
       ${agentBadge(s)}${precision(s)}${chip(s)}${subagentBadge(s)}
       <span class="grow">${esc(s.title || s.lastPrompt || '')}</span>
-      <span class="dwell">${dwellOf(s, now)}</span>
+      <span class="dwell" data-since="${s.stateSince ?? s.lastActivityAt ?? ''}">${dwellOf(s, now)}</span>
     </div>`).join('');
 
   renderList();
@@ -914,7 +914,7 @@ function renderList() {
       ${sparkline(p.momentum)}
       <span class="ag wait${a.waiting > 0 ? '' : ' off'}">${esc(waitingText(a))}</span>
       <span class="ag run${a.running > 0 ? '' : ' off'}">${esc(runningText(a))}</span>
-      <span class="xy">${esc(dwell)}</span>
+      <span class="xy" data-since="${a.leadSince ?? ''}">${esc(dwell)}</span>
       ${miniBar(p.progress)}
       <span class="pc">${esc(pct)}</span>
       ${why}
@@ -950,7 +950,7 @@ function projectCard(p) {
           <span class="sess-name">${esc(sessionName(sv))}</span>
           ${agentBadge(sv)}${precision(sv)}${chip(sv)}${subagentBadge(sv)}
           <span class="title">${esc(sv.title || '')}</span>
-          <span class="dwell">${dwellOf(sv, now)}</span>
+          <span class="dwell" data-since="${sv.stateSince ?? sv.lastActivityAt ?? ''}">${dwellOf(sv, now)}</span>
           <span class="ev">${esc((sv.evidence || []).join(' · '))}</span>
         </div>`).join('')}
     </div>`;
@@ -1088,8 +1088,34 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Re-render on a timer so dwell counters advance between server pushes.
-setInterval(() => { if (report) render(); }, 1000);
+/**
+ * Advance the clocks without rebuilding the page.
+ *
+ * The only thing that changes between server pushes is how long something has
+ * been waiting, and this used to call the whole of `render()` once a second —
+ * which reassigns `innerHTML` for the counters, the waiting strip and the
+ * project list. Every rebuild dropped keyboard focus, cleared any text
+ * selection and closed whatever was open, once a second, forever: a chooser
+ * you could not tab through and a session id you could not select.
+ *
+ * So the tick writes text into the nodes that hold an elapsed time and touches
+ * nothing else. The full rebuild belongs to the SSE frame, which is the only
+ * moment the numbers actually changed.
+ */
+function tickClocks() {
+  if (!report) return;
+  const now = Date.now();
+  for (const el of document.querySelectorAll('[data-since]')) {
+    const from = Number(el.dataset.since);
+    if (!from) continue;
+    const next = fmtAge(sinceMs(now, from));
+    // Assigning an identical string still invalidates a selection in some
+    // engines, so it is compared first.
+    if (el.textContent !== next) el.textContent = next;
+  }
+}
+
+setInterval(tickClocks, 1000);
 
 function setConn(cls, text) {
   const el = document.getElementById('conn');

@@ -80,14 +80,40 @@ export class Store {
   }
 
   #pragmas(): void {
+    // `auto_vacuum` first, and the order is the whole point.
+    //
+    // It can only be set on a database with no pages yet, and switching the
+    // journal to WAL writes the header — so setting it *after* WAL silently
+    // does nothing, even on a file created a microsecond earlier. Measured:
+    // WAL first gives `auto_vacuum = 0`, auto_vacuum first gives 2. With it at
+    // 0 the `PRAGMA incremental_vacuum` in `maintain()` is a no-op, which means
+    // the retention passes were deleting rows into free pages the file never
+    // gave back and the database only ever grew.
+    //
     // WAL + NORMAL: durable across process crashes, without an fsync per write.
     this.#db.exec(`
+      PRAGMA auto_vacuum = INCREMENTAL;
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
       PRAGMA busy_timeout = 5000;
       PRAGMA foreign_keys = ON;
-      PRAGMA auto_vacuum = INCREMENTAL;
     `);
+  }
+
+  /**
+   * Turn on incremental vacuum for a database that predates the fix.
+   *
+   * Changing `auto_vacuum` on a populated file needs a full `VACUUM` — the
+   * pragma alone is ignored. That is expensive, so it runs once, from
+   * maintenance rather than from `open`, and only when the file actually says
+   * NONE. A database that was already correct pays a single pragma read.
+   */
+  #adoptAutoVacuum(): boolean {
+    const row = this.#db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum?: number } | undefined;
+    if (Number(row?.auto_vacuum ?? 0) !== 0) return false;
+    this.#db.exec('PRAGMA auto_vacuum = INCREMENTAL');
+    this.#db.exec('VACUUM');
+    return true;
   }
 
   #migrate(): void {
@@ -685,6 +711,11 @@ export class Store {
     }
 
     // Outside the transaction: neither of these can run inside one.
+    // Databases created before the pragma order was fixed are stuck at NONE,
+    // where this call does nothing at all. Converting is a one-off full
+    // vacuum; after it, the incremental pass below is what keeps the file from
+    // growing forever.
+    this.#adoptAutoVacuum();
     this.#db.exec('PRAGMA incremental_vacuum');
     // A daemon that only ever appends never triggers an automatic checkpoint of
     // the right size, so the WAL drifts far larger than the database itself

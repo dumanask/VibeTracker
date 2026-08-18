@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Store } from '../src/store.ts';
 import type { StatusReport } from '@vibetracker/shared';
 
@@ -124,6 +125,36 @@ test('the list is bounded, so a machine with hundreds of projects still answers'
       })),
     );
     assert.equal(s.candidates(60).length, 60);
+  } finally {
+    done();
+  }
+});
+
+/**
+ * The file has to be able to shrink.
+ *
+ * `auto_vacuum` can only be set while the database has no pages, and switching
+ * the journal to WAL writes the header — so the pragma block set it *after*
+ * WAL and it was silently ignored, on every database ever created. With it at
+ * NONE the `PRAGMA incremental_vacuum` in `maintain()` is a no-op: the
+ * retention passes were deleting rows into free pages the file never handed
+ * back, and a daemon meant to run for months only ever grew.
+ */
+test('the database is opened in a mode that can return free pages', () => {
+  const { s, done } = store();
+  try {
+    // Read from a second connection rather than adding an accessor the product
+    // does not need: WAL allows concurrent readers, and this is the same
+    // question SQLite would be asked from a shell.
+    const db = new DatabaseSync(s.path, { readOnly: true });
+    try {
+      const av = db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum?: number };
+      const jm = db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string };
+      assert.equal(Number(av.auto_vacuum), 2, 'auto_vacuum INCREMENTAL değil — dosya asla küçülmez');
+      assert.equal(String(jm.journal_mode).toLowerCase(), 'wal');
+    } finally {
+      db.close();
+    }
   } finally {
     done();
   }
