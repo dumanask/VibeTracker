@@ -8,9 +8,11 @@ ekranda gösterir.
 
 **Hiçbir projene dosya yazmaz. Hiçbir ajanla konuşmaz. Ağa çıkmaz.**
 
+Apache-2.0 · Windows, macOS, Linux · npm paketi ya da masaüstü uygulaması
+
 ---
 
-## Durum: M4 tamam · altı ajan tek panoda
+## Durum: açık kaynak · altı ajan · üç platform
 
 Daemon, canlı panel, tek örnek kilidi, watchdog, saklama politikası, otomatik başlatma,
 `vt doctor`, redaksiyon hattı, **hook tabanlı kesin durum tespiti** ve **faz/ilerleme
@@ -414,6 +416,49 @@ Windows uygulaması gerçek veriyle doğrulandı. Linux ve macOS uygulamaları y
 henüz o platformlarda çalıştırılmadı; ayrıca ajanın Windows dışında süreç başlangıç zamanı
 kaydedip kaydetmediği doğrulanamadı — kod bunu tespit eder ve yoksa korumanın zayıfladığını
 raporlar.
+
+### Otomatik başlatma: üç mekanizma, tek kural
+
+| Platform | Mekanizma | Çöken daemon |
+|---|---|---|
+| Windows | Scheduled Task · `InteractiveToken` | 5 dk'da bir tetikleyici canlılık kontrolü |
+| macOS | `~/Library/LaunchAgents/dev.vibetracker.daemon.plist` | `KeepAlive`, 30 sn |
+| Linux | `~/.config/systemd/user/vibetracker.service` | `Restart=on-failure`, 30 sn |
+| systemd yok | `~/.config/autostart/vibetracker.desktop` | geri getirmez, ve bunu söyler |
+
+Üçünün ortak kuralı **yönetici hakkı istememek**. Root isteyen bir kullanıcı-başına
+gözlemci ne olduğunu yanlış anlamıştır; LaunchDaemon yerine LaunchAgent, sistem birimi
+yerine `--user` birimi olmasının sebebi bu. Ve bu, Linux'un diğer ikisinin veremediği bir
+söz verebilmesinin de sebebi.
+
+**`KeepAlive` düz `true` değil.** Öyle olsaydı daemon *her* çıkıştan sonra yeniden
+başlardı — `vt daemon stop`'un temiz çıkışı dâhil. O zaman durdurmak, agent'ı da
+kaldırmadan imkânsız olurdu. `SuccessfulExit: false` "yalnızca hata ile çıkarsa" demek,
+ki watchdog'un `exit(1)`'i tam olarak odur ve bilinçli bir durdurma değildir.
+
+**systemd birimi sözü çekirdeğe yaptırıyor.**
+
+```ini
+ProtectHome=read-only
+ReadWritePaths=/home/ali/.local/share/vibetracker /home/ali/.config/vibetracker
+```
+
+"Hiçbir projene dosya yazmaz, ajan durum dizinine yazmaz" cümlesinin README'de bir iddia
+olmaktan çıkıp **çekirdeğin reddettiği bir şeye** dönüştüğü tek platform burası. Daemon
+`$HOME`'un tamamını okuyabiliyor ve tam olarak iki dizine yazabiliyor, ikisi de kendisinin.
+Bir hata bunu ihlal edemez; kontrolü koddan sessizce kaldıran bir çatal da edemez. Yollar
+kurulum anında daemon'ın kullandığı fonksiyonlardan hesaplanıyor, yani alışılmadık bir
+`XDG_DATA_HOME` onu kendi veritabanını yazamaz hâlde bırakamıyor.
+
+**`MemoryDenyWriteExecute` bilerek yok.** Bir systemd birimini sertleştirirken insanların
+ilk eklediği satır, ve V8'in JIT'ini sessizce bozuyor: daemon başlar, tuhaf davranır,
+hiçbir şey sebebini söylemez. Bir testle sabitlendi, çünkü bu dosyayı sertleştirmeye
+gelecek bir sonraki kişi ona uzanacak.
+
+**"Linger" yapılmıyor, raporlanıyor.** Onsuz `--user` birimi son oturum kapanınca duruyor.
+Açmak genelde polkit doğrulaması istiyor, ve kullanıcının ayrıcalıklı olmasını istemediği
+bir kurulum sırasında kimlik doğrulama penceresi açan araç, kaldırılan araçtır. Kurulum
+durumu söylüyor ve komutu yazıyor.
 
 ---
 
@@ -1091,6 +1136,70 @@ söylemeye başlama biçimidir.
 
 ---
 
+## Masaüstü uygulaması
+
+Tepsi simgesi, yerel bildirim ve bir daemon süpervizörü — bir tarayıcı sekmesinin
+veremediği üç şey. Gösterdiği her sayıyı motor hesaplıyor ve açtığı pencere daemon'ın
+kendi panosu; not penceresinin kuralı burada da geçerli: **motor karar verir, yüzey
+çizer.** Bir URL'nin etrafına sarılmış kabuk olsaydı var olmasının sebebi olmazdı.
+
+Kabuk Tauri 2, ve derlenmiş hâli **4,4 MB**. Windows kurulumu 23,5 MB.
+
+### Node pakete giriyor — ama tek dosya olarak derlenmiş hâlde değil
+
+Masaüstü sürümünün varlık sebebi, Node'u olmayan ve olmak zorunda kalmaması gereken
+kişi. Yani çalışma zamanı paketle gelmek zorunda. Bunun standart yolu `node:sea` ile
+tek dosyalık bir yürütülebilir üretmek, ve o yol bakıldıktan sonra bırakıldı.
+
+SEA tek bir CommonJS dosyası istiyor, yani bir bundler. Bu depoda derleme adımı yok ve
+bundler yok; masaüstü çıktısını üretmek için bir tane eklemek, **kullanıcının çalıştırdığı
+şeyin testlerin hiç görmediği bir araç zinciri tarafından birleştirilmesi** demekti — yani
+ürünün test edilenden farklı davranmasının ikinci bir yolu. Node zaten TypeScript'i
+doğrudan çalıştırdığı için kaynakları taşımak hem daha basit hem test edilene daha yakın.
+
+Boyut zaten değişmiyordu: `node.exe` 85,6 MB, kaynaklar 960 KB. Baskın olan çalışma
+zamanı. NSIS onu 23,5 MB'a sıkıştırıyor.
+
+Apache-2.0 altında kaynakların uygulamanın içinde okunabilir hâlde durması bir sızıntı
+değil, bir özellik: paketin ne yaptığını merak eden `resources/runtime/` altına bakabilir.
+
+**Tek bir dönüşüm var, ve sebebi şu:** Node, `node_modules` altındaki hiçbir dosyada tip
+silmiyor — `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, ve bu bilinçli bir politika,
+hata değil. Yani paketler `@vibetracker/core`'un çözümleneceği yere konamıyor ve o ad
+göreli bir yola çevrilmek zorunda. Test edilenle sevk edilen arasındaki fark bu kadar, ve
+sınırları belli: 99 paketler-arası içe aktarımın hepsi alt yol içermeyen düz
+`@vibetracker/<ad>`, ve ağaçtaki her dinamik `import()` ya `node:` ya göreli. Aşama
+betiği bunu doğruluyor — çözümlenmemiş tek bir ad kalırsa derleme duruyor, çünkü o hata
+ancak kullanıcının makinesinde, uygulamayı açtığı anda görünürdü.
+
+### Simge kodla çiziliyor
+
+`scripts/make-icon.mjs` bir PNG kodlayıcı (`node:zlib` ile kırk satır), bir ICO ve bir
+ICNS konteyneri. Bağımlılığı olmadığı iddiasındaki bir depoya görüntü kütüphanesi
+eklemekten ucuz, ve simgeyi **diff'lenebilir** yapıyor: işareti değiştirmek bir kod
+incelemesi, kimsenin içini göremediği bir ikili dosya değil.
+
+Çizdiği şey panonun kendisi: üç satır, biri bekliyor. Aracın cevapladığı soru "beni
+bekleyen bir şey var mı", ve cevabı diğerleri sönükken yanan bir satır.
+
+### İmzalanmamış, ve bu söyleniyor
+
+Paketler kod imzalı değil. Windows SmartScreen uyarısı gösterecek, macOS Gatekeeper
+doğrudan açtırmayacak. Sertifika gerektiriyor, sertifika bir kimlik ve ücretli bir program
+gerektiriyor — ikisi de bakımcının kararı. Yayın notlarında yazıyor; gizlenecek bir şey
+değil, eksik bir şey.
+
+### Üç platformda derlemek
+
+Tauri güvenilir biçimde çapraz derlemiyor: paket biçimi, simge konteyneri, webview
+bağlaması ve imzalama hikâyesi platform başına ayrı. `.github/workflows/release.yml`
+her birini kendi koşucusunda derliyor — Windows, macOS (Apple Silicon ve Intel), Linux.
+
+Bu bir kolaylık değil: **macOS ve Linux çıktılarının var olmasının ve sınanmasının tek
+yolu orası**, çünkü bu satırların yazıldığı makine Windows.
+
+---
+
 ## Sırada ne var
 
 `~/.claude/plans/` altındaki plan dokümanına göre: ~~M1 pasif daemon + canlı panel~~,
@@ -1125,10 +1234,25 @@ M3 ve M4'ten devreden ne varsa kapandı:
 - **Yerel pencere** (`vt mini`): çerçevesiz, üstte kalan, üç boyutlu bir okuma paneli.
   Sıfır bağımlılık — WinForms zaten kurulu.
 
-Açıkta kalan tek şey **lisans**. `npm publish` bilerek engelli: paketleme betiği LICENSE
-dosyası yoksa `prepublishOnly` içine, sebebini yazan bir hata koyar. `npm pack` ve yerel
-kurulum çalışıyor; tarball 80 dosya, 202 KB, sıfır bağımlılık — temiz bir dizine kurulup
-`vt demo` ile doğrulandı.
+**Lisans seçildi: Apache-2.0.** MIT'de olmayan iki maddesi burada değerli. 5. madde,
+gönderilen katkıyı ayrı bir sözleşme olmadan aynı lisansın altına alıyor. Ve açık patent
+bağışı, başkalarının dosya formatlarını okuyan bir araç için gerçek bir koruma.
+
+Katkı için **CLA değil DCO** — commit'e `-s` ile eklenen tek satırlık bir beyan.
+Bunun bir bedeli var ve `CONTRIBUTING.md`'de açıkça yazılı: telif hakları bakımcıda
+toplanmadığı için proje ileride yeniden lisanslanamaz ve ikili lisans yapılamaz. Bir
+gözlemci aracın katkı önündeki engeli, ileride ticarileştirme esnekliğinden daha pahalı
+görüldü.
+
+`NOTICE` pakete giriyor, çünkü Apache-2.0 §4(d) onu yeniden dağıtanlardan istiyor — ve
+hiç göndermediğimiz bir dosyayı taşıyamazlar. İçinde "resmî olmayan araç" beyanı ve
+ürünün *yapmadığı* şeylerin listesi var; bunlar özellik değil garanti, ve onları kaldıran
+bir çatalın bunu bilerek yapması gerekiyor.
+
+`npm publish` engeli kalktı. CI'daki adım da tersine döndü: artık "yayın engellendi mi"
+değil, "sevk edilen şey iddia ettiği lisansı gerçekten taşıyor mu" diye soruyor. Metadata'sı
+Apache-2.0 diyen ve tarball'ında LICENSE olmayan bir paket, lisansı hiç olmayandan
+kötüdür.
 
 M2'de kalan tek doğrulanmamış halka: hook'lar **kendi makinemde gerçek bir Claude Code
 oturumuyla** çalıştırılmadı. Yazdığımız ayarı ajanın kendisi kabul ediyor (`claude doctor`
