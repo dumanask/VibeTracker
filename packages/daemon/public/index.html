@@ -1086,7 +1086,7 @@ function projectCard(p) {
       ${p.workspaces.map(w => {
         const bits = [];
         if (w.branch) bits.push(w.branch);
-        if (w.commitCount != null) bits.push(t`${w.commitCount} commits`);
+        if (w.commitCount != null) bits.push(w.commitCount === 1 ? t`${w.commitCount} commit` : t`${w.commitCount} commits`);
         if (w.dirtyCount != null) bits.push(t`${w.dirtyCount} dirty`);
         if (w.isWorktree) bits.push('worktree');
         if (w.storageKind !== 'local') bits.push(w.storageKind);

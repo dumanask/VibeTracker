@@ -860,5 +860,13 @@
   "An agent CLI you are already signed in to — needs no key, eats your own account quota": "Zaten giriş yapmış olduğun ajan CLI'ı — anahtar istemez, kendi hesabından yer",
   "source": "kaynak",
   "port {0} · a VibeTracker daemon that did not accept our token": "port {0} · jetonumuzu kabul etmeyen bir VibeTracker daemon’ı",
-  "It is probably running under another profile or data directory; its own `vt doctor` can see it.": "Muhtemelen başka bir profil ya da veri dizini altında çalışıyor; onu kendi `vt doctor`’ı görebilir."
+  "It is probably running under another profile or data directory; its own `vt doctor` can see it.": "Muhtemelen başka bir profil ya da veri dizini altında çalışıyor; onu kendi `vt doctor`’ı görebilir.",
+  "{0} commit": "{0} commit",
+  "{0} record in sessions/": "sessions/ içinde {0} kayıt",
+  "{0} lock in ide/": "ide/ içinde {0} kilit",
+  "{0} live agent": "{0} canlı ajan",
+  "{0} project": "{0} proje",
+  "{0} session waiting on you": "{0} oturum seni bekliyor",
+  "{0} record": "{0} kayıt",
+  " · {0} commit after it was called done": " · bitti denildikten sonra {0} commit"
 }

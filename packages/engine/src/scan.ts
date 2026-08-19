@@ -228,7 +228,13 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   capabilities.claudeDir = { ok: true, detail: dir };
   capabilities.sessionRegistry = registry.error
     ? { ok: false, detail: registry.error }
-    : { ok: true, detail: t`${registry.entries.length} records` };
+    : {
+        ok: true,
+        detail:
+          registry.entries.length === 1
+            ? t`${registry.entries.length} record`
+            : t`${registry.entries.length} records`,
+      };
   capabilities.ideLocks = { ok: ideWindows.length > 0, detail: t`${ideWindows.length} lock files` };
   capabilities.transcriptIndex = {
     ok: transcripts.size > 0,

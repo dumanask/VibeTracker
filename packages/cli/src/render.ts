@@ -219,8 +219,8 @@ export function renderCompact(r: StatusReport): string {
   const head = [
     `${bold('VibeTracker')}`,
     c.needsYou > 0 ? yellow(t`${c.needsYou} waiting`) : dim(tr('nothing waiting')),
-    dim(t`${c.live} live agents`),
-    dim(t`${followed.length} projects`),
+    dim(c.live === 1 ? t`${c.live} live agent` : t`${c.live} live agents`),
+    dim(followed.length === 1 ? t`${followed.length} project` : t`${followed.length} projects`),
   ];
   if (c.untracked > 0) head.push(dim(t`${c.untracked} not tracked`));
   out.push('  ' + head.join(dim(' · ')));
@@ -287,7 +287,7 @@ export function renderText(r: StatusReport): string {
     t`  ${bold(String(c.registryEntries))} records → ${green(t`${c.live} live`)} ${dim('·')} ${dim(t`${c.dead} dead`)} ${dim('·')} ${reusedTxt}`,
   );
   out.push(
-    t`  ${bold(String(c.projects))} projects ${dim('·')} ${c.needsYou > 0 ? yellow(t`${c.needsYou} sessions waiting on you`) : dim(t`nothing waiting`)} ${dim('·')} ${c.ideWindows} IDE windows`,
+    t`  ${bold(String(c.projects))} projects ${dim('·')} ${c.needsYou > 0 ? yellow(c.needsYou === 1 ? t`${c.needsYou} session waiting on you` : t`${c.needsYou} sessions waiting on you`) : dim(t`nothing waiting`)} ${dim('·')} ${c.ideWindows} IDE windows`,
   );
   out.push(dim(`  ${r.claudeDir}`));
 
@@ -334,7 +334,7 @@ export function renderText(r: StatusReport): string {
     for (const w of p.workspaces) {
       const bits: string[] = [];
       if (w.branch) bits.push(w.branch);
-      if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commits`);
+      if (w.commitCount !== undefined) bits.push(w.commitCount === 1 ? t`${w.commitCount} commit` : t`${w.commitCount} commits`);
       if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} dirty`);
       if (w.isWorktree) bits.push('worktree');
       if (w.storageKind !== 'local') bits.push(w.storageKind);
@@ -517,7 +517,7 @@ export function renderHtml(r: StatusReport): string {
       .map((w) => {
         const bits: string[] = [];
         if (w.branch) bits.push(w.branch);
-        if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commits`);
+        if (w.commitCount !== undefined) bits.push(w.commitCount === 1 ? t`${w.commitCount} commit` : t`${w.commitCount} commits`);
         if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} dirty`);
         if (w.isWorktree) bits.push('worktree');
         if (w.storageKind !== 'local') bits.push(w.storageKind);

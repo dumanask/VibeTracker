@@ -158,7 +158,9 @@ function activity(p: ProjectView): string {
   const bits: string[] = [];
   if (a.waiting > 0) bits.push(t`${a.waiting} waiting`);
   if (a.running > 0) bits.push(t`${a.running} running`);
-  if (bits.length === 0) bits.push(a.live > 0 ? t`${a.live} live agents` : tr('off'));
+  if (bits.length === 0) bits.push(
+      a.live === 0 ? tr('off') : a.live === 1 ? t`${a.live} live agent` : t`${a.live} live agents`,
+    );
   return bits.join(' · ');
 }
 

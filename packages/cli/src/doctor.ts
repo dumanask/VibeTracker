@@ -206,7 +206,9 @@ async function checkAgentDir(): Promise<Check[]> {
     detail: virgin
       ? tr('no sessions yet — this directory is new')
       : sessions >= 0
-        ? t`${sessions} records in sessions/`
+        ? sessions === 1
+          ? t`${sessions} record in sessions/`
+          : t`${sessions} records in sessions/`
         : tr('sessions/ unreadable'),
     fix: virgin
       ? tr('Run `claude` once; the dashboard starts populated next time.')
@@ -220,7 +222,12 @@ async function checkAgentDir(): Promise<Check[]> {
     id: 'ide-locks',
     label: tr('IDE windows'),
     status: locks > 0 ? 'ok' : 'info',
-    detail: locks >= 0 ? t`${locks} locks in ide/` : tr('ide/ unreadable'),
+    detail:
+      locks < 0
+        ? tr('ide/ unreadable')
+        : locks === 1
+          ? t`${locks} lock in ide/`
+          : t`${locks} locks in ide/`,
     fix: locks === 0 ? tr('No IDE window open; window grouping is disabled.') : undefined,
   });
 

@@ -111,7 +111,7 @@ function render(
 
   for (const b of boards) {
     out.push('');
-    out.push(`  ${cyan(b.name)} ${dim(t`${b.scanned} commits`)}`);
+    out.push(`  ${cyan(b.name)} ${dim(b.scanned === 1 ? t`${b.scanned} commit` : t`${b.scanned} commits`)}`);
     if (b.spans.length === 0) {
       out.push(
         dim(
@@ -134,11 +134,15 @@ function render(
       const label = `${s.unit} ${s.ordinal}`.padEnd(10);
       const tail =
         s.afterDone > 0
-          ? yellow(t` · ${s.afterDone} commits after it was called done`)
+          ? yellow(
+              s.afterDone === 1
+                ? t` · ${s.afterDone} commit after it was called done`
+                : t` · ${s.afterDone} commits after it was called done`,
+            )
           : s.doneAt !== null
             ? green(t` · finished ${fmtAge(Date.now() - s.doneAt)} ago`)
             : dim(tr(' · open'));
-      out.push(`    ${label} ${dim(bar)} ${dim(t`${s.commits} commits`)}${tail}`);
+      out.push(`    ${label} ${dim(bar)} ${dim(s.commits === 1 ? t`${s.commits} commit` : t`${s.commits} commits`)}${tail}`);
     }
   }
 
