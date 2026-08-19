@@ -129,7 +129,19 @@ mkdirSync(STAGE, { recursive: true });
 // `process.execPath` is the interpreter running this script, which is the one
 // the project is tested against. Taking it rather than downloading a release
 // keeps the staged runtime and the tested runtime the same thing.
-const node = process.execPath;
+//
+// `VT_STAGE_NODE` overrides it, and exists for one situation: a build whose
+// target is not the machine doing the building. The macOS Intel package is
+// compiled on an Apple Silicon runner, so the Node running this script is the
+// wrong architecture to put inside it -- an .dmg that works everywhere except
+// on the machines it was built for. The release workflow fetches the official
+// tarball for the target, verifies it against the checksums published beside
+// it, and points this at the result.
+const node = process.env.VT_STAGE_NODE || process.execPath;
+if (!existsSync(node)) {
+  console.error(`VT_STAGE_NODE points at nothing: ${node}`);
+  process.exit(1);
+}
 const nodeName = basename(node);
 copyFileSync(node, join(STAGE, nodeName));
 const nodeMb = statSync(node).size / 1e6;

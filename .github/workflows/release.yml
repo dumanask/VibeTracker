@@ -41,12 +41,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with: { version: 9 }
-      # `architecture` is what makes the Intel build honest: it decides which
-      # Node ends up inside the bundle, because the staging script copies the
-      # interpreter that runs it.
       - uses: actions/setup-node@v4
-        with: { node-version: '22.20', architecture: '${{ matrix.node }}', cache: pnpm }
+        with: { node-version: '22.20', cache: pnpm }
       - run: pnpm install --frozen-lockfile
+
       - run: pnpm typecheck
       - run: pnpm test
       - name: pack
@@ -138,13 +136,38 @@ jobs:
       # The icons are generated, not committed as binaries — see
       # scripts/make-icon.mjs for why. So they have to exist before the bundler
       # looks for them.
+      # The runtime that goes *inside* a cross-compiled package.
+      #
+      # `desktop-stage.mjs` bundles the Node running it, which is the runner's
+      # -- right for three of the four jobs and wrong for this one. Asking
+      # `setup-node` for `architecture: x64` looked like the answer and is not:
+      # the log said `Acquiring 22.20.0 - arm64` and the build went on to stage
+      # an arm64 runtime for an Intel bundle. The check below caught it, one
+      # step before the upload.
+      #
+      # Verified against the checksums nodejs.org publishes beside the tarball,
+      # because this binary ships to users.
+      - name: the target's own Node
+        if: matrix.key == 'macos-x64'
+        run: |
+          set -euo pipefail
+          ver=v22.20.0
+          tar=node-$ver-darwin-x64.tar.gz
+          curl -fsSLO "https://nodejs.org/dist/$ver/$tar"
+          curl -fsSL "https://nodejs.org/dist/$ver/SHASUMS256.txt" -o SHASUMS256.txt
+          grep " $tar$" SHASUMS256.txt | shasum -a 256 -c -
+          tar xzf "$tar"
+          echo "VT_STAGE_NODE=$PWD/node-$ver-darwin-x64/bin/node" >> "$GITHUB_ENV"
+          file "$PWD/node-$ver-darwin-x64/bin/node"
+
       - name: icons
         run: node scripts/make-icon.mjs
 
-      # The runtime that gets bundled is whichever Node this job set up, so the
-      # artifact carries the same version the tests just ran against — and, on
-      # each platform, that platform's binary. This is the step that cannot be
-      # done anywhere but here.
+      # The runtime that gets bundled is whichever Node this job set up — or,
+      # where the target is not the runner, the one fetched above. Either way
+      # the artifact carries the version the tests ran against and the binary
+      # the target can execute. This is the step that cannot be done anywhere
+      # but here.
       - name: stage the runtime
         run: node scripts/desktop-stage.mjs
 
@@ -152,7 +175,7 @@ jobs:
         working-directory: packages/desktop
         run: pnpm exec tauri build ${{ matrix.args }}
 
-      - name: the staged runtime belongs to this platform
+      - name: a runtime was staged at all
         shell: bash
         run: |
           node -e "
@@ -162,25 +185,25 @@ jobs:
             const bin = names.find(n => n === 'node' || n === 'node.exe');
             if (!bin) { console.error('no runtime:', names); process.exit(1) }
             const mb = statSync(dir + '/' + bin).size / 1e6;
-            console.log(process.platform, process.arch, bin, mb.toFixed(1) + ' MB');
+            console.log(process.platform, bin, mb.toFixed(1) + ' MB');
             if (mb < 20) { console.error('the runtime is suspiciously small'); process.exit(1) }
-            if (process.arch !== '${{ matrix.node }}') {
-              console.error('staged a ' + process.arch + ' runtime for a ${{ matrix.node }} build');
-              process.exit(1);
-            }
           "
 
-      # The bundled Node has to match what the app was compiled for, and on the
-      # cross-compiled job the two come from different places. `file` is the
-      # cheapest thing that can tell them apart, and getting this wrong ships a
-      # .dmg that crashes on launch for precisely the users it exists for.
-      - name: the bundled runtime matches the build target
+      # ...and it is the right architecture. Asked of the staged binary rather
+      # than of `process.arch`, which reports the *runner's* Node -- the one
+      # thing that is guaranteed wrong on a cross-compiled job, and the reason
+      # the first version of this check failed to describe what it had found.
+      # Getting this wrong ships a .dmg that crashes on launch for precisely
+      # the users it exists for.
+      - name: the staged runtime matches the build target
         if: runner.os == 'macOS'
         run: |
-          file packages/desktop/src-tauri/runtime/node
+          set -euo pipefail
+          bin=packages/desktop/src-tauri/runtime/node
+          file "$bin"
           case "${{ matrix.node }}" in
-            x64)   file packages/desktop/src-tauri/runtime/node | grep -q 'x86_64' ;;
-            arm64) file packages/desktop/src-tauri/runtime/node | grep -q 'arm64' ;;
+            x64)   file "$bin" | grep -q 'x86_64' ;;
+            arm64) file "$bin" | grep -q 'arm64' ;;
           esac
 
       - uses: actions/upload-artifact@v4
