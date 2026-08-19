@@ -1,4 +1,4 @@
-export { deriveState, type DeriveInput, type DerivedState } from './derive.ts';
+export { deriveState, lastActivityOf, type DeriveInput, type DerivedState } from './derive.ts';
 export { fmtAge, fmtPercent, sinceMs, truncate, FUTURE_TOLERANCE_MS } from './format.ts';
 export {
   STALL_MS,
@@ -10,6 +10,7 @@ export {
   RECENT_WRITE_MS,
   LOCAL_TOOL_PERMISSION_MS,
   SPAWN_GRACE_MS,
+  WAITING_ATTENTION_MS,
   ALERT_REARM_MS,
   SETTLE_MS,
   CPU_TRUST_MULTIPLE,
@@ -57,6 +58,7 @@ export {
 
 // ── the one-line-per-project summary ────────────────────────────────────
 export {
+  awaitsAttention,
   summarizeAgents,
   summarizeBoard,
   compactRank,

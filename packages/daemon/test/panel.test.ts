@@ -17,6 +17,8 @@ import { readFileSync } from 'node:fs';
 import { loadPanel, PANEL } from './panel-harness.ts';
 import type { ProjectView, SessionView } from '@vibetracker/shared';
 
+const NOW = 1_800_000_000_000;
+
 function session(over: Partial<SessionView>): SessionView {
   return {
     sessionId: 'aaaaaaaa-bbbb',
@@ -41,7 +43,7 @@ function project(name: string, sessions: SessionView[]): ProjectView {
     summary: { kind: 'none', waiting: 0, running: 0, live: 0, total: 0, urgency: 0 },
   };
   // Exactly what the engine does before the report leaves it.
-  p.summary = summarizeAgents(p);
+  p.summary = summarizeAgents(p, NOW);
   return p;
 }
 
@@ -80,7 +82,7 @@ test('the panel renders the summary the engine computed', () => {
 
   for (const p of cases) {
     const mine = summarize(p);
-    const theirs = summarizeAgents(p);
+    const theirs = summarizeAgents(p, NOW);
     assert.equal(mine.kind, theirs.kind, `${p.displayName}: kind`);
     assert.equal(mine.waiting, theirs.waiting, `${p.displayName}: waiting`);
     assert.equal(mine.running, theirs.running, `${p.displayName}: running`);

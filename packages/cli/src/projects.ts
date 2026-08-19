@@ -153,7 +153,7 @@ function line(p: TrackableProject, tracked: boolean, extra: string): string {
  * to add the project to, about the project you were looking at.
  */
 function activity(p: ProjectView): string {
-  const a = p.summary ?? summarizeAgents(p);
+  const a = p.summary ?? summarizeAgents(p, Date.now());
   if (a.total === 0) return tr('no sessions');
   const bits: string[] = [];
   if (a.waiting > 0) bits.push(t`${a.waiting} waiting`);

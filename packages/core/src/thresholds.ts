@@ -125,6 +125,25 @@ export const LOCAL_TOOL_PERMISSION_MS = 30_000;
 export const SPAWN_GRACE_MS = 15_000;
 
 /**
+ * How long a finished turn keeps counting as something that is waiting for you.
+ *
+ * The state does not expire -- the agent really is waiting, and the board goes
+ * on saying so with the honest age beside it. What expires is the *claim on
+ * your attention*: a turn that ended two and a half days ago is a session you
+ * parked, not one you owe an answer to, and counting it in "3 waiting" makes
+ * the number mean nothing on a machine that has run agents for a week.
+ *
+ * Measured on the board that prompted this: of six sessions counted as waiting,
+ * one had ended four minutes earlier and one two days and nine hours earlier,
+ * and the count gave them equal weight.
+ *
+ * Eight hours, because the number has to survive a lunch, a meeting and an
+ * evening away from the desk -- coming back to a board that has forgotten what
+ * you left running is the same failure in the other direction.
+ */
+export const WAITING_ATTENTION_MS = 8 * 60 * 60_000;
+
+/**
  * How long a session has to have been out of an alerting state before entering
  * it again is treated as news rather than as noise.
  *

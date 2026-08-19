@@ -7,6 +7,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { dataDir } from '@vibetracker/platform';
 import {
+  awaitsAttention,
   DB_HARD_CAP_BYTES,
   RETAIN_AGGRESSIVE_MS,
   RETAIN_SESSIONS_MS,
@@ -499,7 +500,7 @@ export class Store {
             s.liveness,
             sinceTs,
             JSON.stringify(s.evidence),
-            needsYouFlag(s),
+            needsYouFlag(s, now),
             urgencyFlag(s),
             s.openTools[0] ?? null,
             now,
@@ -858,13 +859,12 @@ export interface StateChange {
   dwellMs: number | null;
 }
 
-function needsYouFlag(s: SessionView): number {
-  return s.state === 'WAITING_PERMISSION' ||
-    s.state === 'WAITING_INPUT' ||
-    s.state === 'STALLED' ||
-    s.state === 'ERRORED'
-    ? 1
-    : 0;
+// The same rule the board counts by, asked of the same function. This column
+// used to spell the state list out again, which meant the stored flag and the
+// number on screen were two implementations of one idea and only one of them
+// learned that a two-day-old finished turn is not waiting for anybody.
+function needsYouFlag(s: SessionView, now: number): number {
+  return awaitsAttention(s, now) ? 1 : 0;
 }
 
 function urgencyFlag(s: SessionView): number {

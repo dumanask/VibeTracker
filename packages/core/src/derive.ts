@@ -12,11 +12,35 @@ import {
   CPU_TRUST_MULTIPLE,
   LOCAL_TOOL_PERMISSION_MS,
   RECENT_WRITE_MS,
-  SPAWN_GRACE_MS,
   stallDeadline,
 } from './thresholds.ts';
 import { fmtAge, sinceMs } from './format.ts';
 import { t, tr } from './i18n.ts';
+
+/**
+ * When this session last actually said something.
+ *
+ * The conversation's clock, not the file's. Claude Code appends bookkeeping
+ * records -- `ai-title`, `mode`, `last-prompt`, `atis-latch` -- long after the
+ * last turn, and none of them carries a timestamp of its own, so the file's
+ * mtime moves while the conversation does not. Taking the newer of the two let
+ * a touched file speak for a finished conversation: measured, session 62e054a9
+ * last spoke on 17 August at 11:58 and had an `atis-latch` appended two and a
+ * half days later, whereupon the board read it as `silent for 5m 7s`, brought
+ * it back from ORPHANED to BUSY, and twenty-four seconds later announced it as
+ * an agent waiting for you. Nothing had happened in that project at all.
+ *
+ * mtime is the fallback for a transcript no turn could be parsed out of -- an
+ * adapter that reports no entries, a window that held none -- never a floor
+ * under one that could.
+ *
+ * One function because there were three copies of the expression, in the
+ * derivation and twice in the scan, and the wire field kept the file's clock
+ * for a while after the derivation had stopped believing it.
+ */
+export function lastActivityOf(facts: TranscriptFacts): number {
+  return facts.lastEntryAt ?? facts.mtimeMs;
+}
 
 export interface DeriveInput {
   liveness: Liveness;
@@ -55,19 +79,29 @@ export interface DerivedState {
  *    Once the assistant has finished a message and nothing followed, the ball
  *    is with the human however much CPU the process burns on its timers.
  *
- * 2. For a tool whose work happens in a child process, the agent's own CPU is
- *    0% whether the command is running or it is blocked on approval. Only the
- *    process tree separates those two, and only by age: a child spawned after
- *    the call began is the work, an older one is infrastructure (MCP servers
- *    live for the whole session, so "has children" alone means nothing).
+ * 2. The process tree can confirm that work is in flight and can never deny
+ *    it. A child spawned after the call began is that call's work, and saying
+ *    so is worth doing. The mirror image -- no such child, therefore nothing
+ *    is running, therefore something is blocked -- assumes the work is a
+ *    descendant of the pid the session registered, and on an IDE-hosted
+ *    session it simply is not: measured here, a live working session's
+ *    registered pid had zero descendants while its shell ran elsewhere. So
+ *    the tree is read for what it shows and never for what it fails to show.
  *
- * 3. ...but the converse of that is absolute, and cheap. A process blocked on
- *    a prompt burns nothing. So cpu can never *prove* a permission gate and can
- *    always *refute* one, and it is consulted before every branch that would
- *    claim one. Measured: a session running a test suite at 20% cpu was called
- *    WAITING_PERMISSION three times in ten minutes, because the tree said no
- *    child had started since the call -- true, and irrelevant, because the work
- *    was not a descendant of the pid we were watching.
+ * 3. WAITING_PERMISSION may be claimed only where the tool's own duration is
+ *    the evidence -- a call that finishes in milliseconds and has not, after
+ *    half a minute -- and never from the absence of a process. It is the one
+ *    state that interrupts a person, so it is the one that has to be sure, and
+ *    an absence proves nothing about a tree we may not even be looking at.
+ *    Measured before this rule: seventeen false permission alarms in ninety
+ *    minutes, all of them `Bash`, from a session doing nothing but running
+ *    approved commands. A real gate on a shell command is reported by the hook
+ *    that is told about it, which is exact.
+ *
+ *    CPU still refutes: a process blocked on a prompt burns nothing, so a
+ *    reading above the line is consulted before any branch that would claim a
+ *    gate. Measured: a session running a test suite at 20% cpu was called
+ *    WAITING_PERMISSION three times in ten minutes.
  *
  * 4. And cpu expires. Past a wide multiple of a branch's own deadline the
  *    transcript is the only witness left, because anything still running would
@@ -94,7 +128,7 @@ export function deriveState(input: DeriveInput): DerivedState {
     return { state: SessionState.Starting, confidence: 0.6, evidence };
   }
 
-  const lastActivity = Math.max(facts.lastEntryAt ?? 0, facts.mtimeMs);
+  const lastActivity = lastActivityOf(facts);
   const ageMs = sinceMs(now, lastActivity);
   // Which line to measure against depends on which side we were on: it takes
   // CPU_BUSY_PCT to be called busy, and a fall below CPU_IDLE_PCT to stop
@@ -173,18 +207,32 @@ export function deriveState(input: DeriveInput): DerivedState {
           };
         }
         return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.9, evidence };
-      } else if (ageMs > SPAWN_GRACE_MS && !working(deadline)) {
+      } else {
+        // No new descendant is not evidence of a permission prompt.
+        //
+        // The inference here used to be: a shell tool that spawns nothing is a
+        // shell tool whose command never started, and a command that never
+        // started is one waiting to be allowed. It assumed the work runs as a
+        // child of the pid the session registered. Measured on this machine:
+        // the registered pid of a live, working session has *zero*
+        // descendants -- an IDE-hosted session runs its shell somewhere else
+        // entirely -- so every Bash call it made looked like a permission
+        // gate. Seventeen of them in ninety minutes, in one session, none of
+        // them real. And WAITING_PERMISSION is the one state that interrupts
+        // someone, so this was the most expensive place in the product to be
+        // wrong.
+        //
+        // A tree that shows nothing now says nothing. The command is treated
+        // as running until its own deadline says otherwise, which is the same
+        // answer the tail would give without a probe at all. Real permission
+        // gates are reported by the hook that knows -- `perm.request` -- which
+        // is exact, and the capability matrix already tells a user without
+        // hooks installed that this is what they are missing.
         evidence.push(
           descendants.total > 0
-            ? t`perm:no new descendants (${descendants.total} older ones, probably MCP)`
-            : tr('perm:no descendants at all, the command never started'),
+            ? t`proc:${descendants.total} descendants, none started since the call`
+            : tr('proc:no descendants — the work is not under this pid'),
         );
-        return {
-          state: SessionState.WaitingPermission,
-          subReason: `tool:${openTool}`,
-          confidence: 0.65,
-          evidence,
-        };
       }
     }
 

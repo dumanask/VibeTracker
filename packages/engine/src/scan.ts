@@ -18,10 +18,12 @@ import {
 import {
   assessDrift,
   attentionScore,
+  awaitsAttention,
   fmtAge,
   deriveState,
   displayNameFor,
   labelWorkspaces,
+  lastActivityOf,
   projectFlags,
   RECENT_WRITE_MS,
   sinceMs,
@@ -410,7 +412,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
     scanned.some(({ liveness, facts }) => {
       if (liveness !== 'live' || !facts) return false;
       if (facts.openTools.length > 0) return true;
-      const age = sinceMs(now, Math.max(facts.lastEntryAt ?? 0, facts.mtimeMs));
+      const age = sinceMs(now, lastActivityOf(facts));
       return age >= RECENT_WRITE_MS && facts.lastEntryRole !== 'assistant';
     });
 
@@ -509,7 +511,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
         ideName: ide?.ideName,
         title: facts?.aiTitle,
         lastPrompt: facts?.lastPrompt,
-        lastActivityAt: facts ? Math.max(facts.lastEntryAt ?? 0, facts.mtimeMs) : undefined,
+        lastActivityAt: facts ? lastActivityOf(facts) : undefined,
         openTools: facts?.openTools ?? [],
         transcriptPath,
         transcriptSize: facts?.size,
@@ -590,7 +592,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
           startedAt: s.startedAt,
           title: s.facts.aiTitle,
           lastPrompt: s.facts.lastPrompt,
-          lastActivityAt: Math.max(s.facts.lastEntryAt ?? 0, s.facts.mtimeMs),
+          lastActivityAt: lastActivityOf(s.facts),
           openTools: s.facts.openTools,
         },
       });
@@ -883,7 +885,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
 
   // One computation, three renderers. The terminal, the dashboard and the
   // pinned note all draw this; none of them re-derives it.
-  for (const proj of projects.values()) proj.summary = summarizeAgents(proj);
+  for (const proj of projects.values()) proj.summary = summarizeAgents(proj, now);
 
   const ordered = [...projects.values()].sort((a, b) => attentionScore(b) - attentionScore(a));
   // Counts describe what the user is following. An agent waiting inside a
@@ -892,7 +894,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   // alarm — and the alarm is the part that interrupts them.
   const followed = ordered.filter((p) => p.tracked);
   const needsYouCount = followed.reduce(
-    (n, p) => n + p.sessions.filter((s) => needsYou(s.state)).length,
+    (n, p) => n + p.sessions.filter((s) => awaitsAttention(s, now)).length,
     0,
   );
   // The subset that is allowed to interrupt someone. Counted here beside the

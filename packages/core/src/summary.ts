@@ -21,8 +21,40 @@ import {
   type SessionStateName,
 } from '@vibetracker/shared';
 import { urgencyOf } from './project.ts';
+import { WAITING_ATTENTION_MS } from './thresholds.ts';
 
 export type { AgentSummary, AgentSummaryKind, BoardLoad };
+
+/**
+ * Whether this session's wait is still *yours*.
+ *
+ * `needsYou` asks a question about a state; this asks it about a session, and
+ * the difference is time. Every turn of every agent ends in WAITING_INPUT and
+ * stays there until someone comes back, so on a machine that has been running
+ * agents all week the state alone counts sessions from Tuesday alongside the
+ * one that finished a minute ago. Measured on the board that prompted this:
+ * six sessions counted as waiting, the oldest for two days and nine hours, all
+ * of them weighed the same.
+ *
+ * What a block never does is decay -- an agent stopped at a permission prompt
+ * is stopped until you answer it, whether that is one minute or one day -- so
+ * `interrupts` is exempt, and it is also the only set that is allowed to make
+ * a sound.
+ *
+ * The state itself is untouched: the board still shows WAITING_INPUT with the
+ * honest age beside it. What expires is the claim on your attention.
+ */
+export function awaitsAttention(
+  s: { state: SessionStateName; lastActivityAt?: number },
+  now: number,
+): boolean {
+  if (!needsYou(s.state)) return false;
+  if (interrupts(s.state)) return true;
+  // A session whose age we do not know is counted rather than dropped: an
+  // unknown age is the one case where staying silent would hide a real wait.
+  if (s.lastActivityAt === undefined) return true;
+  return now - s.lastActivityAt <= WAITING_ATTENTION_MS;
+}
 
 const DEAD: ReadonlySet<SessionStateName> = new Set<SessionStateName>([
   'ORPHANED',
@@ -30,8 +62,8 @@ const DEAD: ReadonlySet<SessionStateName> = new Set<SessionStateName>([
   'UNKNOWN',
 ]);
 
-export function summarizeAgents(p: Pick<ProjectView, 'sessions'>): AgentSummary {
-  const waiting = p.sessions.filter((s) => needsYou(s.state));
+export function summarizeAgents(p: Pick<ProjectView, 'sessions'>, now: number): AgentSummary {
+  const waiting = p.sessions.filter((s) => awaitsAttention(s, now));
   const blocked = waiting.filter((s) => interrupts(s.state));
   const running = p.sessions.filter((s) => s.state === 'BUSY');
   const live = p.sessions.filter((s) => !DEAD.has(s.state));
@@ -70,8 +102,8 @@ export function summarizeAgents(p: Pick<ProjectView, 'sessions'>): AgentSummary 
  * the user is above anything that does not, because a list you scan in one
  * second cannot afford a subtle ordering nobody can predict.
  */
-export function compactRank(p: ProjectView): number {
-  const s = p.summary ?? summarizeAgents(p);
+export function compactRank(p: ProjectView, now = Date.now()): number {
+  const s = p.summary ?? summarizeAgents(p, now);
   if (s.kind === 'waiting') return 1000 + s.urgency * 10 + Math.min(s.waiting, 9);
   if (s.kind === 'running') return 500 + Math.min(s.running, 9);
   if (s.kind === 'idle') return 100;

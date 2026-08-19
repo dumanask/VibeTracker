@@ -27,7 +27,7 @@
 import { open, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { dialectFor, knownEntryTypes, redactSnippet } from '@vibetracker/core';
+import { dialectFor, knownEntryTypes, lastActivityOf, redactSnippet } from '@vibetracker/core';
 import type { TranscriptFacts } from '@vibetracker/shared';
 import type { TailReader, LineApplier } from '../tail.ts';
 import {
@@ -388,7 +388,10 @@ export function createCodexAdapter(tail: () => TailReader): AgentAdapter {
           const facts: TranscriptFacts =
             (await tail().read(r.path, { apply: applyCodexLines, headBytes: 0 })) ??
             emptyFacts(r.path, r.mtimeMs, r.size);
-          const last = Math.max(facts.lastEntryAt ?? 0, facts.mtimeMs);
+          // The conversation's clock, same rule as everywhere else: a rollout
+          // file that was touched without a new event in it is not a session
+          // that just did something. See `lastActivityOf`.
+          const last = lastActivityOf(facts);
           return {
             agentKind: 'codex',
             sessionId: meta.sessionId ?? r.path,
