@@ -61,6 +61,14 @@ struct Overview {
 /// have to agree: a desktop app that looked in the wrong place would sit there
 /// showing nothing while a perfectly healthy daemon ran beside it.
 fn data_dir() -> Option<PathBuf> {
+    // The same override the TypeScript honours. If these two ever disagreed,
+    // the shell would sit there showing nothing beside a perfectly healthy
+    // daemon -- which is the failure this whole function exists to avoid.
+    if let Some(over) = std::env::var_os("VT_DATA_DIR") {
+        if !over.is_empty() {
+            return Some(PathBuf::from(over));
+        }
+    }
     #[cfg(target_os = "windows")]
     {
         std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("VibeTracker"))
@@ -81,6 +89,34 @@ fn data_dir() -> Option<PathBuf> {
         }
         std::env::var_os("HOME")
             .map(|h| PathBuf::from(h).join(".local").join("share").join("vibetracker"))
+    }
+}
+
+/// A log file, because a tray app has nowhere else to say anything.
+///
+/// There is no console (`windows_subsystem = "windows"`), no terminal to run it
+/// from and no window to print into: everything this process learns about a
+/// failure is otherwise learned by nobody. One line per event, appended, and
+/// the file is truncated when it passes a megabyte so it cannot grow into a
+/// problem of its own. Paths and counts only -- the same rule the daemon's log
+/// obeys, and pure ASCII, because `Get-Content` on Windows PowerShell decodes a
+/// file as the system codepage and would turn a Turkish sentence into mojibake
+/// in the one place somebody reads when something has already gone wrong.
+fn log(msg: &str) {
+    let Some(dir) = data_dir() else { return };
+    let path = dir.join("desktop.log");
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > 1_000_000 {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = writeln!(f, "{ms} {msg}");
     }
 }
 
@@ -282,7 +318,17 @@ fn open_panel(app: &AppHandle) {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
-        return;
+        // The same check the close path makes, for the same reason and in the
+        // same direction: `show` reporting success is not the window being on
+        // screen. A handle that is still registered but no longer backed by a
+        // live window answers every call with `Ok` and does nothing, and the
+        // symptom is a tray icon you can click all day for no result. Dropping
+        // it and falling through rebuilds from scratch, which always works.
+        if w.is_visible().unwrap_or(false) {
+            return;
+        }
+        log("panel gosterilemedi, yeniden kuruluyor");
+        let _ = w.destroy();
     }
     if OPENING.swap(true, Ordering::SeqCst) {
         return;
@@ -329,6 +375,18 @@ fn main() {
             let note = MenuItem::with_id(app, "note", "Post-it", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Çık", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &note, &quit])?;
+
+            // A way in that is not the mouse.
+            //
+            // Every surface this process owns is reached by clicking a tray
+            // icon, which means none of it can be exercised without a physical
+            // cursor -- not by a test, not by a bug report, and not by someone
+            // whose tray icon is hidden in the Windows 11 overflow. One
+            // environment variable is the cheapest door that does not change
+            // what the app does when nobody sets it.
+            if std::env::var("VT_DESKTOP_PANEL").is_ok() {
+                open_panel(&handle);
+            }
 
             let (tx, rx) = mpsc::channel::<u32>();
 
@@ -437,16 +495,55 @@ fn main() {
         .on_window_event(|window, event| {
             // Closing the window closes the window. The tray is the app, and an
             // observer that quits when you tidy your desktop is an observer that
-            // is not observing.
+            // is not observing. So the X hides it and the tray brings it back,
+            // and the window keeps its size and place across the round trip.
+            //
+            // **Then it is checked, because it was measured failing.** On a
+            // shell that had been up for an hour and a half, pressing the X did
+            // nothing at all: the close was prevented and the hide silently was
+            // not applied, twice in a row, with the process perfectly
+            // responsive. `hide` returns `Ok` in that case -- it reports that
+            // the message was delivered, not that the window moved -- so
+            // trusting the return value is what let the window sit there
+            // unclosable.
+            //
+            // Which is why the fallback is `destroy` rather than another `hide`.
+            // A person who pressed the X is owed a window that goes away, and if
+            // the cheap way of doing that will not take, the expensive way must:
+            // `open_panel` rebuilds a missing window from nothing, so the whole
+            // cost of being wrong here is one WebView2 startup the next time
+            // they open it. A window that ignores its own close button costs
+            // more than that.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                if window.is_visible().unwrap_or(false) {
+                    log(&format!("gizlenemedi, kapatiliyor: {}", window.label()));
+                    let _ = window.destroy();
+                }
             }
         })
         .build(tauri::generate_context!())
         .expect("tauri kurulamadı")
         .run(move |_app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                // Losing the last window is not a request to quit.
+                //
+                // Tauri asks to exit when no windows are left, which for an
+                // ordinary app is right and for a tray app is the opposite of
+                // right: the tray *is* the app, and the panel is a thing it
+                // opens. Measured here -- with the close path's `destroy`
+                // fallback forced, closing the panel took the whole shell down
+                // and the daemon with it, so a window that would not hide
+                // turned into a tracker that stopped tracking.
+                //
+                // `code` is what separates the two. `None` means the runtime
+                // noticed there was nothing left on screen; `Some` means
+                // somebody chose Quit, and that one is honoured.
+                if code.is_none() {
+                    api.prevent_exit();
+                    return;
+                }
                 // The daemon we started is ours to stop. One we merely found
                 // running belongs to whoever started it and is left alone.
                 if let Some(mut c) = child_for_exit.lock().unwrap().take() {

@@ -21,8 +21,20 @@ export function claudeDir(): string {
   return join(HOME, '.claude');
 }
 
-/** VibeTracker's own data (db, logs). Never inside the agent's directory. */
+/**
+ * VibeTracker's own data (db, logs). Never inside the agent's directory.
+ *
+ * `VT_DATA_DIR` overrides all three. Two reasons, and neither is a preference
+ * knob: macOS is the one platform whose default is not derived from the
+ * environment at all, so without this there is no way for a macOS user to put
+ * the database anywhere else; and a test that exercises anything touching this
+ * directory otherwise has to write into the user's real one. The desktop shell
+ * reads the same variable, because a data directory the two halves disagree
+ * about is worse than one that cannot move.
+ */
 export function dataDir(): string {
+  const override = process.env.VT_DATA_DIR?.trim();
+  if (override) return override;
   if (PLAT === 'win32') {
     return join(process.env.LOCALAPPDATA ?? join(HOME, 'AppData', 'Local'), 'VibeTracker');
   }

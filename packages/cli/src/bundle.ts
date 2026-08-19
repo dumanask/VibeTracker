@@ -61,6 +61,8 @@ interface Bundle {
   paths: Array<{ alias: string; depth: number; nonAscii: boolean; kind: string }>;
   data: Array<{ what: string; bytes: number | null }>;
   log: { path: string | null; lines: string[] };
+  /** The tray shell's log. Absent on a machine that never ran the desktop app. */
+  desktopLog: { path: string | null; lines: string[] };
 }
 
 /**
@@ -167,8 +169,14 @@ export function buildBundle(checks: Check[], projectPaths: string[]): Bundle {
       { what: 'db', bytes: sizeOf(join(d, 'vibetracker.db')) },
       { what: 'db-wal', bytes: sizeOf(join(d, 'vibetracker.db-wal')) },
       { what: 'log', bytes: sizeOf(join(d, 'daemon.log')) },
+      { what: 'desktop-log', bytes: sizeOf(join(d, 'desktop.log')) },
     ],
     log: tailLines(logFilePath(), LOG_LINES),
+    // The tray shell's own log. It has no console, no terminal and no window
+    // to print into, so this file is the only place it can say that something
+    // went wrong — and a bug report about the desktop app that does not carry
+    // it is a bug report with the evidence left behind.
+    desktopLog: tailLines(join(d, 'desktop.log'), LOG_LINES),
   };
 }
 
