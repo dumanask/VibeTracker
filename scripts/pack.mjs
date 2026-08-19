@@ -308,4 +308,4 @@ console.log(
 );
 if (!existsSync(join(ROOT, 'LICENSE'))) console.log(`  ⚠ ${LICENSE_NOTE.split('\n')[0]}\n`);
 console.log(`Tarball:  cd ${relative(ROOT, STAGE) || '.'} && npm pack`);
-console.log(`Deneme:   npm i -g ./${relative(ROOT, STAGE).split(sep).join('/')}\n`);
+console.log(`Try it:   npm i -g ./${relative(ROOT, STAGE).split(sep).join('/')}\n`);
