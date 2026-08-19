@@ -6,6 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -353,4 +354,59 @@ test('a model estimate is drawn as one, and only when nothing was counted', () =
   // And the label says it is an estimate rather than a measurement.
   assert.match(source, /r\.Approximate \|\| r\.Guess \? "~"/);
   assert.match(source, /r\.Guess \? Amber : Ink/);
+});
+
+/**
+ * A remembered position that is no longer a place.
+ *
+ * This is the failure it is for, observed rather than imagined: the note was
+ * last put at x=2050 on a second display, the display went away, and the
+ * window was recreated at (2050,514)-(2520,734) on a machine whose only screen
+ * is 1920 wide. The process was alive, `IsWindowVisible` said true, the tray
+ * menu had done its job -- and there was nothing on screen. From the outside
+ * it looks exactly like a menu item that does nothing.
+ *
+ * The old test was `x -ge 0`, which is wrong twice: it accepts a position on a
+ * monitor that is gone, and it rejects a monitor arranged to the left of the
+ * primary one, whose coordinates are legitimately negative.
+ *
+ * Run rather than pattern-matched. The predicate is four lines and a text
+ * assertion would have passed on the broken version too -- what needed proving
+ * is that it answers correctly for a real screen layout.
+ */
+test('a position on a monitor that is gone is not restored', { skip: process.platform !== 'win32' ? 'PowerShell yok' : false }, () => {
+  const fn = /function Test-OnScreen[\s\S]*?\n\}/.exec(source);
+  assert.ok(fn, 'Test-OnScreen kayboldu');
+
+  const probe = [
+    fn[0],
+    'Add-Type -AssemblyName System.Windows.Forms',
+    '$wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea',
+    // Far to the right of every screen: the exact shape of the real failure.
+    '$far = Test-OnScreen ($wa.Right + 200) 514 470 220',
+    // The primary screen's own corner, which must always be acceptable.
+    '$home_ = Test-OnScreen ($wa.Left + 40) ($wa.Top + 40) 470 220',
+    // Mostly off the right edge, with a sliver showing: not enough to grab.
+    '$sliver = Test-OnScreen ($wa.Right - 20) ($wa.Top + 40) 470 220',
+    'Write-Output ("$far $home_ $sliver")',
+  ].join('\n');
+
+  const out = execFileSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', probe],
+    { encoding: 'utf8', timeout: 30_000 },
+  ).trim();
+
+  assert.equal(out, 'False True False', `Test-OnScreen yanlış cevap verdi: ${out}`);
+});
+
+test('the note comes home when a display disappears under it', () => {
+  // The same rule at the other moment. Undocking a laptop strands the window
+  // just as surely as restarting after the monitor was unplugged, and a note
+  // that can only be rescued by deleting a JSON file is not rescued.
+  assert.match(source, /SystemEvents\]::add_DisplaySettingsChanged/);
+  assert.match(source, /Get-HomeCorner/);
+  // Unhooked on close: SystemEvents holds a static reference, so a handler
+  // left attached keeps the closed window's whole graph alive.
+  assert.match(source, /remove_DisplaySettingsChanged/);
 });

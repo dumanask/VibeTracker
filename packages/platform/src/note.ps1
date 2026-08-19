@@ -1296,12 +1296,43 @@ if ($LabelsPath -and (Test-Path $LabelsPath)) {
     foreach ($prop in $lj.PSObject.Properties) { $note.L[$prop.Name] = [string]$prop.Value }
   } catch { }
 }
+# -- is a remembered position still a place on this desktop? ---------------
+#
+# The old test was `x -ge 0`, which is wrong in both directions.
+#
+# It accepted a position on a monitor that is no longer there. Measured on
+# this machine: the note was last put at x=2050 on a second display, the
+# display went away, and the window was recreated at (2050,514)-(2520,734)
+# with a single 1920-wide screen. `IsWindowVisible` said true, the process was
+# alive, the tray menu did its job -- and there was nothing on screen. That is
+# the worst failure this window has: it looks like the menu item does nothing.
+# Undocking a laptop, unplugging a monitor or changing resolution is enough.
+#
+# And it rejected a position that was perfectly good: a monitor arranged to
+# the left of the primary one has negative coordinates, so a note parked there
+# was thrown away on every restart.
+#
+# The real question is whether enough of the window lands on some screen to be
+# seen and grabbed. 120x40 is about the close button plus a piece of the strip.
+function Test-OnScreen([int]$x, [int]$y, [int]$w, [int]$h) {
+  $r = New-Object System.Drawing.Rectangle $x, $y, $w, $h
+  foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
+    $i = [System.Drawing.Rectangle]::Intersect($s.WorkingArea, $r)
+    if ($i.Width -ge 120 -and $i.Height -ge 40) { return $true }
+  }
+  return $false
+}
+
+function Get-HomeCorner([int]$w) {
+  $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+  return New-Object System.Drawing.Point(($wa.Right - $w - 24), ($wa.Top + 24))
+}
+
 $note.ClientSize = New-Object System.Drawing.Size([int]$state.w, [int]$state.h)
-if ([int]$state.x -ge 0) {
+if (Test-OnScreen ([int]$state.x) ([int]$state.y) ([int]$state.w) ([int]$state.h)) {
   $note.Location = New-Object System.Drawing.Point([int]$state.x, [int]$state.y)
 } else {
-  $wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-  $note.Location = New-Object System.Drawing.Point(($wa.Right - [int]$state.w - 24), ($wa.Top + 24))
+  $note.Location = Get-HomeCorner ([int]$state.w)
 }
 
 $script:savedState = ''
@@ -1755,6 +1786,25 @@ $note.OnAddPath = [Action] {
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 2000
 $timer.Add_Tick({ Refresh })
+
+# A display that goes away while the note is open strands it just as surely as
+# one that went away between runs -- undocking a laptop is the ordinary way to
+# do it. The rule is the same rule, applied at the other moment: if the window
+# is no longer on any screen, bring it home. If it still is, leave it exactly
+# where the user put it.
+$displayHandler = {
+  if (-not (Test-OnScreen $note.Location.X $note.Location.Y $note.Width $note.Height)) {
+    $note.Location = Get-HomeCorner $note.Width
+    $note.PinTop()
+  }
+}
+[Microsoft.Win32.SystemEvents]::add_DisplaySettingsChanged($displayHandler)
+
+$note.Add_FormClosed({
+  # Unhooked explicitly: SystemEvents holds a static reference, and a handler
+  # that outlives the form keeps the whole window graph alive after close.
+  try { [Microsoft.Win32.SystemEvents]::remove_DisplaySettingsChanged($displayHandler) } catch { }
+})
 
 $note.Add_Shown({
   # Before anything else: the window is up, the handle exists, and this is the
