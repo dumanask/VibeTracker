@@ -25,7 +25,12 @@ const NOW = 1_800_000_000_000;
 
 /** A turn in flight and long past its deadline: cpu is the only discriminator. */
 function silentSinceUser(): TranscriptFacts {
-  const at = NOW - STALL_THINKING_MS * PASSIVE_MULTIPLIER - 60_000;
+  return factsSilentFor(STALL_THINKING_MS * PASSIVE_MULTIPLIER + 60_000);
+}
+
+/** The same, with the silence chosen by the caller. */
+function factsSilentFor(ms: number): TranscriptFacts {
+  const at = NOW - ms;
   return {
     path: 'x.jsonl',
     size: 1,
@@ -91,4 +96,64 @@ test('with no history the upper line applies, so a first reading never over-clai
   // `vt status` is a single snapshot and has no previous side to be on. It
   // must not inherit the benefit of the doubt that hysteresis grants.
   assert.equal(stateAt(2.2, null), SessionState.Stalled);
+});
+
+/**
+ * The burst that survived everything above it.
+ *
+ * Watched on the running daemon with both the hysteresis and the settle guard
+ * in place: a session silent for six hours and fifty-five minutes still moved
+ * to BUSY six times in ten minutes, six to twenty-four seconds each. Not noise
+ * -- a real multi-poll burst every ninety seconds or so, which is what an
+ * abandoned agent process with a heartbeat looks like. The readings were
+ * honest. The inference was not: a turn still in flight writes something
+ * eventually, so after long enough only the transcript can say anything.
+ */
+test('cpu stops vouching for a session long before the silence does', () => {
+  const deadline = STALL_THINKING_MS * PASSIVE_MULTIPLIER;
+
+  // Inside the window, a real reading still means work -- this is the long
+  // extended-thinking turn the cpu test exists for, and it must survive.
+  const soon = deriveState({
+    liveness: 'live',
+    facts: factsSilentFor(deadline + 60_000),
+    cpuPct: 40,
+    descendants: null,
+    prevState: SessionState.Stalled,
+    now: NOW,
+  });
+  assert.equal(soon.state, SessionState.Busy);
+
+  // Past it, the same reading changes nothing.
+  const late = deriveState({
+    liveness: 'live',
+    facts: factsSilentFor(7 * 3600_000),
+    cpuPct: 40,
+    descendants: null,
+    prevState: SessionState.Stalled,
+    now: NOW,
+  });
+  assert.equal(late.state, SessionState.Stalled);
+  // And says so rather than claiming there was no cpu, which there was.
+  assert.ok(
+    late.evidence.some((e) => e.includes('cpu')),
+    late.evidence.join(' | '),
+  );
+
+  // The burst as measured: alternating multi-sample runs of 0% and 4.5%, on a
+  // session silent for seven hours. One answer, all the way through.
+  let state: string = SessionState.Stalled;
+  const seen = new Set<string>();
+  for (const cpu of [0, 0, 4.5, 4.5, 0, 0, 4.5, 4.5, 0, 4.5, 4.5, 4.5]) {
+    state = deriveState({
+      liveness: 'live',
+      facts: factsSilentFor(7 * 3600_000),
+      cpuPct: cpu,
+      descendants: null,
+      prevState: state as never,
+      now: NOW,
+    }).state;
+    seen.add(state);
+  }
+  assert.deepEqual([...seen], [SessionState.Stalled], [...seen].join(' and '));
 });

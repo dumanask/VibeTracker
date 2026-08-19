@@ -9,6 +9,7 @@ import {
 import {
   CPU_BUSY_PCT,
   CPU_IDLE_PCT,
+  CPU_TRUST_MULTIPLE,
   LOCAL_TOOL_PERMISSION_MS,
   RECENT_WRITE_MS,
   SPAWN_GRACE_MS,
@@ -67,6 +68,11 @@ export interface DerivedState {
  *    WAITING_PERMISSION three times in ten minutes, because the tree said no
  *    child had started since the call -- true, and irrelevant, because the work
  *    was not a descendant of the pid we were watching.
+ *
+ * 4. And cpu expires. Past a wide multiple of a branch's own deadline the
+ *    transcript is the only witness left, because anything still running would
+ *    have written by now. `working` below is the single expression of that: a
+ *    reading above the line, taken while a reading could still mean something.
  */
 export function deriveState(input: DeriveInput): DerivedState {
   const { liveness, facts, cpuPct, descendants, prevState, now } = input;
@@ -95,6 +101,14 @@ export function deriveState(input: DeriveInput): DerivedState {
   // being called busy. See the thresholds for what a single line did.
   const cpuFloor = prevState === SessionState.Busy ? CPU_IDLE_PCT : CPU_BUSY_PCT;
   const busyCpu = cpuPct !== null && cpuPct >= cpuFloor;
+  /**
+   * Whether cpu is entitled to an opinion, given how long this has been quiet.
+   *
+   * The deadline differs by branch -- a `Bash` call may legitimately be silent
+   * for twenty minutes, a thinking turn may not -- so it is asked per branch
+   * rather than decided once.
+   */
+  const working = (deadline: number): boolean => busyCpu && ageMs <= deadline * CPU_TRUST_MULTIPLE;
   const openTool = facts.openTools[0];
 
   if (openTool) {
@@ -110,7 +124,7 @@ export function deriveState(input: DeriveInput): DerivedState {
     // minute. When one does, the agent is not slow — it is sitting on a
     // permission prompt. No process tree is needed to know this, only the
     // certainty that a blocked process is not also a running one.
-    if (!busyCpu && toolClass === 'local-instant' && ageMs > LOCAL_TOOL_PERMISSION_MS) {
+    if (!working(deadline) && toolClass === 'local-instant' && ageMs > LOCAL_TOOL_PERMISSION_MS) {
       evidence.push(t`perm:local tool open for ${fmtAge(ageMs)}, should finish in milliseconds`);
       return {
         state: SessionState.WaitingPermission,
@@ -143,7 +157,7 @@ export function deriveState(input: DeriveInput): DerivedState {
           };
         }
         return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.9, evidence };
-      } else if (ageMs > SPAWN_GRACE_MS && !busyCpu) {
+      } else if (ageMs > SPAWN_GRACE_MS && !working(deadline)) {
         evidence.push(
           descendants.total > 0
             ? t`perm:no new descendants (${descendants.total} older ones, probably MCP)`
@@ -158,7 +172,7 @@ export function deriveState(input: DeriveInput): DerivedState {
       }
     }
 
-    if (busyCpu) {
+    if (working(deadline)) {
       return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.8, evidence };
     }
     if (ageMs > deadline) {
@@ -191,13 +205,21 @@ export function deriveState(input: DeriveInput): DerivedState {
   // A turn is in flight. Here CPU is the real discriminator: a long
   // extended-thinking turn writes nothing for minutes while still burning CPU.
   // Silence plus no CPU is a hang.
-  if (busyCpu) {
+  const thinkDeadline = stallDeadline(undefined, true);
+  if (working(thinkDeadline)) {
     evidence.push(tr('tail:silent but burning cpu'));
     return { state: SessionState.Busy, subReason: 'thinking', confidence: 0.7, evidence };
   }
 
-  if (ageMs > stallDeadline(undefined, true)) {
-    evidence.push(t`stall:last=user, silent for ${fmtAge(ageMs)}, no cpu`);
+  if (ageMs > thinkDeadline) {
+    // Said plainly when there *was* cpu and it was disregarded, because
+    // "no cpu" next to a reading of 4.5% is the kind of small lie that costs a
+    // user an afternoon of not believing the rest of the screen.
+    evidence.push(
+      busyCpu
+        ? t`stall:last=user, silent for ${fmtAge(ageMs)} — past what cpu can vouch for`
+        : t`stall:last=user, silent for ${fmtAge(ageMs)}, no cpu`,
+    );
     return { state: SessionState.Stalled, subReason: 'thinking', confidence: 0.6, evidence };
   }
 

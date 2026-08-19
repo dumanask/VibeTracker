@@ -877,5 +877,6 @@
   "the dashboard is listening on {0}:{1} — anyone on this network can reach it": "panel {0}:{1} üzerinde dinliyor — bu ağdaki herkes erişebilir",
   "Reach": "Erişim",
   "listening on {0} — anyone on this network can reach the dashboard": "{0} üzerinde dinliyor — bu ağdaki herkes panele erişebilir",
-  "for this machine only, set bind = \"127.0.0.1\" under [server]": "yalnızca bu makine için [server] altında bind = \"127.0.0.1\" yapın"
+  "for this machine only, set bind = \"127.0.0.1\" under [server]": "yalnızca bu makine için [server] altında bind = \"127.0.0.1\" yapın",
+  "stall:last=user, silent for {0} — past what cpu can vouch for": "stall:son=kullanıcı, {0} sessiz — cpu’nun kefil olabileceği süreyi aştı"
 }

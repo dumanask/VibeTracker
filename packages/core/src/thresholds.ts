@@ -73,6 +73,23 @@ export const CPU_IDLE_PCT = 1;
  */
 
 /**
+ * How far past its own stall deadline a session's cpu still means something.
+ *
+ * Measured: a session silent for six hours and fifty-five minutes burnt enough
+ * cpu, for two consecutive polls at a time, to be called BUSY six times in ten
+ * minutes. The readings were true; the inference was not. A turn still in
+ * flight writes something eventually, so after long enough the transcript is
+ * the only witness left and cpu is just a heartbeat.
+ *
+ * Four, because the deadlines below are already generous -- 450 s of silence
+ * for a thinking turn, 22 minutes for an open `Bash` -- and this is the point
+ * at which a *fourth* of those has passed again with nothing written. An agent
+ * that is genuinely working and has said nothing for half an hour is what
+ * STALLED means: alive, no progress, worth a look.
+ */
+export const CPU_TRUST_MULTIPLE = 4;
+
+/**
  * A state change has to survive a second look before it is believed.
  *
  * Measured cost of not doing this: one cpu sample of 4.5% -- two scheduler
