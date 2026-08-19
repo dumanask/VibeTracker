@@ -742,6 +742,26 @@ An unfollowed project is not deleted from the report: it stays there so `vt proj
 something to offer, but its plan documents are not read. That is the most expensive work in
 the scan; a project you do not follow comes almost free.
 
+### What is allowed to interrupt you
+
+Four states put an agent on the "waiting on you" list. Only **two** of them are allowed to
+make a sound: `WAITING_PERMISSION` and `ERRORED`.
+
+`WAITING_INPUT` is deliberately not one of them. It is how every turn of every agent ends,
+so notifying on it means a notification each time anything finishes anything — which is not
+a feature, it is the reason people switch notifications off. `STALLED` is a suspicion by
+construction (no progress *and* no cpu) and stays advisory. Both still show on the board,
+where you go to look rather than being interrupted.
+
+And each one announces itself **once**. A state that is left and re-entered within twenty
+seconds is a threshold being sat on, not a second prompt — that window costs nothing real,
+because a permission gate cannot even be *detected* until a tool has been open for fifteen
+to thirty seconds. Approving one prompt and hitting the next still notifies.
+
+The rule lives in one function, `interrupts()`, and the tray, the sticky note and the
+dashboard all read it. It used to be written three times in three ways, so the same event
+interrupted you once, twice or not at all depending on which window you had open.
+
 ## The sticky note: a window in the corner of your screen
 
 A monitor you have to switch windows to read is a monitor you stop reading.
