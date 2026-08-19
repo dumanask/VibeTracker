@@ -531,6 +531,21 @@ async function checkDaemon(): Promise<Check[]> {
   }
 
   if (health) {
+    // The identity half of the answer is open to anyone; the numbers are not.
+    // Without them there is nothing to report but the fact that something of
+    // ours is there -- printing a formatted line anyway put `{2}` on screen
+    // where a count goes, and `up 0 min`, which reads like a measurement.
+    if (health.scans === undefined) {
+      return [
+        {
+          id: 'daemon',
+          label: 'Daemon',
+          status: 'warn',
+          detail: t`port ${port} · a VibeTracker daemon that did not accept our token`,
+          fix: tr('It is probably running under another profile or data directory; its own `vt doctor` can see it.'),
+        },
+      ];
+    }
     const up = Math.round(Number(health.uptimeMs ?? 0) / 60000);
     const tail = health.transcripts as { openHandles?: number; skipped?: number; reads?: number } | undefined;
     const out: Check[] = [
