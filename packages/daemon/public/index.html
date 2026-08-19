@@ -433,6 +433,13 @@
   .llm .name { min-width:88px; }
   .llm .note { color:var(--dim); font-family:var(--sans); font-size:10.5px;
                margin-inline-start:auto; text-align:end; }
+  .llm .group { padding:7px var(--pad) 4px; border-block-start:1px solid var(--edge);
+                background:var(--trough); color:var(--dim); font-size:10.5px;
+                font-family:var(--sans); }
+  /* Three to a row: the name is a word and the mark is two, so a full-width
+     line each would be a column of whitespace. */
+  .llm label.cli { display:inline-flex; width:calc(33.33% - 1px); box-sizing:border-box;
+                   border-block-start:0; vertical-align:top; }
   .llm .fields { display:flex; flex-direction:column; gap:6px;
                  padding:8px var(--pad); border-block-start:1px solid var(--edge); }
   .llm .fields label { display:flex; align-items:center; gap:8px; border:0;
@@ -1274,8 +1281,10 @@ function llmLabel(o) {
   if (id === 'ollama') return [tr('Ollama'), tr('bu makinedeki model; anahtar istemez, veri çıkmaz')];
   if (id === 'openai') return [tr('OpenAI uyumlu'), tr('adresle OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
   if (id === 'anthropic') return [tr('Anthropic API'), tr('anahtar gerekir')];
-  if (o.program) return [o.program, tr('makinendeki komut; anahtar istemez, kendi hesabının kotasından yer')];
-  return [id, ''];
+  // The agent CLIs never reach here: they are rendered under their own
+  // heading, by program name, because the only thing that differs between
+  // them is whether the program is on this machine.
+  return [o.program || id, ''];
 }
 
 /** The egress sentence, in the three words that matter. Mirrors `vt digest`. */
@@ -1337,18 +1346,33 @@ function renderLlm() {
     html += `<div class="hint">${esc(tr('Kendi komutunu çalıştıran seçenek yalnızca config dosyasından ayarlanır. Aşağıdan başka bir sağlayıcıya geçebilirsin.'))}</div>`;
   }
 
-  html += llm.options.map(o => {
+  const radio = o => `<input type="radio" name="llmp" value="${esc(o.id)}" ${o.id === llmPick ? 'checked' : ''}>`;
+  const installed = o => o.installed === true
+    ? `<span class="stay">${esc(tr('kurulu'))}</span>`
+    : o.installed === false ? `<span class="bad">${esc(tr('kurulu değil'))}</span>` : '';
+
+  // The four that are not agent CLIs, each with its own sentence.
+  html += llm.options.filter(o => !o.program || o.id === 'ollama').map(o => {
     const [name, why] = llmLabel(o);
-    const mark = o.installed === true
-      ? `<span class="stay">${esc(tr('kurulu'))}</span>`
-      : o.installed === false ? `<span class="bad">${esc(tr('kurulu değil'))}</span>` : '';
-    return `<label>
-      <input type="radio" name="llmp" value="${esc(o.id)}" ${o.id === llmPick ? 'checked' : ''}>
+    return `<label>${radio(o)}
       <span class="name">${esc(name)}</span>
       <span>${esc(why)}</span>
-      <span class="note">${mark}</span>
+      <span class="note">${installed(o)}</span>
     </label>`;
   }).join('');
+
+  // The agent CLIs under one heading. What differs between them is only
+  // whether the program is on this machine, so repeating the same sentence
+  // thirteen times was thirteen lines saying nothing — the sentence is said
+  // once and the rows carry the name and the mark.
+  const clis = llm.options.filter(o => o.program && o.id !== 'ollama');
+  if (clis.length) {
+    html += `<div class="group">${esc(tr('Zaten giriş yapmış olduğun ajan CLI\'ı — anahtar istemez, kendi hesabından yer'))}</div>`;
+    html += clis.map(o => `<label class="cli">${radio(o)}
+      <span class="name">${esc(o.program)}</span>
+      <span class="note">${installed(o)}</span>
+    </label>`).join('');
+  }
 
   const picked = llmPicked();
   if (picked && picked.id !== 'off') {
