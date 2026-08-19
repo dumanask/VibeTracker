@@ -827,5 +827,14 @@
   "  Hangi komut?": "  Which command?",
   "  Argümanlar (boşlukla ayrılmış, boş bırakılabilir)?": "  Arguments (space separated, may be left empty)?",
   "  Uyarı: \"{0}\" PATH'te bulunamadı. Yazılacak, ama çalıştırılamaz.\n": "  Warning: \"{0}\" was not found on PATH. It will be written, but it cannot run.\n",
-  "  Metin komuta stdin ile verilir; komut satırına yazılmaz. Kabul etmiyorsa argümanlara {prompt_file} koy.\n": "  The text is handed to the command on stdin, never on the command line. If it will not take stdin, put {prompt_file} in the arguments.\n"
+  "  Metin komuta stdin ile verilir; komut satırına yazılmaz. Kabul etmiyorsa argümanlara {prompt_file} koy.\n": "  The text is handed to the command on stdin, never on the command line. If it will not take stdin, put {prompt_file} in the arguments.\n",
+  "yerleşik panel · üstte kalır · vt mini": "built-in panel · stays on top · vt mini",
+  "Chromium ailesinden tarayıcı bulunamadı": "no Chromium-family browser found",
+  "Chrome/Chromium/Brave/Edge kur, ya da masaüstü uygulamasını kullan.": "Install Chrome/Chromium/Brave/Edge, or use the desktop app.",
+  "Üstte kalan gerçek bir post-it için masaüstü uygulaması: tepsi menüsü → Post-it.": "For a real sticky note that stays on top, use the desktop app: tray menu → Post-it.",
+  "yalnızca Windows post-it penceresi konuşur": "only the Windows sticky note speaks",
+  "üstte tutulamaz": "cannot be kept on top",
+  "LaunchAgent: {0}": "LaunchAgent: {0}",
+  "systemd --user: {0}.service": "systemd --user: {0}.service",
+  "Zamanlanmış Görev: {0}": "Scheduled Task: {0}"
 }

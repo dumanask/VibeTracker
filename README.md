@@ -68,7 +68,7 @@ peşine düşürür, o yüzden her satır sebebini taşır.
 ```bash
 pnpm vt -- doctor            # --json ile makine okunur
 pnpm vt -- hooks install     # kesin izin/tur tespiti (diff gösterir, onay ister)
-pnpm vt -- autostart install # oturum açılışında daemon (Windows, yönetici gerekmez)
+pnpm vt -- autostart install # oturum açılışında daemon (üç platform, yönetici gerekmez)
 ```
 
 **Kurulum — `vt init`:** dört adım, üç soru, **sıfır disk taraması**. Projeler ajanın zaten
@@ -412,10 +412,19 @@ aşarsa agresif pencere programdan bağımsız hemen koşuyor. Bakım saatte bir
 | macOS | Tek `ps -axo` çağrısı | **second** — aynı saniyede geri dönüşen PID kaçabilir |
 | Diğer | `kill(pid, 0)` | yok |
 
-Windows uygulaması gerçek veriyle doğrulandı. Linux ve macOS uygulamaları yazıldı ancak
-henüz o platformlarda çalıştırılmadı; ayrıca ajanın Windows dışında süreç başlangıç zamanı
-kaydedip kaydetmediği doğrulanamadı — kod bunu tespit eder ve yoksa korumanın zayıfladığını
-raporlar.
+**Windows** gerçek veriyle doğrulandı.
+
+**Linux** bir konteynerde uçtan uca çalıştırıldı: 323 test geçiyor, sonda kendini
+`linux-proc / exact` olarak bildiriyor, `vt demo` sentetik ortamda 10 kaydı 3 canlı /
+5 ölü / **2 PID-yeniden-kullanım** diye ayırıyor, daemon açılıyor, pano `200` dönüyor,
+`Host: evil.com` `403` alıyor, hook kurulup kaldırılırken kullanıcının kendi hook'u
+yerinde kalıyor, `vt uninstall` XDG yollarını doğru sayıyor. Doğrulanmayan tek şey
+ajanın Linux'ta süreç başlangıç zamanı yazıp yazmadığı — kod bunu tespit eder ve yoksa
+korumanın zayıfladığını söyler.
+
+**macOS** hâlâ çalıştırılmadı. `ps` çıktısını ayrıştıran kod ve LaunchAgent plist'i
+kayıtlı örneklerle test edildi, ama hiçbir Mac'te tek satır koşmadı. Ayrıca imzalanmış
+bir paket yok: Gatekeeper, Developer ID + notarization olmadan uygulamayı açtırmaz.
 
 ### Otomatik başlatma: üç mekanizma, tek kural
 

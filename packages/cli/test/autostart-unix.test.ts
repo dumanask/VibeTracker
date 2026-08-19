@@ -4,6 +4,7 @@ import { configDir, dataDir } from '@vibetracker/platform';
 import {
   desktopEntry,
   plist,
+  quotePath,
   unit,
   LAUNCH_LABEL,
   SYSTEMD_UNIT,
@@ -54,9 +55,12 @@ test('the systemd unit makes the write promise enforceable', () => {
   // becomes something the kernel refuses. A fork that removed the check in code
   // would still be unable to write.
   assert.match(u, /^ProtectHome=read-only$/m);
+  // Quoted, so compared in the quoted form -- the unit is written for a shell
+  // that splits on whitespace and macOS puts our data under "Application
+  // Support".
   const rw = /^ReadWritePaths=(.*)$/m.exec(u)?.[1] ?? '';
-  assert.ok(rw.includes(dataDir()), 'the daemon must be able to write its own database');
-  assert.ok(rw.includes(configDir()), 'and its own config');
+  assert.ok(rw.includes(quotePath(dataDir())), 'the daemon must be able to write its own database');
+  assert.ok(rw.includes(quotePath(configDir())), 'and its own config');
   assert.ok(!rw.includes('.claude'), 'the agent state directory must stay read-only');
 
   assert.match(u, /^Restart=on-failure$/m);
@@ -81,7 +85,7 @@ test('the unit does not carry the flag that silently breaks V8', () => {
 test('the XDG fallback starts the same command', () => {
   const d = desktopEntry(NODE, ENTRY);
   assert.match(d, /^\[Desktop Entry\]$/m);
-  assert.match(d, new RegExp(`^Exec=${NODE} ${ENTRY} daemon$`, 'm'));
+  assert.match(d, new RegExp(`^Exec="${NODE}" "${ENTRY}" daemon$`, 'm'));
   assert.match(d, /^Terminal=false$/m);
 });
 
@@ -91,4 +95,31 @@ test('unit and label names are stable', () => {
   // nothing can remove, on a machine we do not own.
   assert.equal(SYSTEMD_UNIT, 'vibetracker');
   assert.equal(LAUNCH_LABEL, 'dev.vibetracker.daemon');
+});
+
+test('a path with a space in it still starts the daemon', () => {
+  // nvm puts node under a versioned directory, a checkout can live under
+  // "My Projects", and macOS hands out "Library/Application Support". systemd
+  // and the XDG spec both split ExecStart on whitespace, so an unquoted path
+  // with a space in it becomes four arguments and an executable that does not
+  // exist -- installed, reported enabled, never starts.
+  const node = '/home/a b/.nvm/versions/node/v22.20.0/bin/node';
+  const entry = '/home/a b/My Projects/vt/packages/cli/src/index.ts';
+
+  const u = unit(node, entry);
+  assert.match(u, new RegExp(`^ExecStart="${node}" "${entry}" daemon$`, 'm'));
+  // The write promise is made of paths too, and dataDir() on macOS contains
+  // "Application Support". An unquoted ReadWritePaths there does not fail
+  // loudly -- it silently grants write access to a path that is not ours.
+  const rw = /^ReadWritePaths=(.*)$/m.exec(u)?.[1] ?? '';
+  assert.equal(rw.split('" "').length, 2, `tırnaklanmamış: ${rw}`);
+  assert.ok(rw.startsWith('"') && rw.endsWith('"'));
+
+  const d = desktopEntry(node, entry);
+  assert.match(d, new RegExp(`^Exec="${node}" "${entry}" daemon$`, 'm'));
+
+  // And the staleness check still recognises its own installation, which reads
+  // the raw path out of the quoted file.
+  assert.ok(u.includes(entry));
+  assert.ok(d.includes(entry));
 });

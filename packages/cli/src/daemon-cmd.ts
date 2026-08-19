@@ -77,18 +77,58 @@ export async function openDashboard(): Promise<number> {
   return 0;
 }
 
+/**
+ * Hand a URL to whatever opens URLs here.
+ *
+ * The previous version wrapped one `spawn` in a `try`, which catches nothing:
+ * a missing program is reported through an asynchronous `'error'` event, and
+ * an `'error'` nobody listens for takes the process down. So on a machine
+ * without `xdg-utils` — a minimal server, a bare window manager, a container —
+ * `vt open` printed the URL, did its work, and then died with a stack trace.
+ * Verified rather than assumed: the same shape crashes on this machine too.
+ *
+ * Hence a list rather than a single command. Linux has no one answer;
+ * `xdg-open` is the convention, `gio open` is what GNOME actually ships,
+ * `wslview` is how a WSL shell reaches the Windows browser, and
+ * `sensible-browser` is Debian's fallback. The URL is already on stdout before
+ * any of this runs, so the worst case is that the user clicks it themselves.
+ */
 async function openBrowser(url: string): Promise<void> {
   const { spawn } = await import('node:child_process');
-  const [cmd, args] =
+
+  const attempts: Array<[string, string[]]> =
     process.platform === 'win32'
-      ? ['cmd', ['/c', 'start', '', url]]
+      ? [['cmd', ['/c', 'start', '', url]]]
       : process.platform === 'darwin'
-        ? ['open', [url]]
-        : ['xdg-open', [url]];
-  try {
-    spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-  } catch {
-    /* the URL is already printed; the user can open it themselves */
+        ? [['open', [url]]]
+        : [
+            ['xdg-open', [url]],
+            ['gio', ['open', url]],
+            ['wslview', [url]],
+            ['sensible-browser', [url]],
+          ];
+
+  const tryOne = ([cmd, args]: [string, string[]]): Promise<boolean> =>
+    new Promise((resolve) => {
+      let child;
+      try {
+        child = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true });
+      } catch {
+        resolve(false);
+        return;
+      }
+      // Both listeners are required. `'error'` is the one that would otherwise
+      // be fatal; `'spawn'` is how we know the program exists without waiting
+      // for it to exit, which a browser launcher may never do.
+      child.once('error', () => resolve(false));
+      child.once('spawn', () => {
+        child.unref();
+        resolve(true);
+      });
+    });
+
+  for (const attempt of attempts) {
+    if (await tryOne(attempt)) return;
   }
 }
 

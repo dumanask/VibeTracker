@@ -61,10 +61,10 @@ const GLYPH: Record<Outcome, string> = {
  * registration first (so nothing restarts mid-removal), then the foreign file
  * we edited, then our own data.
  */
-function touchpoints(): Array<{ id: string; what: string; where: string }> {
+function touchpoints(autostartWhere: string): Array<{ id: string; what: string; where: string }> {
   const d = dataDir();
   return [
-    { id: 'autostart', what: tr('Oturum açılışı görevi'), where: tr('Zamanlanmış Görev: VibeTracker') },
+    { id: 'autostart', what: tr('Oturum açılışı görevi'), where: autostartWhere },
     { id: 'hooks', what: tr('Hook girdileri'), where: join(claudeDir(), 'settings.json') },
     { id: 'config', what: tr('Yapılandırma'), where: configPath() },
     { id: 'db', what: tr('Veritabanı'), where: join(d, 'vibetracker.db') },
@@ -81,11 +81,16 @@ function touchpoints(): Array<{ id: string; what: string; where: string }> {
 
 export async function runUninstall(args: UninstallArgs): Promise<number> {
   const entries: Entry[] = [];
-  const points = touchpoints();
+  // Asked once, up front. It names the object that actually exists on this
+  // machine — a Scheduled Task, a LaunchAgent, a systemd unit, or an XDG entry
+  // on a Linux session with no systemd — and this manifest is a claim about
+  // what was touched, so it must not be a guess made from the platform name.
+  const auto = await autostartStatus();
+  const points = touchpoints(auto.where);
 
   process.stdout.write(tr('\nVibeTracker kaldırılıyor.\n\nDokunulmuş olabilecek yerler:\n'));
   for (const p of points) {
-    const exists = p.id === 'autostart' ? (await autostartStatus()).installed : existsSync(p.where);
+    const exists = p.id === 'autostart' ? auto.installed : existsSync(p.where);
     process.stdout.write(`  ${exists ? '•' : '·'} ${p.what.padEnd(24)} ${p.where}\n`);
   }
   process.stdout.write(
@@ -109,16 +114,15 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   }
 
   // ── 1. autostart, first: nothing should restart mid-removal ───────────
-  const auto = await autostartStatus();
   if (!auto.supported) {
     entries.push({ what: tr('Oturum açılışı görevi'), where: '—', outcome: 'absent', note: tr('bu platformda yok') });
   } else if (!auto.installed) {
-    entries.push({ what: tr('Oturum açılışı görevi'), where: tr('Zamanlanmış Görev'), outcome: 'absent' });
+    entries.push({ what: tr('Oturum açılışı görevi'), where: auto.where, outcome: 'absent' });
   } else {
     const code = await uninstallAutostart();
     entries.push({
       what: tr('Oturum açılışı görevi'),
-      where: tr('Zamanlanmış Görev: VibeTracker'),
+      where: auto.where,
       outcome: code === 0 ? 'removed' : 'failed',
     });
   }

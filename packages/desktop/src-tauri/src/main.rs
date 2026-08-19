@@ -484,11 +484,22 @@ fn main() {
 
             let (tx, rx) = mpsc::channel::<u32>();
 
+            // Left click: open the panel on Windows and macOS, show the menu on
+            // Linux.
+            //
+            // Not a preference. A Linux tray icon is a StatusNotifierItem owned
+            // by the desktop's own indicator host, and that host does not send
+            // click events back to us -- `TrayIconEvent` simply never fires
+            // there. With the menu suppressed as well, the icon had no left
+            // click behaviour at all on Linux: the entire product was reachable
+            // only by right-clicking, and nothing said so.
+            let left_opens_menu = cfg!(target_os = "linux");
+
             let tray = TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("VibeTracker")
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(left_opens_menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => open_panel(app),
                     "note" => open_note(app),

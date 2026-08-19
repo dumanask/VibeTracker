@@ -35,6 +35,27 @@ export interface UnixAutostart {
   installed: boolean;
   stale?: boolean;
   detail: string;
+  /**
+   * The thing that would have to be removed, named the way the system names
+   * it.
+   *
+   * Reported rather than derived by the caller, because on Linux it depends on
+   * the machine and not on the platform: a session with systemd gets a user
+   * unit, one without gets an XDG desktop entry, and `vt uninstall` prints a
+   * manifest of what it touched. Guessing "systemd" on a box that has none
+   * would be the manifest naming something that was never there.
+   */
+  where: string;
+  /**
+   * Will it actually start at the next login?
+   *
+   * Separate from `installed` because systemd separates them: writing the unit
+   * file and enabling it are two steps, and a unit that exists but was never
+   * enabled starts nothing. Undefined means the question does not apply — a
+   * LaunchAgent, a Scheduled Task and an XDG entry are live the moment they
+   * exist.
+   */
+  active?: boolean;
 }
 
 export function launchAgentPath(): string {
@@ -94,6 +115,24 @@ export function plist(node: string, entry: string): string {
 }
 
 /**
+ * Quote a path for a systemd command line, and for an XDG `Exec=`.
+ *
+ * Both split on whitespace and both understand double quotes, and neither is
+ * a shell — so this is quoting, not escaping-for-a-shell, and the only two
+ * characters that need a backslash inside the quotes are the backslash and
+ * the quote itself.
+ *
+ * Not hypothetical on macOS or Linux: `nvm` installs Node under a versioned
+ * directory, a checkout can live under a directory with a space in it, and
+ * `ExecStart=/home/a b/node /home/a b/vt daemon` is read as four arguments and
+ * an executable that does not exist. The unit installs, `systemctl` reports it
+ * enabled, and it never starts.
+ */
+export function quotePath(path: string): string {
+  return `"${path.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/**
  * The systemd user unit.
  *
  * Two lines here are load-bearing and neither is boilerplate.
@@ -121,13 +160,13 @@ After=default.target
 
 [Service]
 Type=simple
-ExecStart=${node} ${entry} daemon
+ExecStart=${quotePath(node)} ${quotePath(entry)} daemon
 Restart=on-failure
 RestartSec=${THROTTLE_SEC}
 # Read anything in the home directory; write only our own two directories.
 # This is the guarantee, not a hardening flourish.
 ProtectHome=read-only
-ReadWritePaths=${data} ${config}
+ReadWritePaths=${quotePath(data)} ${quotePath(config)}
 NoNewPrivileges=yes
 # MemoryDenyWriteExecute is NOT set: it breaks V8's JIT silently.
 
@@ -142,10 +181,14 @@ function gui(): string {
   return `gui/${userInfo().uid}`;
 }
 
+function agentWhere(): string {
+  return t`LaunchAgent: ${LAUNCH_LABEL}`;
+}
+
 async function darwinStatus(entry: string): Promise<UnixAutostart> {
   const path = launchAgentPath();
   if (!existsSync(path)) {
-    return { supported: true, installed: false, detail: tr('kurulu değil') };
+    return { supported: true, installed: false, detail: tr('kurulu değil'), where: agentWhere() };
   }
   let body = '';
   try {
@@ -160,6 +203,7 @@ async function darwinStatus(entry: string): Promise<UnixAutostart> {
     supported: true,
     installed: true,
     stale,
+    where: agentWhere(),
     detail: stale
       ? t`LaunchAgent "${LAUNCH_LABEL}" var ama başka bir kuruluma işaret ediyor`
       : t`LaunchAgent "${LAUNCH_LABEL}" kurulu · girişte başlar, çökerse ${THROTTLE_SEC} sn sonra döner`,
@@ -232,7 +276,7 @@ export function desktopEntry(node: string, entry: string): string {
 Type=Application
 Name=VibeTracker
 Comment=VibeTracker izleme daemon'ı
-Exec=${node} ${entry} daemon
+Exec=${quotePath(node)} ${quotePath(entry)} daemon
 Terminal=false
 X-GNOME-Autostart-enabled=true
 `;
@@ -252,7 +296,11 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
     } catch {
       /* unreadable */
     }
-    const stale = !body.includes(entry);
+    // Compared in the quoted form the file actually holds, the way the macOS
+    // branch compares against the XML-escaped form. Looking for the raw path
+    // would report a correctly installed unit as stale on any path that
+    // needed escaping.
+    const stale = !body.includes(quotePath(entry));
     let enabled = false;
     try {
       const { stdout } = await exec('systemctl', ['--user', 'is-enabled', SYSTEMD_UNIT], {
@@ -266,6 +314,8 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
       supported: true,
       installed: true,
       stale,
+      active: enabled,
+      where: t`systemd --user: ${SYSTEMD_UNIT}.service`,
       detail: stale
         ? t`birim "${SYSTEMD_UNIT}" var ama başka bir kuruluma işaret ediyor`
         : enabled
@@ -277,13 +327,16 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
     return {
       supported: true,
       installed: true,
+      where: desktopEntryPath(),
       detail: t`XDG autostart girdisi kurulu (systemd yok) · ${desktopEntryPath()}`,
     };
   }
+  const systemd = await hasSystemd();
   return {
     supported: true,
     installed: false,
-    detail: (await hasSystemd())
+    where: systemd ? t`systemd --user: ${SYSTEMD_UNIT}.service` : desktopEntryPath(),
+    detail: systemd
       ? tr('kurulu değil')
       : tr('kurulu değil · systemd yok, XDG autostart kullanılacak'),
   };
@@ -387,7 +440,12 @@ async function linuxUninstall(): Promise<number> {
 export async function unixAutostartStatus(entry: string): Promise<UnixAutostart> {
   if (process.platform === 'darwin') return darwinStatus(entry);
   if (process.platform === 'linux') return linuxStatus(entry);
-  return { supported: false, installed: false, detail: tr('bu platformda desteklenmiyor') };
+  return {
+    supported: false,
+    installed: false,
+    where: '—',
+    detail: tr('bu platformda desteklenmiyor'),
+  };
 }
 
 export async function unixAutostartInstall(node: string, entry: string): Promise<number> {

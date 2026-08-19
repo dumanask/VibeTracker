@@ -25,6 +25,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from '
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dataDir } from './dirs.ts';
+import { whichCommand } from './which.ts';
 
 const PIN_SCRIPT = fileURLToPath(new URL('./pin.ps1', import.meta.url));
 
@@ -57,28 +58,62 @@ function candidates(): Array<{ path: string; family: string }> {
     ];
   }
   if (process.platform === 'darwin') {
-    return [
-      {
-        path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        family: 'chrome',
-      },
-      {
-        path: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-        family: 'edge',
-      },
-      {
-        path: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-        family: 'brave',
-      },
+    // Both roots: an app installed for one user lives under `~/Applications`
+    // and is invisible to a list that only knows the system one.
+    const roots = ['/Applications', join(home, 'Applications')];
+    const apps: Array<[string, string]> = [
+      ['Google Chrome.app/Contents/MacOS/Google Chrome', 'chrome'],
+      ['Microsoft Edge.app/Contents/MacOS/Microsoft Edge', 'edge'],
+      ['Brave Browser.app/Contents/MacOS/Brave Browser', 'brave'],
+      ['Vivaldi.app/Contents/MacOS/Vivaldi', 'vivaldi'],
+      ['Chromium.app/Contents/MacOS/Chromium', 'chromium'],
     ];
+    const out: Array<{ path: string; family: string }> = [];
+    for (const root of roots) {
+      for (const [rel, family] of apps) out.push({ path: join(root, rel), family });
+    }
+    return out;
   }
-  return [
-    { path: '/usr/bin/google-chrome', family: 'chrome' },
-    { path: '/usr/bin/chromium', family: 'chromium' },
-    { path: '/usr/bin/chromium-browser', family: 'chromium' },
-    { path: '/usr/bin/microsoft-edge', family: 'edge' },
-    { path: '/usr/bin/brave-browser', family: 'brave' },
+
+  // Linux: a name, not a path.
+  //
+  // The list this replaces was five hardcoded `/usr/bin/...` entries, which is
+  // where a distribution package puts a browser and nowhere else. A snap lands
+  // in `/snap/bin`, a flatpak exports a wrapper under a Flatpak prefix, a
+  // Nix or Homebrew install is somewhere else again, and none of those were
+  // findable — on the desktop Linux most people actually run, Chromium is a
+  // snap. Resolving through PATH answers all of them at once, and the explicit
+  // paths afterwards cover the stores that do not put themselves on PATH.
+  const names: Array<[string, string]> = [
+    ['google-chrome', 'chrome'],
+    ['google-chrome-stable', 'chrome'],
+    ['chromium', 'chromium'],
+    ['chromium-browser', 'chromium'],
+    ['microsoft-edge', 'edge'],
+    ['microsoft-edge-stable', 'edge'],
+    ['brave-browser', 'brave'],
+    ['brave', 'brave'],
+    ['vivaldi', 'vivaldi'],
+    ['vivaldi-stable', 'vivaldi'],
   ];
+  const out: Array<{ path: string; family: string }> = [];
+  for (const [name, family] of names) {
+    const found = whichCommand(name);
+    if (found) out.push({ path: found, family });
+  }
+  const flatpak = [
+    join(home, '.local', 'share', 'flatpak', 'exports', 'bin'),
+    '/var/lib/flatpak/exports/bin',
+  ];
+  for (const dir of flatpak) {
+    out.push({ path: join(dir, 'com.google.Chrome'), family: 'chrome' });
+    out.push({ path: join(dir, 'org.chromium.Chromium'), family: 'chromium' });
+    out.push({ path: join(dir, 'com.brave.Browser'), family: 'brave' });
+    out.push({ path: join(dir, 'com.microsoft.Edge'), family: 'edge' });
+  }
+  out.push({ path: '/snap/bin/chromium', family: 'chromium' });
+  out.push({ path: '/snap/bin/brave', family: 'brave' });
+  return out;
 }
 
 export function findBrowser(): BrowserFound | null {
@@ -145,6 +180,13 @@ export function openMiniWindow(opts: MiniWindowOptions): MiniWindow | null {
     detached: true,
     stdio: 'ignore',
     windowsHide: false,
+  });
+  // A detached child reports a failed launch through an asynchronous 'error'
+  // event, and an unheard 'error' event ends this process. The browser was
+  // there a moment ago when `findBrowser` stat'ed it, which is exactly the
+  // kind of "cannot happen" that takes a tool down on somebody else's machine.
+  child.on('error', () => {
+    /* the caller sees a window that never appeared, not a stack trace */
   });
   child.unref();
   if (child.pid === undefined) return null;

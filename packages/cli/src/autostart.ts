@@ -59,7 +59,20 @@ export interface AutostartStatus {
   /** True when a task exists but points at a different install than this one. */
   stale?: boolean;
   detail: string;
+  /**
+   * What would have to be removed, named the way the system names it — a
+   * Scheduled Task here, a LaunchAgent or a systemd unit or an XDG entry
+   * elsewhere. `vt uninstall` prints it as part of a manifest of what was
+   * touched, so it has to be the object that actually exists on this machine
+   * rather than the one this platform usually uses.
+   */
+  where: string;
+  /** False when the registration exists but would not start anything. */
+  active?: boolean;
 }
+
+/** The Windows answer, in one place because two call sites print it. */
+const TASK_WHERE = (): string => t`Zamanlanmış Görev: ${TASK_NAME}`;
 
 /** Absolute path of the CLI entry point, whatever the install layout is. */
 function cliEntry(): string {
@@ -77,7 +90,7 @@ export async function autostartStatus(): Promise<AutostartStatus> {
     });
     xml = stdout;
   } catch {
-    return { supported: true, installed: false, detail: tr('kurulu değil') };
+    return { supported: true, installed: false, where: TASK_WHERE(), detail: tr('kurulu değil') };
   }
 
   // A moved or reinstalled checkout leaves a task pointing at a path that no
@@ -90,6 +103,7 @@ export async function autostartStatus(): Promise<AutostartStatus> {
     supported: true,
     installed: true,
     stale,
+    where: TASK_WHERE(),
     detail: stale
       ? t`görev "${TASK_NAME}" var ama başka bir kuruluma işaret ediyor`
       : t`görev "${TASK_NAME}" kurulu · oturum açılışında (30 sn gecikmeli) + ${REVIVE_MINUTES} dk'da bir canlılık kontrolü`,

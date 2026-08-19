@@ -15,6 +15,7 @@ import {
   configDir,
   createProcessProbe,
   dataDir,
+  findBrowser,
   listVoices,
   otherAgentDirs,
   speaksLanguage,
@@ -80,6 +81,7 @@ export async function collectChecks(): Promise<{ checks: Check[]; projectPaths: 
     checks.push(await checkAutostart());
     checks.push(...(await checkHooks()));
     checks.push(...(await checkOtherAgents(ctx)));
+    checks.push(checkMiniWindow());
     checks.push(await checkVoice());
     checks.push(await checkDigest());
     checks.push(checkWriteSafety());
@@ -572,9 +574,22 @@ async function checkAutostart(): Promise<Check> {
   return {
     id: 'autostart',
     label: tr('Otomatik başlatma'),
-    status: st.supported ? (st.installed ? 'ok' : 'info') : 'todo',
+    // "Installed" is not the same as "will start". A systemd unit that was
+    // written but never enabled, and a task left pointing at a checkout that
+    // has moved, both exist and both start nothing -- and a tick beside either
+    // is this file telling the user the opposite of the truth.
+    status: !st.supported
+      ? 'todo'
+      : !st.installed
+        ? 'info'
+        : st.stale || st.active === false
+          ? 'warn'
+          : 'ok',
     detail: st.detail,
-    fix: st.supported && !st.installed ? tr('`vt autostart install` ile kur.') : undefined,
+    fix:
+      st.supported && (!st.installed || st.stale || st.active === false)
+        ? tr('`vt autostart install` ile kur.')
+        : undefined,
   };
 }
 
@@ -772,6 +787,49 @@ async function checkOtherAgents(ctx: ScanContext): Promise<Check[]> {
 }
 
 /**
+ * The corner of the screen that answers "is anything waiting for me".
+ *
+ * Three different things wear that name and a user is entitled to know which
+ * one they are going to get. Windows has a painted WinForms panel. Everywhere
+ * else `vt mini` opens a Chromium `--app` window that it cannot put on top,
+ * because pinning a foreign window is `SetWindowPos` and that is Win32 — and
+ * a note that sinks behind the editor is not a note. The desktop app owns its
+ * own window and can ask for always-on-top on all three platforms, so on macOS
+ * and Linux it is the real answer rather than a consolation.
+ *
+ * Checked here because the failure is otherwise found at the worst moment: a
+ * machine with no Chromium-family browser produces "pencere açılamadı" from a
+ * command the user ran expecting a window.
+ */
+function checkMiniWindow(): Check {
+  const browser = findBrowser();
+  if (process.platform === 'win32') {
+    return {
+      id: 'mini',
+      label: tr('Post-it penceresi'),
+      status: 'ok',
+      detail: tr('yerleşik panel · üstte kalır · vt mini'),
+    };
+  }
+  if (!browser) {
+    return {
+      id: 'mini',
+      label: tr('Post-it penceresi'),
+      status: 'warn',
+      detail: tr('Chromium ailesinden tarayıcı bulunamadı'),
+      fix: tr('Chrome/Chromium/Brave/Edge kur, ya da masaüstü uygulamasını kullan.'),
+    };
+  }
+  return {
+    id: 'mini',
+    label: tr('Post-it penceresi'),
+    status: 'warn',
+    detail: `${browser.family} · ${browser.path} · ${tr('üstte tutulamaz')}`,
+    fix: tr('Üstte kalan gerçek bir post-it için masaüstü uygulaması: tepsi menüsü → Post-it.'),
+  };
+}
+
+/**
  * Can the note say a project's name in the interface language?
  *
  * Reported rather than fixed, because the fix is not ours to make: voices are
@@ -786,7 +844,7 @@ async function checkVoice(): Promise<Check> {
       id: 'voice',
       label: tr('Sesli haber'),
       status: 'todo',
-      detail: tr('yalnızca Windows'),
+      detail: tr('yalnızca Windows post-it penceresi konuşur'),
     };
   }
   const report = await listVoices();
