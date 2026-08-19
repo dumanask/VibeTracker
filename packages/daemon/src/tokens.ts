@@ -27,7 +27,7 @@ import { generateToken } from './security.ts';
  * Measured on this machine: the note was launched at 21:19 and the daemon
  * restarted at 21:48. From that moment every call the note made returned 401,
  * and because its chooser reported a failed fetch as an empty list, the window
- * said "proje bulunamadı" — asserting a fact about the user's projects when
+ * said "no projects found" — asserting a fact about the user's projects when
  * what had actually happened was that it had been locked out. The daemon
  * restarts on its own (the watchdog exits rather than hang), so this is not an
  * unusual state; it is the state after any long session.

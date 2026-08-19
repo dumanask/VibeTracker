@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Tauri kabuğu: tepsi, bildirim ve daemon süpervizörü",
+  "description": "The Tauri shell: tray, notifications and a daemon supervisor",
   "scripts": {
     "stage": "node ../../scripts/desktop-stage.mjs",
     "dev": "npm run stage && tauri dev",

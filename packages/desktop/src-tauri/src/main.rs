@@ -465,9 +465,9 @@ fn main() {
 
             *child.lock().unwrap() = spawn_daemon(&handle);
 
-            let open = MenuItem::with_id(app, "open", "Paneli aç", true, None::<&str>)?;
-            let note = MenuItem::with_id(app, "note", "Post-it", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Çık", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open dashboard", true, None::<&str>)?;
+            let note = MenuItem::with_id(app, "note", "Sticky note", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &note, &quit])?;
 
             // A way in that is not the mouse.
@@ -610,9 +610,9 @@ fn main() {
                                 .builder()
                                 .title("VibeTracker")
                                 .body(if n == 1 {
-                                    "Bir ajan seni bekliyor".to_string()
+                                    "An agent is waiting for you".to_string()
                                 } else {
-                                    format!("{n} ajan seni bekliyor")
+                                    format!("{n} agents are waiting for you")
                                 })
                                 .show();
                         }
@@ -627,13 +627,13 @@ fn main() {
             std::thread::spawn(move || {
                 while let Ok(n) = rx.recv() {
                     if n == u32::MAX {
-                        let _ = tray_handle.set_tooltip(Some("VibeTracker — daemon yanıt vermiyor"));
+                        let _ = tray_handle.set_tooltip(Some("VibeTracker — the daemon is not answering"));
                         continue;
                     }
                     let _ = tray_handle.set_tooltip(Some(&if n == 0 {
-                        "VibeTracker — bekleyen yok".to_string()
+                        "VibeTracker — nothing waiting".to_string()
                     } else {
-                        format!("VibeTracker — {n} bekliyor")
+                        format!("VibeTracker — {n} waiting")
                     }));
                     // macOS is the only platform with room for text beside the
                     // icon, and it is the platform whose users expect it.
@@ -682,7 +682,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("tauri kurulamadı")
+        .expect("tauri could not be set up")
         .run(move |_app, event| {
             if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
                 // Losing the last window is not a request to quit.

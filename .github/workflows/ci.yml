@@ -112,7 +112,7 @@ jobs:
             const cases = [['İPTAL','iptal'],['IPTAL','iptal'],['ıptal','iptal'],['Aşama','asama']];
             for (const [input, want] of cases) {
               const got = foldText(input);
-              if (got !== want) { console.error(input + ' -> ' + got + ', beklenen ' + want); process.exit(1); }
+              if (got !== want) { console.error(input + ' -> ' + got + ', expected ' + want); process.exit(1); }
             }
             console.log('tr-locale folding ok');
           " --experimental-strip-types
@@ -160,9 +160,9 @@ jobs:
           node -e "
             const j = JSON.parse(require('fs').readFileSync('/tmp/pack.json','utf8'))[0];
             const bad = j.files.filter(f => /credential|[.]env$|[.]pem$|id_rsa|[.]tgz$|[/]test[/]/i.test(f.path));
-            if (bad.length) { console.error('şüpheli dosyalar:', bad.map(f=>f.path)); process.exit(1); }
-            if (j.unpackedSize > 2 * 1024 * 1024) { console.error('paket çok büyük:', j.unpackedSize); process.exit(1); }
-            console.log(j.entryCount, 'dosya ·', (j.unpackedSize/1024).toFixed(0), 'KB');
+            if (bad.length) { console.error('suspicious files:', bad.map(f=>f.path)); process.exit(1); }
+            if (j.unpackedSize > 2 * 1024 * 1024) { console.error('package too big:', j.unpackedSize); process.exit(1); }
+            console.log(j.entryCount, 'files ·', (j.unpackedSize/1024).toFixed(0), 'KB');
           "
       - name: the tarball installs and runs
         run: |
@@ -178,17 +178,17 @@ jobs:
       # in it is worse than one with no licence at all.
       - name: the package carries the licence it claims
         run: |
-          test -f .pack/LICENSE || { echo "LICENSE tarball'da yok"; exit 1; }
-          test -f .pack/NOTICE  || { echo "NOTICE tarball'da yok"; exit 1; }
+          test -f .pack/LICENSE || { echo "LICENSE is not in the tarball"; exit 1; }
+          test -f .pack/NOTICE  || { echo "NOTICE is not in the tarball"; exit 1; }
           node -e "
             const p = require('./.pack/package.json');
-            if (p.license !== 'Apache-2.0') { console.error('lisans alanı:', p.license); process.exit(1) }
+            if (p.license !== 'Apache-2.0') { console.error('license field:', p.license); process.exit(1) }
             if (p.scripts && p.scripts.prepublishOnly) {
-              console.error('yayın engeli hâlâ duruyor'); process.exit(1)
+              console.error('the publish block is still there'); process.exit(1)
             }
-            console.log('lisans ok:', p.license);
+            console.log('licence ok:', p.license);
           "
-          head -2 .pack/LICENSE | grep -qi 'Apache License' || { echo "LICENSE metni Apache değil"; exit 1; }
+          head -2 .pack/LICENSE | grep -qi 'Apache License' || { echo "the LICENSE text is not Apache"; exit 1; }
 
   # ── translation coverage is a gate, not an intention ────────────────────
   i18n:

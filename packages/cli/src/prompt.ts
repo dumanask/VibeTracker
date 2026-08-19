@@ -36,8 +36,11 @@ export async function confirm(question: string, fallback = false): Promise<boole
   for (;;) {
     const a = (await ask(`${question} ${hint} `)).toLowerCase();
     if (a === '') return fallback;
-    if (a === 'e' || a === 'evet' || a === 'y' || a === 'yes') return true;
-    if (a === 'h' || a === 'hayır' || a === 'hayir' || a === 'n' || a === 'no') return false;
+    // Both languages the interface speaks are accepted, whichever one is
+    // active: somebody running with --lang tr types `e`, and the prompt should
+    // not refuse the word it just showed them.
+    if (a === 'y' || a === 'yes' || a === 'e' || a === 'evet') return true;
+    if (a === 'n' || a === 'no' || a === 'h' || a === 'hayır' || a === 'hayir') return false;
     process.stdout.write(tr('  Type y (yes) or n (no).\n'));
   }
 }

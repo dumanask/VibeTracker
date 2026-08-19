@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: 'Derle ama yayın oluşturma'
+        description: 'Build but do not create a release'
         type: boolean
         default: true
 
@@ -48,15 +48,15 @@ jobs:
       - run: pnpm test
       - name: paketle
         run: node scripts/pack.mjs
-      - name: lisans gerçekten pakette mi
+      - name: the licence really is in the package
         run: |
-          test -f .pack/LICENSE || { echo "LICENSE eksik"; exit 1; }
-          test -f .pack/NOTICE  || { echo "NOTICE eksik";  exit 1; }
+          test -f .pack/LICENSE || { echo "LICENSE is missing"; exit 1; }
+          test -f .pack/NOTICE  || { echo "NOTICE is missing";  exit 1; }
           node -e "
             const p = require('./.pack/package.json');
-            if (p.license !== 'Apache-2.0') { console.error('lisans:', p.license); process.exit(1) }
-            if (p.scripts && p.scripts.prepublishOnly) { console.error('yayın hâlâ engelli'); process.exit(1) }
-            if (Object.keys(p.dependencies || {}).length) { console.error('bağımlılık var'); process.exit(1) }
+            if (p.license !== 'Apache-2.0') { console.error('license:', p.license); process.exit(1) }
+            if (p.scripts && p.scripts.prepublishOnly) { console.error('publishing is still blocked'); process.exit(1) }
+            if (Object.keys(p.dependencies || {}).length) { console.error('there is a dependency'); process.exit(1) }
           "
       # The one check that would have caught the worst bug this package ever
       # had. Sources ship as `.ts` in the repository and Node runs them
@@ -66,7 +66,7 @@ jobs:
       # written; it had simply never run, because the repository had never been
       # pushed. Asserted here too, because a release is the last place to find
       # out.
-      - name: kurulan paket gerçekten açılıyor mu
+      - name: the installed package actually starts
         run: |
           npm pack ./.pack --pack-destination /tmp
           mkdir -p /tmp/probe && cd /tmp/probe && npm init -y > /dev/null
@@ -98,7 +98,7 @@ jobs:
 
       # Tauri's Linux backend is WebKitGTK, and the packagers for .deb and
       # AppImage are separate tools. None of this is needed on the other two.
-      - name: linux bağımlılıkları
+      - name: linux dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -122,21 +122,21 @@ jobs:
       # The icons are generated, not committed as binaries — see
       # scripts/make-icon.mjs for why. So they have to exist before the bundler
       # looks for them.
-      - name: simgeler
+      - name: icons
         run: node scripts/make-icon.mjs
 
       # The runtime that gets bundled is whichever Node this job set up, so the
       # artifact carries the same version the tests just ran against — and, on
       # each platform, that platform's binary. This is the step that cannot be
       # done anywhere but here.
-      - name: çalışma zamanını hazırla
+      - name: stage the runtime
         run: node scripts/desktop-stage.mjs
 
-      - name: derle
+      - name: build
         working-directory: packages/desktop
         run: pnpm exec tauri build ${{ matrix.args }}
 
-      - name: taşınan çalışma zamanı doğru platformun mu
+      - name: the staged runtime belongs to this platform
         shell: bash
         run: |
           node -e "
@@ -144,10 +144,10 @@ jobs:
             const dir = 'packages/desktop/src-tauri/runtime';
             const names = readdirSync(dir);
             const bin = names.find(n => n === 'node' || n === 'node.exe');
-            if (!bin) { console.error('çalışma zamanı yok:', names); process.exit(1) }
+            if (!bin) { console.error('no runtime:', names); process.exit(1) }
             const mb = statSync(dir + '/' + bin).size / 1e6;
             console.log(process.platform, bin, mb.toFixed(1) + ' MB');
-            if (mb < 20) { console.error('çalışma zamanı şüpheli derecede küçük'); process.exit(1) }
+            if (mb < 20) { console.error('the runtime is suspiciously small'); process.exit(1) }
           "
 
       - uses: actions/upload-artifact@v4
@@ -161,44 +161,44 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: yayın taslağı
+    name: draft release
     needs: [npm, desktop]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with: { path: dist }
-      - name: taslak yayın
+      - name: draft release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           files: dist/**/*
           body: |
-            ## Kurulum
+            ## Installing
 
-            **Node kullananlar için** — `npm i -g vibetracker`, sonra `vt init`.
+            **If you have Node** — `npm i -g vibetracker`, then `vt init`.
 
-            **Masaüstü uygulaması** — kendi platformunun paketini indir. Node
-            gerekmiyor: paket kendi çalışma zamanını taşıyor.
+            **The desktop app** — download the package for your platform. Node is
+            not required: the package carries its own runtime.
 
-            ### Bu paketler imzalı değil
+            ### These packages are not signed
 
-            **Windows** — SmartScreen uyarısı gösterecek: "Daha fazla bilgi" →
-            "Yine de çalıştır".
+            **Windows** — SmartScreen will show a warning: "More info" →
+            "Run anyway".
 
-            **macOS** — paketler ne imzalı ne de notarize edilmiş. Eski
-            sürümlerde anlatılan "sağ tık → Aç" yolu macOS 15'ten itibaren
-            çalışmıyor: uygulamayı bir kez açmayı dene, reddedilince
-            **Sistem Ayarları → Gizlilik ve Güvenlik**'e git ve oradaki
-            "Yine de Aç" düğmesine bas.
+            **macOS** — the packages are neither signed nor notarized. The
+            "right click → Open" route described in older guides stopped working
+            with macOS 15: try to open the app once, and when it is refused go to
+            **System Settings → Privacy & Security** and press the
+            "Open Anyway" button there.
 
-            **Linux** — `.deb` WebKitGTK 4.1 istiyor (Ubuntu 22.04+, Debian
-            12+). Daha eski bir dağıtımdaysan `.AppImage` kullan;
-            indirdikten sonra `chmod +x`.
+            **Linux** — the `.deb` needs WebKitGTK 4.1 (Ubuntu 22.04+, Debian
+            12+). On an older distribution use the `.AppImage`; `chmod +x` it
+            after downloading.
 
-            İmzalama sertifikası gerektiriyor ve henüz alınmadı — dürüstçe
-            söylenmesi gereken bir eksik, gizlenecek bir şey değil.
+            Signing needs a certificate and one has not been obtained yet — a gap
+            that should be stated honestly rather than hidden.
 
-            Paketin ne yaptığını doğrulamak istersen: kaynak Apache-2.0 ve
-            uygulamanın taşıdığı kod, derlenmiş değil, okunabilir hâlde
-            `resources/runtime/` altında duruyor.
+            If you want to check what the package does: the source is Apache-2.0
+            and the code the app carries sits readable, not compiled, under
+            `resources/runtime/`.

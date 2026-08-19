@@ -63,11 +63,11 @@ test('a project seen only through a dead session is still offerable', () => {
   const { s, done } = store();
   try {
     s.rememberProjects([
-      { projectId: 'git:aaa', identityKind: 'git_root', displayName: 'Kapalı' },
+      { projectId: 'git:aaa', identityKind: 'git_root', displayName: 'Closed' },
     ]);
     const c = s.candidates();
     assert.equal(c.length, 1);
-    assert.equal(c[0]!.displayName, 'Kapalı');
+    assert.equal(c[0]!.displayName, 'Closed');
   } finally {
     done();
   }

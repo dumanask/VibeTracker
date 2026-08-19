@@ -1,46 +1,46 @@
-name: Yeni ajan desteği
-description: Okunmayan bir ajan CLI'ı ya da editörü
+name: New agent support
+description: An agent CLI or editor that is not being read
 labels: [adapter]
 body:
   - type: markdown
     attributes:
       value: |
-        Bir adaptörün yazılabilmesi için ajanın diske **ne** yazdığını bilmek
-        gerekiyor. Aşağıdaki üç sorunun cevabı, işin çoğu.
+        Writing an adapter takes knowing **what** the agent writes to disk. The
+        answers to the three questions below are most of the work.
 
-        Dosya **içeriği** yapıştırma — istem ve kod taşırlar. İstenen şey
-        şekiller: dizin düzeni, alan adları, kayıt tipleri.
+        Do not paste file **contents** — they carry prompts and code. What is
+        wanted is shapes: the directory layout, field names, record types.
   - type: input
     id: agent
     attributes:
-      label: Ajan
-      description: Adı ve sürümü
+      label: Agent
+      description: Name and version
     validations:
       required: true
   - type: textarea
     id: layout
     attributes:
-      label: Durum dizini
+      label: State directory
       description: |
-        Nerede duruyor, içinde ne var? `ls` çıktısı yeter.
+        Where does it live and what is in it? An `ls` listing is enough.
       render: text
     validations:
       required: true
   - type: textarea
     id: shape
     attributes:
-      label: Kayıt şekilleri
+      label: Record shapes
       description: |
-        JSONL ise satır tipleri ve alan **adları**; SQLite ise
-        `select sql from sqlite_master where type='table'` çıktısı.
-        Değerler değil, adlar.
+        For JSONL, the line types and the field **names**; for SQLite, the
+        output of `select sql from sqlite_master where type='table'`.
+        Names, not values.
       render: text
   - type: checkboxes
     id: signals
     attributes:
-      label: Bulabildiklerin
+      label: What you could find
       options:
-        - label: Bir süreç kimliği (pid) yazıyor
-        - label: Tur başlangıcı/bitişi ayırt edilebiliyor
-        - label: Araç çağrısı ve sonucu eşleştirilebiliyor
-        - label: Çalışma dizini (cwd) kayıtlı
+        - label: It writes a process id (pid)
+        - label: The start and end of a turn can be told apart
+        - label: A tool call can be matched with its result
+        - label: The working directory (cwd) is recorded

@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Güvenlik açığı
+  - name: Security vulnerability
     url: https://github.com/dumanask/VibeTracker/security/advisories/new
-    about: Issue açma. Açıklama kanalı ve 90 günlük süreç için SECURITY.md'ye bak.
+    about: Do not open an issue. See SECURITY.md for the disclosure channel and the 90-day process.

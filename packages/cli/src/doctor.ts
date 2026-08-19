@@ -799,7 +799,7 @@ async function checkOtherAgents(ctx: ScanContext): Promise<Check[]> {
  * and Linux it is the real answer rather than a consolation.
  *
  * Checked here because the failure is otherwise found at the worst moment: a
- * machine with no Chromium-family browser produces "pencere açılamadı" from a
+ * machine with no Chromium-family browser produces "could not open a window" from a
  * command the user ran expecting a window.
  */
 function checkMiniWindow(): Check {

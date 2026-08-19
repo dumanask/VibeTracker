@@ -40,8 +40,8 @@
       "runtime/**/*"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Çok ajanlı vibe coding kontrol merkezi",
-    "longDescription": "Claude Code, Codex, opencode, Cline ve editör ajanlarını tek panoda izler. Hiçbir projeye dosya yazmaz, hiçbir ajanla konuşmaz, ağa çıkmaz.",
+    "shortDescription": "A control room for multi-agent vibe coding",
+    "longDescription": "Watches Claude Code, Codex, opencode, Cline and editor agents on one dashboard. It never writes a file into a project, never talks to an agent, and never goes to the network.",
     "copyright": "Copyright 2026 VibeTracker contributors. Apache-2.0.",
     "licenseFile": "../../../LICENSE",
     "linux": {

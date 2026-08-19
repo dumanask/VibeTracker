@@ -81,7 +81,7 @@ export interface ScanOptions {
    *
    * Supplied only when the user has picked projects by hand. Once picking is
    * an act, the list has to be the user's rather than the process table's: a
-   * project you deliberately added and then closed should read `kapalı`, not
+   * project you deliberately added and then closed should read `off`, not
    * vanish and leave you wondering whether the pick took. In `all` mode there
    * is no pick to honour, so nothing is kept and the board stays "whatever is
    * running" — otherwise every project ever opened would accumulate forever.

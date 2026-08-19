@@ -10,7 +10,7 @@
  * restarts on its own — the watchdog exits rather than hang — so after any long
  * session all three were talking to a daemon that no longer recognised them.
  *
- * The visible symptom was the post-it's chooser saying "proje bulunamadı",
+ * The visible symptom was the sticky note's picker saying "no projects found",
  * because a 401 and an empty list arrived at the same place.
  */
 import { test } from 'node:test';

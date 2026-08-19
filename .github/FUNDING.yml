@@ -1,13 +1,14 @@
-# Sponsorluk bağlantıları. GitHub bunları depo sayfasındaki "Sponsor" düğmesine
-# koyar. Hepsi yorumda: bir hesap açıp adını yazana kadar düğme çıkmasın,
-# çünkü tıklanınca 404 veren bir bağış düğmesi olmamasından kötüdür.
+# Sponsorship links. GitHub turns these into the "Sponsor" button on the
+# repository page. All of them are commented out: no button until an account
+# exists and its name is written here, because a donate button that 404s when
+# clicked is worse than no button at all.
 #
-# Apache-2.0 bağış almayı, sponsorluk kabul etmeyi ve bu kodun üstüne ticari
-# bir ürün satmayı engellemez. Engellediği tek şey, başkalarının aynısını
-# yapmasını engellemek.
+# Apache-2.0 does not prevent taking donations, accepting sponsorship, or
+# selling a commercial product on top of this code. The only thing it prevents
+# is stopping other people from doing the same.
 
-# github: kullanici-adin
-# patreon: kullanici-adin
-# open_collective: proje-adi
-# ko_fi: kullanici-adin
+# github: your-username
+# patreon: your-username
+# open_collective: project-name
+# ko_fi: your-username
 # custom: ['https://...']

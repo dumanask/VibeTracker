@@ -372,7 +372,7 @@ test('saving the chooser sends a change, not a whole selection', async () => {
 /**
  * A list that could not be fetched is not an empty list.
  *
- * The note window said "proje bulunamadı" — an assertion about the user's
+ * The note window said "no projects found" — an assertion about the user's
  * disk — whenever its own request failed, which after any daemon restart was
  * every request it made. The page has the same two states and has to keep them
  * apart too: it falls back to the board, and it has to say that what it is

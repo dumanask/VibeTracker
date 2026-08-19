@@ -1,26 +1,27 @@
-## Ne değişti
+## What changed
 
-<!-- Bir cümle. Hangi dosyaya dokunduğun değil, ne yaptığın. -->
+<!-- One sentence. What you did, not which file you touched. -->
 
-## Neden
+## Why
 
-<!-- Ölçtüysen sayıyı yaz. Bu depodaki yorumların çoğu bir ölçümü kaydediyor. -->
+<!-- If you measured something, give the number. Most comments in this repository record a
+     measurement. -->
 
-## Kontrol listesi
+## Checklist
 
-- [ ] `pnpm typecheck` temiz
-- [ ] `pnpm test` yeşil
-- [ ] Davranış değiştiyse test eklendi
-- [ ] Yeni metin varsa `packages/core/locales/en.json` güncellendi
-      (kapsam testi zaten kırılır, ama buradan hatırlaması kolay)
-- [ ] Commit'ler `-s` ile imzalandı (DCO — bkz. CONTRIBUTING.md)
+- [ ] `pnpm typecheck` is clean
+- [ ] `pnpm test` is green
+- [ ] A test was added if behaviour changed
+- [ ] `packages/core/locales/tr.json` was updated if there is new text
+      (the coverage test breaks anyway, but it is easier to remember from here)
+- [ ] Commits are signed off with `-s` (DCO — see CONTRIBUTING.md)
 
-## Bunlardan birini yaptıysa söyle
+## Say so if it does any of these
 
-- [ ] Bir projeye ya da ajan durum dizinine **yazıyor**
-- [ ] Ağ isteği yapıyor
-- [ ] Serbest metni redaksiyondan geçirmeden saklıyor ya da gösteriyor
-- [ ] Süreç komut satırı okuyor
+- [ ] **Writes** into a project or into an agent state directory
+- [ ] Makes a network request
+- [ ] Stores or displays free text without redacting it
+- [ ] Reads a process command line
 
-<!-- Hepsi "hayır" olmalı. Biri "evet" ise gerekçesi PR açıklamasında olmalı;
-     bunlar ürünün tanımı, tercih değil. -->
+<!-- All of these should be "no". If one is "yes", the reason belongs in the PR description;
+     these are the definition of the product, not preferences. -->

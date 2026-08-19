@@ -477,7 +477,7 @@ function shellQuote(a: string): string {
  * spinner into the middle of the answer — but several of them colour their
  * output whether or not anything is watching, and `opencode` has no flag to
  * turn it off. An escape sequence inside the model's JSON is the difference
- * between a summary and "yanıt şema dışı", so they come off before anything
+ * between a summary and "the answer did not fit the schema", so they come off before anything
  * tries to read the reply.
  */
 function stripAnsi(s: string): string {
