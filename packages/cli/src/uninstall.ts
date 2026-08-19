@@ -295,7 +295,13 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
 }
 
 function label(o: Outcome): string {
-  return { removed: 'silindi', kept: 'korundu', absent: 'yoktu', failed: 'HATA', skipped: tr('skipped') }[o];
+  return {
+    removed: tr('removed'),
+    kept: tr('kept'),
+    absent: tr('was not there'),
+    failed: tr('FAILED'),
+    skipped: tr('skipped'),
+  }[o];
 }
 
 function sizeOf(path: string): string | undefined {

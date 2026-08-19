@@ -317,7 +317,14 @@ test('opencode: a completed turn waits, an unfinished one is busy with its tool'
     assert.equal(done.facts.lastEntryRole, 'assistant');
     assert.deepEqual(done.facts.openTools, []);
     assert.equal(
-      deriveState({ liveness: 'live', facts: done.facts, cpuPct: null, descendants: null, now }).state,
+      deriveState({
+        liveness: 'live',
+        facts: done.facts,
+        cpuPct: null,
+        descendants: null,
+        prevState: null,
+        now,
+      }).state,
       'WAITING_INPUT',
     );
 
@@ -327,7 +334,7 @@ test('opencode: a completed turn waits, an unfinished one is busy with its tool'
     assert.equal(open.facts.lastEntryRole, 'user');
     assert.deepEqual(open.facts.openTools, ['bash']);
     const state = deriveState({
-      liveness: 'live', facts: open.facts, cpuPct: null, descendants: null, now,
+      liveness: 'live', facts: open.facts, cpuPct: null, descendants: null, prevState: null, now,
     });
     assert.equal(state.state, 'BUSY');
     assert.equal(state.subReason, 'tool:bash');

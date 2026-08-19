@@ -185,7 +185,7 @@ test('a command that will not read stdin gets a file, and it does not survive', 
   const script =
     'const fs=require("node:fs");' +
     'const text=fs.readFileSync(process.argv[1],"utf8");' +
-    'if(!text.includes("DATA>>>"))throw new Error("yuk dosyaya yazilmadi");' +
+    'if(!text.includes("DATA>>>"))throw new Error("the payload was not written to the file");' +
     'fs.writeFileSync(process.argv[2],' +
     ANSWER +
     ');fs.writeFileSync(process.argv[3],process.argv[1]);';

@@ -1,4 +1,5 @@
 import {
+  interrupts,
   needsYou,
   type AgentTally,
   type DescendantSummaryLike,
@@ -8,6 +9,7 @@ import {
   type ProcSnapshot,
   type ProjectView,
   type RegistryEntry,
+  type SessionStateName,
   type SessionView,
   type StatusReport,
   type TranscriptFacts,
@@ -69,6 +71,16 @@ export interface ScanOptions {
    * honest outcome — a single scan genuinely cannot see a trend.
    */
   history?: (projectId: string) => { prior: PriorReading | null; activitySince: number } | null;
+  /**
+   * What each session was called on the previous scan.
+   *
+   * Same shape and same reason as `history`: the daemon remembers, a one-shot
+   * `vt status` does not, and without it the derivation simply has no previous
+   * side to apply hysteresis against -- which is correct for a single reading.
+   * It is only ever consulted at the cpu threshold; it can never carry a state
+   * forward on its own.
+   */
+  previousState?: (sessionId: string) => SessionStateName | null;
   /**
    * Which projects the user follows. Absent means all of them.
    *
@@ -457,6 +469,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       facts,
       cpuPct: cpuPctFor(entry.pid),
       descendants,
+      prevState: opts.previousState?.(entry.sessionId) ?? null,
       now,
     });
 
@@ -531,9 +544,11 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
         facts: s.facts,
         // No CPU for these: sampling costs a held poll and only pays off for a
         // session whose pid we know, which is exactly the case where the
-        // transcript has already answered.
+        // transcript has already answered. With no cpu there is no threshold
+        // to sit on, so the previous state has nothing to decide either.
         cpuPct: null,
         descendants: null,
+        prevState: null,
         now,
       });
       const evidence = [...derived.evidence, ...extra];
@@ -655,7 +670,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
         flags: [],
         tracked: true,
         // Filled in below, once every session has been attached.
-        summary: { kind: 'none', waiting: 0, running: 0, live: 0, total: 0, urgency: 0 },
+        summary: { kind: 'none', waiting: 0, blocked: 0, running: 0, live: 0, total: 0, urgency: 0 },
       };
       proj.tracked = opts.isTracked
         ? opts.isTracked(proj.projectId, proj.displayName)
@@ -707,7 +722,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
           sessions: [],
           flags: [],
           tracked: true,
-          summary: { kind: 'none', waiting: 0, running: 0, live: 0, total: 0, urgency: 0 },
+          summary: { kind: 'none', waiting: 0, blocked: 0, running: 0, live: 0, total: 0, urgency: 0 },
         };
         closedProjects.set(ident.projectId, proj);
       }
@@ -726,7 +741,14 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       // cannot — printing the wrong reason for it on the row that shows it is
       // the worst place in the product to have a second opinion.
       const liveness = batch.verdicts.get(entry.pid) ?? 'unknown';
-      const derived = deriveState({ liveness, facts: null, cpuPct: null, descendants: null, now });
+      const derived = deriveState({
+        liveness,
+        facts: null,
+        cpuPct: null,
+        descendants: null,
+        prevState: null,
+        now,
+      });
       proj.sessions.push({
         sessionId: entry.sessionId,
         name: entry.name,
@@ -781,7 +803,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
           sessions: [],
           flags: [],
           tracked: opts.isTracked ? opts.isTracked(ident.projectId, displayName) : true,
-          summary: { kind: 'none', waiting: 0, running: 0, live: 0, total: 0, urgency: 0 },
+          summary: { kind: 'none', waiting: 0, blocked: 0, running: 0, live: 0, total: 0, urgency: 0 },
         });
       }),
     );
@@ -863,6 +885,13 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
     (n, p) => n + p.sessions.filter((s) => needsYou(s.state)).length,
     0,
   );
+  // The subset that is allowed to interrupt someone. Counted here beside the
+  // number it is a subset of, so no surface has to work it out again -- and
+  // work it out differently, which is exactly what had happened.
+  const blockedCount = followed.reduce(
+    (n, p) => n + p.sessions.filter((s) => interrupts(s.state)).length,
+    0,
+  );
 
   // Dialect health. Reported as a capability rather than a warning when it is
   // fine, because "we still understand the format" is a fact worth showing
@@ -902,6 +931,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       projects: followed.length,
       untracked: ordered.length - followed.length,
       needsYou: needsYouCount,
+      blocked: blockedCount,
       ideWindows: ideWindows.filter((w) => w.alive).length,
     },
     // Kept out of `counts` deliberately: that block is the Claude Code

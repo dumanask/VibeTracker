@@ -229,7 +229,7 @@ export class HookIngest {
       case 'StopFailure':
         s.pendingTool = undefined;
         s.lastError = p.error ? truncateReason(p.error) : 'turn failed';
-        this.#set(s, SessionState.Errored, 'stop_failure', `hook:tur hatayla bitti`, now);
+        this.#set(s, SessionState.Errored, 'stop_failure', `hook:the turn ended with an error`, now);
         return;
 
       case 'PreCompact':
@@ -251,7 +251,7 @@ export class HookIngest {
 
       case 'SessionEnd':
         s.ended = safeField(p.reason, 'end');
-        this.#set(s, SessionState.Ended, s.ended, `hook:oturum bitti (${s.ended})`, now);
+        this.#set(s, SessionState.Ended, s.ended, `hook:session ended (${s.ended})`, now);
         return;
 
       default:

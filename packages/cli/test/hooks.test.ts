@@ -118,7 +118,7 @@ test('malformed settings are refused, never overwritten', async () => {
   const s = sandbox(broken);
   try {
     const code = await installHooks({ ...ARGS, settingsPath: s.path });
-    assert.equal(code, 5, 'bozuk dosyada hata kodu dönmeli');
+    assert.equal(code, 5, 'a corrupt file must return an error code');
     assert.equal(readFileSync(s.path, 'utf8'), broken, 'a broken file was modified');
   } finally {
     s.cleanup();
@@ -141,7 +141,7 @@ test('every installed entry carries our marker and our url', async () => {
         }
       }
     }
-    assert.ok(n >= 13, `beklenenden az girdi: ${n}`);
+    assert.ok(n >= 13, `fewer entries than expected: ${n}`);
   } finally {
     s.cleanup();
   }

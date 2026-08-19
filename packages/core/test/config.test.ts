@@ -111,7 +111,7 @@ test('a config file cannot reach Object.prototype', () => {
   // And the front door reports rather than throwing: a broken config must not
   // stop the daemon, it must be said out loud.
   const { issues } = loadConfigText('[__proto__]\nbad = true');
-  assert.ok(issues.length > 0, 'kirletme denemesi sessizce yutuldu');
+  assert.ok(issues.length > 0, 'the pollution attempt was swallowed silently');
   assert.equal(({} as Record<string, unknown>).bad, undefined);
 });
 

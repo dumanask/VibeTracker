@@ -60,6 +60,10 @@ public class Row {
   public string Name = "";
   public string Kind = "none";     // waiting | running | idle | none
   public int Waiting, Running, Live, Total, Urgency;
+  // Of Waiting, the ones allowed to interrupt: a permission gate or an error,
+  // never a finished turn. Drawn nowhere; only spoken. -1 when the daemon is
+  // too old to report it, which silences speech rather than guessing.
+  public int Blocked = -1;
   public double Percent = -1;      // negative means "no honest number"
   public bool Approximate;
   /// <summary>
@@ -1372,12 +1376,14 @@ $note.Add_FormClosing({ Save-State })
 # The window is already the surface you do not have to switch to; speech is
 # the same idea for the seconds you are not looking at the screen either.
 #
-# Three rules keep it from becoming noise. It announces a *transition* into
-# waiting, never a state, so a project blocked for an hour stays silent. It
-# says nothing on the first poll, because everything is a transition when
-# there is nothing to compare against and a restart would otherwise read the
-# whole board aloud. And more than two at once collapses into a count --
-# nobody needs to hear five project names in a row.
+# Four rules keep it from becoming noise. It announces only what is genuinely
+# blocked on the user -- a permission gate or an error -- and never a finished
+# turn, which is how every turn of every agent ends and would have it talking
+# all day. It announces a *transition*, never a state, so a project blocked for
+# an hour stays silent. It says nothing on the first poll, because everything
+# is a transition when there is nothing to compare against and a restart would
+# otherwise read the whole board aloud. And more than two at once collapses
+# into a count -- nobody needs to hear five project names in a row.
 $script:prevWaiting = $null
 # What we ended up able to say, and in which language. Null until the first
 # attempt; @{ engine = 'none' } once we have tried and failed.
@@ -1532,7 +1538,9 @@ function Voice-Notice {
 
 function Announce($rows) {
   $now = @{}
-  foreach ($r in $rows) { $now[$r.Name] = [int]$r.Waiting }
+  # A daemon that does not report the count is skipped entirely rather than
+  # falling back to Waiting: the fallback is the behaviour being fixed.
+  foreach ($r in $rows) { if ($r.Blocked -ge 0) { $now[$r.Name] = [int]$r.Blocked } }
   if ($null -eq $script:prevWaiting) { $script:prevWaiting = $now; return }
   $turned = @()
   foreach ($k in $now.Keys) {
@@ -1629,6 +1637,7 @@ function Refresh {
       if ($s) {
         $row.Kind = [string]$s.kind
         $row.Waiting = [int]$s.waiting; $row.Running = [int]$s.running
+        if ($null -ne $s.blocked) { $row.Blocked = [int]$s.blocked }
         $row.Live = [int]$s.live; $row.Total = [int]$s.total
         $row.Urgency = [int]$s.urgency
         if ($s.leadTitle) { $row.Lead = [string]$s.leadTitle }

@@ -12,6 +12,7 @@
  * running because waiting is the state that costs the user time.
  */
 import {
+  interrupts,
   needsYou,
   type AgentSummary,
   type AgentSummaryKind,
@@ -31,6 +32,7 @@ const DEAD: ReadonlySet<SessionStateName> = new Set<SessionStateName>([
 
 export function summarizeAgents(p: Pick<ProjectView, 'sessions'>): AgentSummary {
   const waiting = p.sessions.filter((s) => needsYou(s.state));
+  const blocked = waiting.filter((s) => interrupts(s.state));
   const running = p.sessions.filter((s) => s.state === 'BUSY');
   const live = p.sessions.filter((s) => !DEAD.has(s.state));
 
@@ -49,6 +51,7 @@ export function summarizeAgents(p: Pick<ProjectView, 'sessions'>): AgentSummary 
   return {
     kind,
     waiting: waiting.length,
+    blocked: blocked.length,
     running: running.length,
     live: live.length,
     total: p.sessions.length,

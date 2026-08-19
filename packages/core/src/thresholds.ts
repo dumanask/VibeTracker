@@ -40,6 +40,24 @@ export const PASSIVE_MULTIPLIER = 1.5;
 export const CPU_BUSY_PCT = 3;
 
 /**
+ * ...and this is what it takes to stop counting as busy again.
+ *
+ * A single line does not survive contact with a real process. A long-lived
+ * agent idles *at* the threshold, not comfortably below it, so a lone 3% line
+ * sampled every three seconds produces BUSY, STALLED, BUSY, STALLED forever --
+ * measured here as 485 crossings in six hours for one session sitting at 2.2%.
+ * Every crossing was a state change, and every state change into STALLED was
+ * an alert.
+ *
+ * Two lines with a gap between them is the standard cure: it takes 3% to be
+ * called busy and a fall below 1% to stop being called busy, so noise inside
+ * the band changes nothing. It costs no latency on a real transition, which is
+ * why this rather than a delay: work that actually starts crosses 3% decisively
+ * and work that actually stops falls to zero.
+ */
+export const CPU_IDLE_PCT = 1;
+
+/**
  * The gap between "assistant finished its text" and "assistant starts the next
  * tool" is routinely 2-8 s. Twenty seconds is comfortably past that and still
  * reads as instant to someone scanning a dashboard.
@@ -55,6 +73,19 @@ export const LOCAL_TOOL_PERMISSION_MS = 30_000;
 
 /** Grace period for a spawned command to actually appear in the process tree. */
 export const SPAWN_GRACE_MS = 15_000;
+
+/**
+ * How long a session has to have been out of an alerting state before entering
+ * it again is treated as news rather than as noise.
+ *
+ * Leaving and re-entering within a few seconds is the signature of a threshold
+ * being sat on, not of a second permission prompt. And this costs nothing real:
+ * `WAITING_PERMISSION` cannot be *detected* until a tool has been open for
+ * SPAWN_GRACE_MS or LOCAL_TOOL_PERMISSION_MS, so a genuine second prompt is
+ * already further away than this window by construction. Approving one prompt
+ * and hitting the next still notifies.
+ */
+export const ALERT_REARM_MS = 20_000;
 
 /**
  * Below this a reading is an inference rather than an observation and must not

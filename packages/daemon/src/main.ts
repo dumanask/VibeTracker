@@ -11,6 +11,7 @@ import {
 import { dataDir, configPath, claudeDir, loadConfig, writeConfig } from '@vibetracker/platform';
 import {
   t,
+  ALERT_REARM_MS,
   MAINTENANCE_INTERVAL_MS,
   redactSnippet,
   tr,
@@ -21,7 +22,7 @@ import {
   type TrackingConfig,
   setCustomPatterns,
 } from '@vibetracker/core';
-import type { StatusReport } from '@vibetracker/shared';
+import { interrupts, type SessionStateName, type StatusReport } from '@vibetracker/shared';
 import { Store, type MaintenanceResult, type StateChange } from './store.ts';
 import { DaemonServer } from './server.ts';
 import { enableFileLog, log } from './log.ts';
@@ -120,6 +121,12 @@ export class Daemon {
   #token = loadOrCreateApiToken();
   #hookToken = loadOrCreateHookToken();
   #ring = new HookRing();
+  /**
+   * The last state we announced for each session, so we do not announce it
+   * again. Bounded by the sessions the daemon has seen and pruned by
+   * maintenance; see `#emitChange` for what it is defending against.
+   */
+  #alerted = new Map<string, string>();
   #momentum = new Momentum();
   #hooks = new HookIngest();
   #oversize = 0;
@@ -284,7 +291,7 @@ export class Daemon {
     // Single instance: if the port is busy, ask who is there.
     const existing = await probeExisting(this.#opts.port);
     if (existing?.ok) {
-      throw new AlreadyRunningError(existing.daemonId ?? 'bilinmiyor', this.#opts.port);
+      throw new AlreadyRunningError(existing.daemonId ?? 'unknown', this.#opts.port);
     }
 
     try {
@@ -620,10 +627,16 @@ export class Daemon {
       // the history-dependent detectors stay quiet rather than guess.
       await this.#refreshTracking();
 
+      // Snapshotted before the scan rather than queried inside it: `apply`
+      // rewrites these rows at the end of this same cycle, so reading them
+      // afterwards would hand the derivation its own output.
+      const prevStates = this.#store.stateMap();
+
       const report = await scan(
         {
           ...this.#scanOpts,
           isTracked: (projectId) => isTracked(this.#tracking, projectId),
+          previousState: (sessionId) => prevStates.get(sessionId) ?? null,
           keepClosed:
             this.#tracking.mode === 'selected'
               ? (projectId) => isTracked(this.#tracking, projectId)
@@ -752,6 +765,14 @@ export class Daemon {
     try {
       this.#hooks.prune();
       this.#momentum.prune(Date.now());
+      // Sessions the last scan no longer saw will never transition again, so
+      // their entry can only grow the map.
+      if (this.#latest) {
+        const seen = new Set(
+          this.#latest.projects.flatMap((p) => p.sessions.map((s) => s.sessionId)),
+        );
+        for (const id of this.#alerted.keys()) if (!seen.has(id)) this.#alerted.delete(id);
+      }
       const result = this.#store.maintain();
       this.#lastMaintenance = { ...result, at: Date.now() };
       if (result.hardCapTriggered) {
@@ -775,10 +796,29 @@ export class Daemon {
   }
 
   #emitChange(c: StateChange): void {
-    // Only transitions that a human would want to know about become alerts.
-    const interesting =
-      c.to === 'WAITING_PERMISSION' || c.to === 'ERRORED' || c.to === 'STALLED';
-    if (interesting) this.#server.broadcast('alert', c);
+    // What may interrupt a person is one rule, in `shared`, read by every
+    // surface. This used to include STALLED, which the dashboard then filtered
+    // out again -- so the daemon's idea of "worth interrupting for" and the
+    // dashboard's disagreed, and each new surface picked one at random.
+    if (!interrupts(c.to as SessionStateName)) return;
+
+    // Once is enough.
+    //
+    // A transition is an edge, and an edge is only worth announcing if the
+    // signal under it is steady. Measured here: two sessions crossed
+    // BUSY/STALLED 485 times in six hours because their cpu sat on a
+    // threshold. The hysteresis in `deriveState` cures that particular noise;
+    // this is the floor under every future source of it, because the cost of
+    // being wrong is asymmetric -- a late notification is one missed
+    // notification, a repeated one teaches the user to ignore all of them.
+    //
+    // `dwellMs` is how long the session spent in the state it just left, so
+    // this reads as: you already heard about this, and it has not been away
+    // from it long enough for coming back to be news.
+    const last = this.#alerted.get(c.sessionId);
+    if (last === c.to && (c.dwellMs ?? Number.POSITIVE_INFINITY) < ALERT_REARM_MS) return;
+    this.#alerted.set(c.sessionId, c.to);
+    this.#server.broadcast('alert', c);
   }
 
   /**

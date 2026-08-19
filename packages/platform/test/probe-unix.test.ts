@@ -66,7 +66,7 @@ test('a process name with spaces and brackets in it does not shift the fields', 
 test('an unparseable stat line is absence, not a wrong answer', () => {
   assert.equal(statFields('no parenthesis here'), null);
   assert.equal(parseStat(1, ''), null);
-  assert.equal(parseStat(1, '1 (x) S'), null, 'starttime yoksa cevap yok');
+  assert.equal(parseStat(1, '1 (x) S'), null, 'no starttime, no answer');
   // No boot time is a real state on a container with a masked /proc/stat: the
   // entry still exists, it just cannot say when it started.
   const t = parseStatTree(4242, STAT, null);

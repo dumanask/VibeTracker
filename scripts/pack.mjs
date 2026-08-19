@@ -197,7 +197,7 @@ const entry = join(here, '..', 'src', 'cli', 'index.js');
 const [major, minor] = process.versions.node.split('.').map(Number);
 if (major < 22 || (major === 22 && minor < 20)) {
   console.error(
-    \`VibeTracker Node 22.20+ gerektiriyor (bulunan: \${process.version}).\\n\` +
+    \`VibeTracker needs Node 22.20 or newer (found: \${process.version}).\\n\` +
       'That version is what it takes to run TypeScript with no build step and\\n' +
       'to use node:sqlite -- anything older cannot start.',
   );

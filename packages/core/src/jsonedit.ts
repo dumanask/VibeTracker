@@ -144,7 +144,7 @@ class Parser {
 
   parseString(): string {
     const t = this.text;
-    if (t[this.pos] !== '"') throw new JsonParseError('dize bekleniyordu', this.pos);
+    if (t[this.pos] !== '"') throw new JsonParseError('expected a string', this.pos);
     let i = this.pos + 1;
     let out = '';
     while (i < t.length) {
@@ -194,7 +194,7 @@ class Parser {
       const keyStart = this.pos;
       const key = this.parseString();
       this.skipTrivia();
-      if (this.text[this.pos] !== ':') throw new JsonParseError('":" bekleniyordu', this.pos);
+      if (this.text[this.pos] !== ':') throw new JsonParseError('expected ":"', this.pos);
       this.pos++;
       this.skipTrivia();
       members.push({ key, keyStart, value: this.parseValue() });
@@ -214,7 +214,7 @@ class Parser {
         this.pos++;
         return { kind: 'object', start, end: this.pos, members };
       }
-      throw new JsonParseError('"," veya "}" bekleniyordu', this.pos);
+      throw new JsonParseError('expected "," or "}"', this.pos);
     }
   }
 
@@ -245,7 +245,7 @@ class Parser {
         this.pos++;
         return { kind: 'array', start, end: this.pos, items };
       }
-      throw new JsonParseError('"," veya "]" bekleniyordu', this.pos);
+      throw new JsonParseError('expected "," or "]"', this.pos);
     }
   }
 }

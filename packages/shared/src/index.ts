@@ -42,6 +42,26 @@ export function needsYou(state: SessionStateName): boolean {
   );
 }
 
+/**
+ * Whether entering this state may interrupt a person -- a toast, a sound, a
+ * badge that demands attention -- as opposed to merely showing up on a board.
+ *
+ * A far narrower set than `needsYou`, and the difference is the whole point.
+ * `WAITING_INPUT` is how every single turn of every agent ends; announcing it
+ * means a notification every time anything finishes anything, which is how
+ * people learn to dismiss notifications without reading them. `STALLED` is a
+ * suspicion by construction (no progress *and* no cpu) and stays advisory.
+ *
+ * Lives here rather than in each surface because it was in each surface: the
+ * dashboard filtered to these two, the daemon broadcast a third, and the
+ * desktop tray notified on any rise of `needsYou` -- so the same event
+ * interrupted you once, twice or not at all depending on which window you had
+ * open.
+ */
+export function interrupts(state: SessionStateName): boolean {
+  return state === SessionState.WaitingPermission || state === SessionState.Errored;
+}
+
 // ── process liveness ────────────────────────────────────────────────────
 /**
  * `reused` is a first-class value, not an error: the PID exists but belongs to
@@ -392,6 +412,12 @@ export interface AgentSummary {
   kind: AgentSummaryKind;
   /** Sessions blocked on the user. */
   waiting: number;
+  /**
+   * Of those, the ones that may interrupt -- see `interrupts`. Absent on
+   * reports older than 0.2. `waiting` is what the board draws; this is what is
+   * allowed to make a sound.
+   */
+  blocked?: number;
   /** Sessions doing work right now. */
   running: number;
   /** Sessions whose process is still alive, running or not. */
@@ -468,6 +494,13 @@ export interface StatusReport {
     /** Projects seen but not followed — the pool `vt projects add` draws from. */
     untracked: number;
     needsYou: number;
+    /**
+     * Of those, the ones that are actually blocked on you -- see `interrupts`.
+     * Separate from `needsYou` because the two drive different things: this
+     * one is allowed to interrupt, that one only fills the board. Absent on
+     * reports older than 0.2.
+     */
+    blocked?: number;
     ideWindows: number;
   };
   /**

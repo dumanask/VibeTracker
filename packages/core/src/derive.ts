@@ -8,6 +8,7 @@ import {
 } from '@vibetracker/shared';
 import {
   CPU_BUSY_PCT,
+  CPU_IDLE_PCT,
   LOCAL_TOOL_PERMISSION_MS,
   RECENT_WRITE_MS,
   SPAWN_GRACE_MS,
@@ -23,6 +24,15 @@ export interface DeriveInput {
   cpuPct: number | null;
   /** Descendant summary of the session process, or null when unavailable. */
   descendants: DescendantSummaryLike | null;
+  /**
+   * What this session was called on the previous pass, or null on the first.
+   *
+   * Only the cpu test reads it, and only to pick which side of the hysteresis
+   * band applies. It is deliberately not a fallback or a prior: nothing here
+   * carries a state forward because it is convenient, and a session with no
+   * history is derived exactly as it is today.
+   */
+  prevState: SessionStateName | null;
   now: number;
 }
 
@@ -51,7 +61,7 @@ export interface DerivedState {
  *    live for the whole session, so "has children" alone means nothing).
  */
 export function deriveState(input: DeriveInput): DerivedState {
-  const { liveness, facts, cpuPct, descendants, now } = input;
+  const { liveness, facts, cpuPct, descendants, prevState, now } = input;
   const evidence: string[] = [];
 
   if (liveness === 'dead') {
@@ -72,7 +82,11 @@ export function deriveState(input: DeriveInput): DerivedState {
 
   const lastActivity = Math.max(facts.lastEntryAt ?? 0, facts.mtimeMs);
   const ageMs = sinceMs(now, lastActivity);
-  const busyCpu = cpuPct !== null && cpuPct >= CPU_BUSY_PCT;
+  // Which line to measure against depends on which side we were on: it takes
+  // CPU_BUSY_PCT to be called busy, and a fall below CPU_IDLE_PCT to stop
+  // being called busy. See the thresholds for what a single line did.
+  const cpuFloor = prevState === SessionState.Busy ? CPU_IDLE_PCT : CPU_BUSY_PCT;
+  const busyCpu = cpuPct !== null && cpuPct >= cpuFloor;
   const openTool = facts.openTools[0];
 
   if (openTool) {
@@ -178,6 +192,6 @@ export function deriveState(input: DeriveInput): DerivedState {
     return { state: SessionState.Stalled, subReason: 'thinking', confidence: 0.6, evidence };
   }
 
-  evidence.push(t`tail:last=${facts.lastEntryRole ?? 'bilinmiyor'}, silent for ${fmtAge(ageMs)}`);
+  evidence.push(t`tail:last=${facts.lastEntryRole ?? 'unknown'}, silent for ${fmtAge(ageMs)}`);
   return { state: SessionState.Busy, subReason: 'thinking', confidence: 0.5, evidence };
 }

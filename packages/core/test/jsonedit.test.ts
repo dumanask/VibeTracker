@@ -75,7 +75,7 @@ test('a trailing comma is tolerated rather than fatal', () => {
 test('malformed JSON reports an offset instead of guessing', () => {
   try {
     parseWithPositions('{ "a": }');
-    assert.fail('hata bekleniyordu');
+    assert.fail('an error was expected');
   } catch (e) {
     assert.ok(e instanceof JsonParseError);
     assert.ok((e as JsonParseError).offset > 0);

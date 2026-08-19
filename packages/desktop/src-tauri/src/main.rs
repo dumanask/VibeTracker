@@ -48,6 +48,12 @@ struct Runtime {
 struct Counts {
     #[serde(rename = "needsYou")]
     needs_you: u32,
+    /// The subset that is actually blocked on the user. Absent from daemons
+    /// older than 0.2, and absent is not zero: falling back to `needs_you`
+    /// there would be the old behaviour, so it falls back to *no* count and
+    /// this build simply does not announce against an old daemon.
+    #[serde(default)]
+    blocked: Option<u32>,
 }
 
 #[derive(serde::Deserialize)]
@@ -175,13 +181,13 @@ fn runtime_paths(app: &AppHandle) -> Option<(PathBuf, PathBuf)> {
 fn spawn_daemon(app: &AppHandle) -> Option<Child> {
     if let Some(rt) = read_runtime() {
         if health(&rt).is_some() {
-            log("daemon zaten yanit veriyor, baslatilmadi");
+            log("a daemon is already answering; not starting another");
             return None;
         }
     }
     match run_cli(app, &["daemon"]) {
         Some(c) => {
-            log(&format!("daemon baslatildi pid={}", c.id()));
+            log(&format!("daemon started, pid={}", c.id()));
             Some(c)
         }
         None => {
@@ -189,7 +195,7 @@ fn spawn_daemon(app: &AppHandle) -> Option<Child> {
             // that cannot start the thing it supervises, and says nothing
             // about it, is indistinguishable from a healthy one -- and the
             // symptom is a tray icon reporting nothing at all, for ever.
-            log("daemon BASLATILAMADI");
+            log("the daemon could NOT be started");
             None
         }
     }
@@ -210,13 +216,13 @@ fn run_cli(app: &AppHandle, args: &[&str]) -> Option<Child> {
             .path()
             .resource_dir()
             .map(|d| d.join("runtime").display().to_string())
-            .unwrap_or_else(|_| "(resource_dir yok)".into());
-        log(&format!("calisma zamani bulunamadi: {base}"));
+            .unwrap_or_else(|_| "(no resource_dir)".into());
+        log(&format!("no runtime found: {base}"));
         return None;
     };
     // Written down, because a wrong one produces a child that dies before it
     // can say anything and a tray that reports nothing for ever.
-    log(&format!("calistiriliyor: node={} entry={} {args:?}", node.display(), entry.display()));
+    log(&format!("starting: node={} entry={} {args:?}", node.display(), entry.display()));
     let mut cmd = Command::new(node);
     cmd.arg("--no-warnings=ExperimentalWarning").arg(&entry);
     for a in args {
@@ -266,7 +272,7 @@ fn spawn_it(mut cmd: Command) -> Option<Child> {
     match cmd.spawn() {
         Ok(c) => Some(c),
         Err(e) => {
-            log(&format!("calistirilamadi: {e}"));
+            log(&format!("could not be started: {e}"));
             None
         }
     }
@@ -420,7 +426,7 @@ fn open_panel(app: &AppHandle) {
         if w.is_visible().unwrap_or(false) {
             return;
         }
-        log("panel gosterilemedi, yeniden kuruluyor");
+        log("the panel would not show; rebuilding it");
         let _ = w.destroy();
     }
     if OPENING.swap(true, Ordering::SeqCst) {
@@ -576,7 +582,7 @@ fn main() {
                             .unwrap_or(true);
                         if quiet >= 3 && cool {
                             last_restart = Some(std::time::Instant::now());
-                            log(&format!("daemon {quiet} tur sessiz, yeniden baslatiliyor"));
+                            log(&format!("daemon silent for {quiet} rounds; restarting it"));
                             if let Some(c) = spawn_daemon(&supervisor) {
                                 if let Ok(mut slot) = child_for_poll.lock() {
                                     // Whatever was there is gone -- that is why
@@ -596,28 +602,42 @@ fn main() {
                     let n = ov.counts.needs_you;
                     let _ = tx.send(n);
 
-                    // A *transition* into waiting, never a state. Announcing the
+                    // The badge counts everything waiting; the notification does
+                    // not. `needs_you` includes WAITING_INPUT, which is how every
+                    // turn of every agent ends -- notifying on it meant a toast
+                    // each time anything finished anything, all day, which is how
+                    // a notification becomes something people switch off. Only
+                    // what is genuinely blocked on the user interrupts them, and
+                    // the daemon decides which that is (`interrupts`) so the tray,
+                    // the dashboard and the sticky note cannot disagree.
+                    let blocked = ov.counts.blocked;
+
+                    // A *transition* into blocked, never a state. Announcing the
                     // state would mean a notification every three seconds for as
-                    // long as anything was blocked, which is how a notification
-                    // becomes something people turn off. And nothing at all on
-                    // the first reading: with nothing to compare against,
-                    // everything looks like a transition, so a restart would
-                    // otherwise announce the whole board.
-                    if let Some(before) = prev {
-                        if n > before {
+                    // long as anything was blocked. And nothing at all on the
+                    // first reading: with nothing to compare against, everything
+                    // looks like a transition, so a restart would otherwise
+                    // announce the whole board.
+                    if let (Some(before), Some(now)) = (prev, blocked) {
+                        if now > before {
                             let _ = handle
                                 .notification()
                                 .builder()
                                 .title("VibeTracker")
-                                .body(if n == 1 {
+                                .body(if now == 1 {
                                     "An agent is waiting for you".to_string()
                                 } else {
-                                    format!("{n} agents are waiting for you")
+                                    format!("{now} agents are waiting for you")
                                 })
                                 .show();
                         }
                     }
-                    prev = Some(n);
+                    // Left untouched by a daemon that does not report the count,
+                    // so the first daemon that does is compared against a real
+                    // previous reading rather than against nothing.
+                    if let Some(now) = blocked {
+                        prev = Some(now);
+                    }
                 }
             });
 
@@ -676,7 +696,7 @@ fn main() {
                 api.prevent_close();
                 let _ = window.hide();
                 if window.is_visible().unwrap_or(false) {
-                    log(&format!("gizlenemedi, kapatiliyor: {}", window.label()));
+                    log(&format!("could not be hidden, closing instead: {}", window.label()));
                     let _ = window.destroy();
                 }
             }

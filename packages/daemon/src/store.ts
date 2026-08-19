@@ -16,6 +16,7 @@ import {
   CANDIDATE_LIMIT,
   type DigestView,
   type ProjectView,
+  type SessionStateName,
   type SessionView,
   type StatusReport,
 } from '@vibetracker/shared';
@@ -511,6 +512,20 @@ export class Store {
       throw err;
     }
     return changes;
+  }
+
+  /**
+   * What each session was called last time, for the cpu hysteresis.
+   *
+   * Read before the scan, never after: `apply` overwrites these rows, so
+   * asking afterwards would hand the next pass its own answer.
+   */
+  stateMap(): Map<string, SessionStateName> {
+    const rows = this.#db.prepare('SELECT session_id, state FROM session_state').all() as Array<{
+      session_id: string;
+      state: string;
+    }>;
+    return new Map(rows.map((r) => [r.session_id, r.state as SessionStateName]));
   }
 
   /** When each session entered its current state, for dwell timers. */

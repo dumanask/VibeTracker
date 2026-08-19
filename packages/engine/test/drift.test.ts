@@ -370,7 +370,7 @@ test('the provenance names the same numerator the percentage came from', async (
     const r = await readProjectProgress(root, { now: NOW });
     const said = say(r.provenance!);
     const m = /([\d.]+)\/([\d.]+)/.exec(said);
-    assert.ok(m, `beklenen pay/payda: ${said}`);
+    assert.ok(m, `expected numerator/denominator: ${said}`);
     assert.equal(Math.round((Number(m[1]) / Number(m[2])) * 100), r.percent);
     // And the half-credit survives to the screen rather than being rounded.
     assert.match(said, /1\.5\/10/);

@@ -207,7 +207,7 @@ test('a secret in any hook field is redacted before it is kept', () => {
   ]);
   const dump = JSON.stringify(h.get(SID) ?? {});
   assert.ok(!dump.includes('sk-ant-api03'), `hook alanindaki sir tutuldu: ${dump}`);
-  assert.ok(dump.includes('«redacted:'), 'redaksiyon hic calismamis');
+  assert.ok(dump.includes('«redacted:'), 'redaction never ran at all');
 
   const v = view({});
   h.overlay(v);

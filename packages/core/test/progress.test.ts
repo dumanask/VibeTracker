@@ -152,7 +152,7 @@ test('the extractor ignores comparison ticks even inside a real plan', () => {
 `;
   const r = analyzeDocument('gelistirme-plani.md', mixed);
   const table = r.items.filter((i) => i.extractor === 'table');
-  assert.equal(table.length, 8, `durum sütunundan 8 madde beklendi, ${table.length} geldi`);
+  assert.equal(table.length, 8, `expected 8 items from the status column, got ${table.length}`);
   assert.equal(r.percent.counts.done, 3, 'only the ticks in the status column count');
   assert.equal(r.percent.percent, 38);
 });

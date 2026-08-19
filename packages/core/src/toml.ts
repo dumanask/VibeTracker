@@ -240,7 +240,7 @@ bad = true')` returned ok, its own result
   #assignment(table: TomlTable, scope: string): void {
     const path = this.#keyPath();
     this.#skipInline();
-    if (this.#s[this.#i] !== '=') throw this.#err("anahtardan sonra '=' bekleniyor");
+    if (this.#s[this.#i] !== '=') throw this.#err("expected '=' after the key");
     this.#i++;
     this.#skipInline();
     const value = this.#value();
@@ -448,7 +448,7 @@ bad = true')` returned ok, its own result
         this.#i++;
         return out;
       }
-      throw this.#err("dizide ',' veya ']' bekleniyor");
+      throw this.#err("expected ',' or ']' in the array");
     }
   }
 

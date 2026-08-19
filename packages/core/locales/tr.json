@@ -868,5 +868,9 @@
   "{0} project": "{0} proje",
   "{0} session waiting on you": "{0} oturum seni bekliyor",
   "{0} record": "{0} kayıt",
-  " · {0} commit after it was called done": " · bitti denildikten sonra {0} commit"
+  " · {0} commit after it was called done": " · bitti denildikten sonra {0} commit",
+  "removed": "silindi",
+  "kept": "korundu",
+  "was not there": "yoktu",
+  "FAILED": "HATA"
 }
