@@ -324,7 +324,7 @@ async function post(
   try {
     return await res.json();
   } catch {
-    throw new ProviderError('yanıt JSON değil', 'shape');
+    throw new ProviderError('the answer is not JSON', 'shape');
   }
 }
 
@@ -353,7 +353,7 @@ async function chatAnthropic(cfg: ProviderConfig, req: ChatRequest): Promise<Cha
     .filter((c) => c.type === 'text')
     .map((c) => str(c.text))
     .join('');
-  if (!text) throw new ProviderError('boş yanıt', 'shape');
+  if (!text) throw new ProviderError('empty answer', 'shape');
   return {
     text,
     inputTokens: num(b.usage?.input_tokens),
@@ -395,7 +395,7 @@ async function chatOpenAI(cfg: ProviderConfig, req: ChatRequest): Promise<ChatRe
     model?: unknown;
   };
   const text = str(b.choices?.[0]?.message?.content);
-  if (!text) throw new ProviderError('boş yanıt', 'shape');
+  if (!text) throw new ProviderError('empty answer', 'shape');
   return {
     text,
     inputTokens: num(b.usage?.prompt_tokens),
@@ -429,7 +429,7 @@ async function chatOllama(cfg: ProviderConfig, req: ChatRequest): Promise<ChatRe
     model?: unknown;
   };
   const text = str(b.message?.content);
-  if (!text) throw new ProviderError('boş yanıt', 'shape');
+  if (!text) throw new ProviderError('empty answer', 'shape');
   return {
     text,
     inputTokens: num(b.prompt_eval_count),
@@ -513,7 +513,7 @@ async function runCommand(
   // exit and a localised "is not recognized" line instead of ENOENT. That
   // reads as "the model refused" when it means "you have not installed this".
   if (!whichCommand(command)) {
-    throw new ProviderError(`"${command}" bulunamadı — kurulu mu, PATH'te mi?`, 'config');
+    throw new ProviderError(`"${command}" not found — is it installed and on PATH?`, 'config');
   }
   const useShell = process.platform === 'win32';
 
@@ -565,7 +565,7 @@ async function runCommand(
     const timer = setTimeout(() => {
       killTree(child.pid);
       child.kill();
-      finish(() => reject(new ProviderError(`zaman aşımı (${Math.round(timeoutMs / 1000)} sn)`, 'network')));
+      finish(() => reject(new ProviderError(`timed out after ${Math.round(timeoutMs / 1000)} s`, 'network')));
     }, timeoutMs);
     const onAbort = (): void => {
       killTree(child.pid);
@@ -587,7 +587,7 @@ async function runCommand(
       finish(() =>
         reject(
           new ProviderError(
-            enoent ? `"${command}" bulunamadı — kurulu mu, PATH'te mi?` : `${command}: ${e.message}`,
+            enoent ? `"${command}" not found — is it installed and on PATH?` : `${command}: ${e.message}`,
             'config',
           ),
         ),
@@ -632,7 +632,7 @@ function usefulTail(text: string): string {
 
 function cliFailed(command: string, r: CommandResult): ProviderError {
   const tail = usefulTail(r.stderr);
-  return new ProviderError(`${command} çıkış kodu ${r.code}${tail ? ': ' + tail : ''}`, 'http');
+  return new ProviderError(`${command} exited with ${r.code}${tail ? ': ' + tail : ''}`, 'http');
 }
 
 /**
@@ -721,7 +721,7 @@ async function chatPreset(
       // reports "exit code 1" and nothing else to whoever has to fix it.
       const why = usefulTail(r.stdout + '\n' + r.stderr);
       throw new ProviderError(
-        `${preset.program} çıkış kodu ${r.code}${why ? ': ' + why : ''}`,
+        `${preset.program} exited with ${r.code}${why ? ': ' + why : ''}`,
         'http',
       );
     }
@@ -742,7 +742,7 @@ async function chatPreset(
       // program said on the way is the only thing left to report.
       const why = usefulTail(r.stderr);
       throw new ProviderError(
-        why ? `${preset.program}: ${why}` : 'boş yanıt',
+        why ? `${preset.program}: ${why}` : 'empty answer',
         why ? 'http' : 'shape',
       );
     }
@@ -789,7 +789,7 @@ async function chatCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply
   const command = (cfg.command ?? '').trim();
   if (!command) {
     throw new ProviderError(
-      'çalıştırılacak komut yazılmamış — config dosyasında [digest] command ayarla',
+      'no command to run — set [digest] command in the config file',
       'config',
     );
   }
@@ -814,10 +814,10 @@ async function chatCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply
       try {
         text = readFileSync(outputFile, 'utf8');
       } catch {
-        throw new ProviderError(`{output_file} yazılmadı: ${outputFile}`, 'shape');
+        throw new ProviderError(`{output_file} was not written: ${outputFile}`, 'shape');
       }
     }
-    if (!text.trim()) throw new ProviderError('boş yanıt', 'shape');
+    if (!text.trim()) throw new ProviderError('empty answer', 'shape');
     return { text, model: cfg.model || command };
   });
 }
@@ -825,7 +825,7 @@ async function chatCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply
 export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
   switch (cfg.provider) {
     case 'off':
-      throw new ProviderError('LLM kapalı', 'config');
+      throw new ProviderError('the LLM is off', 'config');
     case 'anthropic':
       return await chatAnthropic(cfg, req);
     case 'openai':
@@ -837,7 +837,7 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
     default: {
       const preset = presetFor(cfg.provider);
       if (preset) return await chatPreset(preset, cfg, req);
-      throw new ProviderError('bilinmeyen sağlayıcı', 'unsupported');
+      throw new ProviderError('unknown provider', 'unsupported');
     }
   }
 }

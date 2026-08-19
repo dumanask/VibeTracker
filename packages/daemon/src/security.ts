@@ -67,11 +67,11 @@ export interface GuardResult {
 }
 
 export function guard(req: IncomingMessage, url: URL, port: number, token: string): GuardResult {
-  if (!isLoopback(req)) return { ok: false, status: 403, reason: tr('loopback dışı') };
-  if (!hostAllowed(req, port)) return { ok: false, status: 403, reason: tr('Host başlığı reddedildi') };
+  if (!isLoopback(req)) return { ok: false, status: 403, reason: tr('not loopback') };
+  if (!hostAllowed(req, port)) return { ok: false, status: 403, reason: tr('Host header refused') };
   if (!originAllowed(req, port)) return { ok: false, status: 403, reason: 'Origin reddedildi' };
   if (!tokenMatches(extractToken(req, url), token)) {
-    return { ok: false, status: 401, reason: tr('token geçersiz') };
+    return { ok: false, status: 401, reason: tr('invalid token') };
   }
   return { ok: true };
 }

@@ -229,7 +229,7 @@ test('a preset that is not installed says so instead of throwing a stack', async
       (e: unknown) => {
         assert.ok(e instanceof ProviderError);
         assert.equal(e.kind, 'config');
-        assert.match(e.message, /bulunamadı|PATH/);
+        assert.match(e.message, /not found|PATH/);
         return true;
       },
     );

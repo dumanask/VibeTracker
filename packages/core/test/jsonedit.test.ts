@@ -32,7 +32,7 @@ test('comments and blank lines survive an edit', () => {
 
   assert.ok(out.includes('// kişisel ayarlar — buna dokunulmamalı'));
   assert.ok(out.includes('/* blok yorum */'));
-  assert.ok(out.includes('\n\n'), 'boş satır korunmalı');
+  assert.ok(out.includes('\n\n'), 'the blank line must survive');
   assert.match(out, /"effortLevel": "max",\n\s+"hooks": \{\}/);
 });
 
@@ -114,8 +114,8 @@ test('removing a member keeps the surrounding object valid', () => {
     const key = name === 'son' ? 'b' : 'a';
     const out = applySplices(src, [removeMember(src, root, key)!]);
     const parsed = JSON.parse(out) as Record<string, number>;
-    assert.equal(parsed[key], undefined, `${name}: ${key} kalmamalı`);
-    assert.doesNotThrow(() => parseWithPositions(out), `${name} sonrası geçerli kalmalı`);
+    assert.equal(parsed[key], undefined, `${name}: ${key} should be gone`);
+    assert.doesNotThrow(() => parseWithPositions(out), `still valid after ${name}`);
   }
 });
 

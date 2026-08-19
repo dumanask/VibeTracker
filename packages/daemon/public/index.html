@@ -524,12 +524,12 @@
 <div class="minibar" id="minibar">
   <span id="miniCount"></span>
   <span class="sp"></span>
-  <a href="#" id="miniFull" data-tr="tam görünüm">tam görünüm</a>
+  <a href="#" id="miniFull" data-tr="full view">full view</a>
 </div>
 <div class="wrap">
   <header>
     <h1>VibeTracker</h1>
-    <span class="conn" id="conn" data-tr="bağlanıyor…">bağlanıyor…</span>
+    <span class="conn" id="conn" data-tr="connecting…">connecting…</span>
   </header>
   <div class="meta" id="meta"></div>
 
@@ -539,32 +539,32 @@
   <div id="warnings"></div>
 
   <div id="waitingWrap" hidden>
-    <h2 data-tr="Seni bekleyenler">Seni bekleyenler</h2>
+    <h2 data-tr="Waiting on you">Waiting on you</h2>
     <div class="waiting" id="waiting"></div>
   </div>
 
   <div id="listView">
-    <h2 data-tr="Projeler">Projeler</h2>
+    <h2 data-tr="Projects">Projects</h2>
     <div class="plist" id="projects"></div>
     <div class="pickwrap">
-      <button class="backbtn" id="pickToggle" data-tr="izlenecekleri seç">izlenecekleri seç</button>
+      <button class="backbtn" id="pickToggle" data-tr="choose what to track">choose what to track</button>
       <div class="pick" id="pick" hidden></div>
     </div>
     <div class="pickwrap">
-      <button class="backbtn" id="llmToggle" data-tr="LLM özeti — hangi model">LLM özeti — hangi model</button>
+      <button class="backbtn" id="llmToggle" data-tr="LLM summary — which model">LLM summary — which model</button>
       <div class="pick llm" id="llm" hidden></div>
     </div>
   </div>
 
   <div id="detailView" hidden>
-    <button class="backbtn" id="back" data-tr="← tüm projeler">← tüm projeler</button>
+    <button class="backbtn" id="back" data-tr="← all projects">← all projects</button>
     <div id="detail"></div>
   </div>
 
   <footer>
-    <span data-tr="Canlı — sunucu itiyor, sayfa yenilemeye gerek yok.">Canlı — sunucu itiyor, sayfa yenilemeye gerek yok.</span>
-    <span data-tr="VibeTracker hiçbir projene yazmaz ve hiçbir ajanla konuşmaz.">VibeTracker hiçbir projene yazmaz ve hiçbir ajanla konuşmaz.</span>
-    <span data-tr="Anthropic, OpenAI, Google, Microsoft veya Cursor ile ilişkili değildir.">Anthropic, OpenAI, Google, Microsoft veya Cursor ile ilişkili değildir.</span>
+    <span data-tr="Live — the server pushes; no need to refresh.">Live — the server pushes; no need to refresh.</span>
+    <span data-tr="VibeTracker never writes to your projects and never talks to an agent.">VibeTracker never writes to your projects and never talks to an agent.</span>
+    <span data-tr="Not affiliated with Anthropic, OpenAI, Google, Microsoft or Cursor.">Not affiliated with Anthropic, OpenAI, Google, Microsoft or Cursor.</span>
   </footer>
 </div>
 
@@ -629,12 +629,12 @@ const GLYPH = { STARTING:'◌', BUSY:'▶', WAITING_PERMISSION:'●', WAITING_IN
 // `9s 36dk`, which reads as nine seconds. They are looked up rather than
 // translated as whole strings — an age appears on nearly every line, and a
 // catalog entry per duration would be thousands of keys for four words.
-const U = { s: tr('sn'), m: tr('dk'), h: tr('sa'), d: tr('g') };
+const U = { s: tr('s'), m: tr('m'), h: tr('h'), d: tr('d') };
 
 // Turkish writes the sign first (%99), English last (99%). The number is the
 // message here, so the sign has to move around it rather than be a catalog
 // entry of its own.
-const PCT_FIRST = tr('%{0}') !== '%{0}';
+const PCT_FIRST = tr('{0}%') !== '%{0}';
 /**
  * The width of a lit run of segments.
  *
@@ -686,8 +686,8 @@ function chip(s) {
   const unsure = s.confidence < CONFIDENT;
   const tool = s.openTools?.[0] ? ' ' + esc(s.openTools[0]) : '';
   const label = esc(s.state) + (unsure ? '?' : '') + tool;
-  const how = s.hooked ? tr('hook (ölçüldü)') : tr('pasif (çıkarım)');
-  return `<span class="chip s-${esc(s.state)}${unsure?' unsure':''}" title="${tr('güven')} ${s.confidence.toFixed(2)} · ${how}">${label}</span>`;
+  const how = s.hooked ? tr('hook (measured)') : tr('passive (inferred)');
+  return `<span class="chip s-${esc(s.state)}${unsure?' unsure':''}" title="${tr('confidence')} ${s.confidence.toFixed(2)} · ${how}">${label}</span>`;
 }
 
 // A measured state and an inferred one must never look the same. The dot marks
@@ -718,13 +718,13 @@ function sessionName(s) {
 function agentBadge(s) {
   const kind = s.agentKind;
   if (!kind || kind === 'claude-code') return '';
-  return `<span class="agent" title="${tr('bu oturumu okuyan adaptör')}">${esc(kind)}</span>`;
+  return `<span class="agent" title="${tr('the adapter that read this session')}">${esc(kind)}</span>`;
 }
 
 function precision(s) {
   return s.hooked
-    ? `<span class="prec hooked" title="${tr('durum hook olaylarından geliyor — ölçüm')}">◆</span>`
-    : `<span class="prec passive" title="${tr('durum transcript ve süreç ağacından çıkarıldı — tahmin')}">◇</span>`;
+    ? `<span class="prec hooked" title="${tr('state comes from hook events — measured')}">◆</span>`
+    : `<span class="prec passive" title="${tr('state inferred from the transcript and process tree — a guess')}">◇</span>`;
 }
 
 /**
@@ -787,7 +787,7 @@ function progressRow(p, digest) {
   const nextText = p.nextAction || (digest && digest.nextAction) || '';
   const fromModel = !p.nextAction && nextText;
   const next = nextText
-    ? `<div class="prov${fromModel ? ' guess' : ''}">${t`sonraki: ${esc(nextText.slice(0, 160))}`}</div>` : '';
+    ? `<div class="prov${fromModel ? ' guess' : ''}">${t`next: ${esc(nextText.slice(0, 160))}`}</div>` : '';
   return `<div class="prog">${bits.join('')}</div>${next}`;
 }
 
@@ -812,25 +812,25 @@ function digestBlock(d) {
   }
   if (d.summary) rows.push(`<div class="dg-sum">${esc(d.summary)}</div>`);
   if (d.percentEstimate !== null && d.percentEstimate !== undefined) {
-    rows.push(`<div class="dg-line"><b>${tr('ilerleme')}</b> ~%${esc(String(d.percentEstimate))}
+    rows.push(`<div class="dg-line"><b>${tr('progress')}</b> ~%${esc(String(d.percentEstimate))}
       <span class="dg-kind">${esc(d.percentBasis)} · ${esc(d.confidence)}</span></div>`);
   }
-  if (d.nextAction) rows.push(`<div class="dg-line"><b>${tr('sonraki')}</b> ${esc(d.nextAction)}</div>`);
-  if (d.blocker) rows.push(`<div class="dg-line dg-bad"><b>${tr('engel')}</b> ${esc(d.blocker)}</div>`);
-  if (d.stallReason) rows.push(`<div class="dg-line"><b>${tr('durgunluk')}</b> ${esc(d.stallReason)}</div>`);
+  if (d.nextAction) rows.push(`<div class="dg-line"><b>${tr('next')}</b> ${esc(d.nextAction)}</div>`);
+  if (d.blocker) rows.push(`<div class="dg-line dg-bad"><b>${tr('blocker')}</b> ${esc(d.blocker)}</div>`);
+  if (d.stallReason) rows.push(`<div class="dg-line"><b>${tr('stalled')}</b> ${esc(d.stallReason)}</div>`);
   for (const c of d.conflicts || []) rows.push(`<div class="dg-line dg-warn">${esc(c)}</div>`);
   for (const r of d.riskFlags || []) rows.push(`<div class="dg-line dg-warn">${esc(r)}</div>`);
   const ev = (d.evidence || []).map(e => `${e.kind}: ${e.ref}`).join(' · ');
   return `<div class="digest">
-    <div class="dg-head">${tr('LLM özeti')}
+    <div class="dg-head">${tr('LLM summary')}
       <span class="dg-kind">${esc(d.provider)}${d.model ? ' · ' + esc(d.model) : ''} · ${esc(fmtAge(Date.now() - d.atMs))}</span></div>
     ${rows.join('')}
-    ${ev ? `<div class="dg-ev" title="${esc(ev)}">${tr('kanıt')}: ${esc(ev.slice(0, 200))}</div>` : ''}
+    ${ev ? `<div class="dg-ev" title="${esc(ev)}">${tr('evidence')}: ${esc(ev.slice(0, 200))}</div>` : ''}
   </div>`;
 }
 
 function subagentBadge(s) {
-  return s.subagents ? `<span class="sub" title="${tr('çalışan alt-ajan')}">⑂${s.subagents}</span>` : '';
+  return s.subagents ? `<span class="sub" title="${tr('running subagents')}">⑂${s.subagents}</span>` : '';
 }
 
 // Dwell is measured from when the state began, not from the last transcript
@@ -852,10 +852,10 @@ function render() {
   renderLoad();
 
   document.getElementById('stats').innerHTML = [
-    [tr('canlı oturum'), c.live, false],
-    [tr('kayıt'), c.registryEntries, false],
-    [tr('ölü'), c.dead, false],
-    [tr('PID yeniden kullanım'), c.reused, c.reused > 0],
+    [tr('live sessions'), c.live, false],
+    [tr('records'), c.registryEntries, false],
+    [tr('dead'), c.dead, false],
+    [tr('PID reuse'), c.reused, c.reused > 0],
     ['proje', c.projects, false],
     ['seni bekliyor', c.needsYou, c.needsYou > 0],
     ['IDE penceresi', c.ideWindows, false],
@@ -937,12 +937,12 @@ function rank(p) {
  * meaning something else entirely.
  */
 function waitingText(a) {
-  return a.waiting > 0 ? t`${a.waiting} bekliyor` : '—';
+  return a.waiting > 0 ? t`${a.waiting} waiting` : '—';
 }
 
 function runningText(a) {
-  if (a.running > 0) return t`${a.running} çalışıyor`;
-  if (a.waiting === 0) return a.live > 0 ? tr('boşta') : tr('kapalı');
+  if (a.running > 0) return t`${a.running} running`;
+  if (a.waiting === 0) return a.live > 0 ? tr('idle') : tr('off');
   return '—';
 }
 
@@ -1001,7 +1001,7 @@ function renderLoad() {
   const el = document.getElementById('load');
   const l = report && report.load;
   if (!l) { el.innerHTML = ''; return; }
-  const label = tr('sistem yükü');
+  const label = tr('system load');
   if (l.percent == null || l.live === 0) {
     el.innerHTML = `<span>${label}</span><span class="track none"></span><span class="pc">—</span>`;
     return;
@@ -1040,8 +1040,8 @@ function renderList() {
   if (list.length === 0) {
     el.innerHTML = `<div class="prow"><span></span><span class="nm">${
       report && report.counts.untracked > 0
-        ? tr('Hiçbir proje izlenmiyor — aşağıdan seç.')
-        : tr('Görünür oturum yok. Bir ajan oturumu başlat.')}</span></div>`;
+        ? tr('No projects tracked — choose below.')
+        : tr('No sessions visible. Start an agent session.')}</span></div>`;
     return;
   }
   const now = Date.now();
@@ -1081,13 +1081,13 @@ function projectCard(p) {
       </h3>
       ${progressRow(p.progress, p.digest)}
       ${digestBlock(p.digest)}
-      <button class="boardbtn" data-project="${esc(p.projectId)}">${tr('faz panosu')}</button>
+      <button class="boardbtn" data-project="${esc(p.projectId)}">${tr('phase board')}</button>
       <div class="board" id="board-${esc(p.projectId)}" hidden></div>
       ${p.workspaces.map(w => {
         const bits = [];
         if (w.branch) bits.push(w.branch);
-        if (w.commitCount != null) bits.push(t`${w.commitCount} commit`);
-        if (w.dirtyCount != null) bits.push(t`${w.dirtyCount} kirli`);
+        if (w.commitCount != null) bits.push(t`${w.commitCount} commits`);
+        if (w.dirtyCount != null) bits.push(t`${w.dirtyCount} dirty`);
         if (w.isWorktree) bits.push('worktree');
         if (w.storageKind !== 'local') bits.push(w.storageKind);
         const lbl = p.workspaces.length > 1 && w.label ? '<b>' + esc(w.label) + '</b> · ' : '';
@@ -1111,7 +1111,7 @@ function renderDetail() {
   if (!p) {
     // The project vanished between clicking and rendering — its last session
     // ended, or it was just untracked. Saying so beats an empty pane.
-    el.innerHTML = `<p class="empty">${tr('Bu proje artık görünmüyor.')}</p>`;
+    el.innerHTML = `<p class="empty">${tr('This project is no longer visible.')}</p>`;
     return;
   }
   el.innerHTML = projectCard(p);
@@ -1130,8 +1130,8 @@ function renderMinibar() {
   if (!MINI || !report) return;
   const n = report.counts.needsYou;
   document.getElementById('miniCount').innerHTML = n > 0
-    ? `<b>${n}</b> ${esc(tr('bekliyor'))}`
-    : esc(tr('bekleyen yok'));
+    ? `<b>${n}</b> ${esc(tr('waiting'))}`
+    : esc(tr('nothing waiting'));
 }
 
 // ── choosing what to follow ─────────────────────────────────────────────
@@ -1176,7 +1176,7 @@ function renderPick() {
   const el = document.getElementById('pick');
   el.hidden = !picking;
   if (!picking) return;
-  if (!candidates) { el.innerHTML = `<div class="pickbar">${tr('yükleniyor…')}</div>`; return; }
+  if (!candidates) { el.innerHTML = `<div class="pickbar">${tr('loading…')}</div>`; return; }
   el.innerHTML = candidates.map(p => `
     <label>
       <input type="checkbox" data-track="${esc(p.projectId)}" ${p.tracked ? 'checked' : ''}>
@@ -1184,10 +1184,10 @@ function renderPick() {
       <span class="pid">${esc(p.projectId)}</span>
     </label>`).join('') + `
     <div class="pickbar">
-      <button id="pickSave">${tr('kaydet')}</button>
-      <button id="pickAll">${tr('hepsi')}</button>
+      <button id="pickSave">${tr('save')}</button>
+      <button id="pickAll">${tr('all')}</button>
       <span class="msg" id="pickMsg">${
-        candidatesPartial ? esc(tr('liste tam değil — yalnızca burada değiştirdiklerin yazılır')) : ''
+        candidatesPartial ? esc(tr('list is not complete — only what you change here is written')) : ''
       }</span>
     </div>`;
 }
@@ -1220,7 +1220,7 @@ function pickDelta() {
 
 async function saveTracking(body) {
   const msg = document.getElementById('pickMsg');
-  if (msg) msg.textContent = tr('kaydediliyor…');
+  if (msg) msg.textContent = tr('saving…');
   try {
     const res = await fetch('/api/v1/tracking?t=' + encodeURIComponent(TOKEN), {
       method: 'POST',
@@ -1242,9 +1242,9 @@ async function saveTracking(body) {
         if (body.mode === 'all') p.tracked = true;
       }
     }
-    if (msg) msg.textContent = tr('kaydedildi');
+    if (msg) msg.textContent = tr('saved');
   } catch (e) {
-    if (msg) msg.textContent = tr('kaydedilemedi');
+    if (msg) msg.textContent = tr('could not save');
   }
 }
 
@@ -1277,10 +1277,10 @@ let llmDraft = { model: '', base_url: '', api_key_env: '' };
  */
 function llmLabel(o) {
   const id = o.id;
-  if (id === 'off') return [tr('Kapalı'), tr('yapısal motor tek başına çalışır; hiçbir şey gönderilmez')];
-  if (id === 'ollama') return [tr('Ollama'), tr('bu makinedeki model; anahtar istemez, veri çıkmaz')];
-  if (id === 'openai') return [tr('OpenAI uyumlu'), tr('adresle OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
-  if (id === 'anthropic') return [tr('Anthropic API'), tr('anahtar gerekir')];
+  if (id === 'off') return [tr('Off'), tr('the structural engine works on its own; nothing is sent')];
+  if (id === 'ollama') return [tr('Ollama'), tr('a model on this machine; needs no key, nothing leaves')];
+  if (id === 'openai') return [tr('OpenAI-compatible'), tr('one base_url reaches OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
+  if (id === 'anthropic') return [tr('the Anthropic API'), tr('a key is required')];
   // The agent CLIs never reach here: they are rendered under their own
   // heading, by program name, because the only thing that differs between
   // them is whether the program is on this machine.
@@ -1289,9 +1289,9 @@ function llmLabel(o) {
 
 /** The egress sentence, in the three words that matter. Mirrors `vt digest`. */
 function llmEgress(e) {
-  if (e === 'no') return `<span class="stay">${esc(tr('veri bu makineden çıkmaz'))}</span>`;
-  if (e === 'yes') return `<span class="out">${esc(tr('veri bu makineden ÇIKAR'))}</span>`;
-  return `<span class="out">${esc(tr('veri çıkar mı — bilinmiyor'))}</span>`;
+  if (e === 'no') return `<span class="stay">${esc(tr('data does not leave this machine'))}</span>`;
+  if (e === 'yes') return `<span class="out">${esc(tr('data DOES leave this machine'))}</span>`;
+  return `<span class="out">${esc(tr('does data leave — unknown'))}</span>`;
 }
 
 async function loadLlm() {
@@ -1319,8 +1319,8 @@ function renderLlm() {
   const el = document.getElementById('llm');
   el.hidden = !llmOpen;
   if (!llmOpen) return;
-  if (!llm) { el.innerHTML = `<div class="pickbar">${esc(tr('yükleniyor…'))}</div>`; return; }
-  if (llm === 'error') { el.innerHTML = `<div class="pickbar">${esc(tr('okunamadı'))}</div>`; return; }
+  if (!llm) { el.innerHTML = `<div class="pickbar">${esc(tr('loading…'))}</div>`; return; }
+  if (llm === 'error') { el.innerHTML = `<div class="pickbar">${esc(tr('could not be read'))}</div>`; return; }
 
   // What the file says right now, before any of the radios below.
   const now = [`<b>${esc(llm.provider)}</b>`];
@@ -1330,10 +1330,10 @@ function renderLlm() {
     if (llm.commandLine) now.push(esc(llm.commandLine));
     now.push(llmEgress(llm.egress));
     now.push(llm.ready
-      ? `<span class="stay">${esc(tr('hazır'))}</span>`
-      : `<span class="bad">${esc(tr('eksik yapılandırma'))}</span>`);
+      ? `<span class="stay">${esc(tr('ready'))}</span>`
+      : `<span class="bad">${esc(tr('incomplete configuration'))}</span>`);
   } else {
-    now.push(esc(tr('panodaki her sayı bu makinede hesaplanıyor')));
+    now.push(esc(tr('every number on the board is computed on this machine')));
   }
   // Each fact is its own flex child, so the row's gap separates them. Joined
   // raw, `openai` and its address ran together into one unreadable word.
@@ -1343,13 +1343,13 @@ function renderLlm() {
   // this panel will not write a command. Saying so beats a row that silently
   // refuses.
   if (!llm.inOptions) {
-    html += `<div class="hint">${esc(tr('Kendi komutunu çalıştıran seçenek yalnızca config dosyasından ayarlanır. Aşağıdan başka bir sağlayıcıya geçebilirsin.'))}</div>`;
+    html += `<div class="hint">${esc(tr('The option that runs a command of your own is set from the config file only. You can still switch to another provider below.'))}</div>`;
   }
 
   const radio = o => `<input type="radio" name="llmp" value="${esc(o.id)}" ${o.id === llmPick ? 'checked' : ''}>`;
   const installed = o => o.installed === true
-    ? `<span class="stay">${esc(tr('kurulu'))}</span>`
-    : o.installed === false ? `<span class="bad">${esc(tr('kurulu değil'))}</span>` : '';
+    ? `<span class="stay">${esc(tr('installed'))}</span>`
+    : o.installed === false ? `<span class="bad">${esc(tr('not installed'))}</span>` : '';
 
   // The four that are not agent CLIs, each with its own sentence.
   html += llm.options.filter(o => !o.program || o.id === 'ollama').map(o => {
@@ -1367,7 +1367,7 @@ function renderLlm() {
   // once and the rows carry the name and the mark.
   const clis = llm.options.filter(o => o.program && o.id !== 'ollama');
   if (clis.length) {
-    html += `<div class="group">${esc(tr('Zaten giriş yapmış olduğun ajan CLI\'ı — anahtar istemez, kendi hesabından yer'))}</div>`;
+    html += `<div class="group">${esc(tr('An agent CLI you are already signed in to — needs no key, eats your own account quota'))}</div>`;
     html += clis.map(o => `<label class="cli">${radio(o)}
       <span class="name">${esc(o.program)}</span>
       <span class="note">${installed(o)}</span>
@@ -1379,10 +1379,10 @@ function renderLlm() {
     const rows = [];
     rows.push(`<label><span>${esc(tr('model'))}</span><input id="llmModel" value="${esc(llmDraft.model)}" placeholder="${esc(picked.modelDefault)}" spellcheck="false"></label>`);
     if (picked.baseUrlDefault) {
-      rows.push(`<label><span>${esc(tr('adres'))}</span><input id="llmBase" value="${esc(llmDraft.base_url)}" placeholder="${esc(picked.baseUrlDefault)}" spellcheck="false"></label>`);
+      rows.push(`<label><span>${esc(tr('address'))}</span><input id="llmBase" value="${esc(llmDraft.base_url)}" placeholder="${esc(picked.baseUrlDefault)}" spellcheck="false"></label>`);
     }
     if (picked.needsKey) {
-      rows.push(`<label><span>${esc(tr('anahtar değişkeni'))}</span><input id="llmKeyEnv" value="${esc(llmDraft.api_key_env)}" placeholder="${esc(picked.keyEnvDefault || '')}" spellcheck="false" autocomplete="off"></label>`);
+      rows.push(`<label><span>${esc(tr('key variable'))}</span><input id="llmKeyEnv" value="${esc(llmDraft.api_key_env)}" placeholder="${esc(picked.keyEnvDefault || '')}" spellcheck="false" autocomplete="off"></label>`);
     }
     html += `<div class="fields">${rows.join('')}</div>`;
 
@@ -1392,15 +1392,15 @@ function renderLlm() {
       const where = llm.key.from === 'env' ? (llm.key.envName || '') : llm.keyFile;
       html += `<div class="hint">${
         have
-          ? esc(t`Anahtar var: ${llm.key.masked} · ${where}`)
-          : esc(tr('Anahtarın kendisi buraya yazılmaz — bu dosya yedeklenir ve teşhis paketine girer.')) +
+          ? esc(t`Key present: ${llm.key.masked} · ${where}`)
+          : esc(tr('The key itself is never written here — this file is backed up and goes into the diagnostic bundle.')) +
             ' <code>vt digest key &lt;anahtar&gt;</code>'
       }</div>`;
     }
   }
 
   html += `<div class="pickbar">
-    <button id="llmSave">${esc(tr('kaydet'))}</button>
+    <button id="llmSave">${esc(tr('save'))}</button>
     <span class="msg" id="llmMsg"></span>
   </div>`;
   el.innerHTML = html;
@@ -1415,7 +1415,7 @@ async function saveLlm() {
     base_url: value('llmBase'),
     api_key_env: value('llmKeyEnv'),
   };
-  if (msg) msg.textContent = tr('kaydediliyor…');
+  if (msg) msg.textContent = tr('saving…');
   try {
     const res = await fetch('/api/v1/digest?t=' + encodeURIComponent(TOKEN), {
       method: 'POST',
@@ -1426,7 +1426,7 @@ async function saveLlm() {
     if (!res.ok) {
       // The daemon's sentence, not a generic failure: it is the one that knows
       // which of the four fields was wrong and why.
-      if (msg) msg.textContent = answer.error || tr('kaydedilemedi');
+      if (msg) msg.textContent = answer.error || tr('could not save');
       return;
     }
     // Re-read from the answer rather than from what was typed: the daemon
@@ -1437,9 +1437,9 @@ async function saveLlm() {
     llmDraft = { model: llm.model, base_url: llm.baseUrl, api_key_env: llm.keyEnv };
     renderLlm();
     const after = document.getElementById('llmMsg');
-    if (after) after.textContent = tr('kaydedildi');
+    if (after) after.textContent = tr('saved');
   } catch (e) {
-    if (msg) msg.textContent = tr('kaydedilemedi');
+    if (msg) msg.textContent = tr('could not save');
   }
 }
 
@@ -1497,7 +1497,7 @@ document.addEventListener('click', (e) => {
     const delta = pickDelta();
     if (!delta.add.length && !delta.remove.length) {
       const msg = document.getElementById('pickMsg');
-      if (msg) msg.textContent = tr('değişiklik yok');
+      if (msg) msg.textContent = tr('nothing changed');
       return;
     }
     void saveTracking(delta);
@@ -1553,10 +1553,10 @@ function setConn(cls, text) {
 
 function connect() {
   const es = new EventSource('/api/v1/stream?t=' + encodeURIComponent(TOKEN));
-  es.addEventListener('open', () => setConn('live', tr('canlı')));
+  es.addEventListener('open', () => setConn('live', tr('live')));
   es.addEventListener('overview', e => {
     report = JSON.parse(e.data);
-    setConn('live', tr('canlı'));
+    setConn('live', tr('live'));
     render();
   });
   es.addEventListener('alert', e => {
@@ -1565,7 +1565,7 @@ function connect() {
   });
   // EventSource reconnects on its own and replays via Last-Event-ID; we only
   // need to reflect the outage in the UI.
-  es.addEventListener('error', () => setConn('down', tr('bağlantı koptu — yeniden deneniyor')));
+  es.addEventListener('error', () => setConn('down', tr('connection lost — retrying')));
 }
 /**
  * Phase board, on demand.
@@ -1584,7 +1584,7 @@ async function toggleBoard(projectId) {
   if (!el.hidden) { el.hidden = true; return; }
   el.hidden = false;
   if (boardCache.has(projectId)) { el.innerHTML = boardCache.get(projectId); return; }
-  el.textContent = tr('yükleniyor…');
+  el.textContent = tr('loading…');
   try {
     const res = await fetch('/api/v1/board?project=' + encodeURIComponent(projectId) +
       '&t=' + encodeURIComponent(TOKEN));
@@ -1593,7 +1593,7 @@ async function toggleBoard(projectId) {
     boardCache.set(projectId, html);
     el.innerHTML = html;
   } catch (e) {
-    el.textContent = tr('faz panosu okunamadı');
+    el.textContent = tr('the phase board could not be read');
   }
 }
 
@@ -1601,8 +1601,8 @@ function renderBoard(b) {
   const spans = (b && b.reconstructed && b.reconstructed.spans) || [];
   if (spans.length === 0) {
     const why = b && b.reconstructed && b.reconstructed.reason === 'no-git'
-      ? tr('git yok — geçmiş çıkarılamaz')
-      : tr('commit başlıklarında faz adı geçmiyor');
+      ? tr('no git — no recoverable history')
+      : tr('no phase name in any commit subject');
     return `<div class="note">${esc(why)}</div>`;
   }
   const min = Math.min(...spans.map(s => s.firstAt));
@@ -1621,10 +1621,10 @@ function renderBoard(b) {
       else bar += '\u00b7';
     }
     const tail = s.afterDone > 0
-      ? `<span class="after">${esc(t` \u00b7 bitti denildikten sonra ${s.afterDone} commit`)}</span>`
+      ? `<span class="after">${esc(t` · ${s.afterDone} commits after it was called done`)}</span>`
       : s.doneAt != null
-        ? `<span class="done">${esc(t` \u00b7 ${fmtAge(Date.now() - s.doneAt)} \u00f6nce bitti`)}</span>`
-        : `<span>${esc(tr(' \u00b7 a\u00e7\u0131k'))}</span>`;
+        ? `<span class="done">${esc(t` · finished ${fmtAge(Date.now() - s.doneAt)} ago`)}</span>`
+        : `<span>${esc(tr(' · open'))}</span>`;
     const label = (s.unit + ' ' + s.ordinal).padEnd(10);
     return `<div class="row"><span class="rung">${esc(label)}</span>${esc(bar)} ${tail}</div>`;
   }).join('');
@@ -1632,8 +1632,8 @@ function renderBoard(b) {
   // The seam is stated rather than smoothed over: everything left of it is a
   // reconstruction, everything right of it was watched.
   const note = b.seam
-    ? t`\u25b2 ${new Date(b.seam).toISOString().slice(0, 10)} tarihinden itibaren \u00f6l\u00e7\u00fcld\u00fc; \u00f6ncesi commit ba\u015fl\u0131klar\u0131ndan \u00e7\u0131kar\u0131ld\u0131.`
-    : tr('Tamamı commit başlıklarından çıkarıldı (kaba).');
+    ? t`▲ measured from ${new Date(b.seam).toISOString().slice(0, 10)} onward; everything before is mined from commit subjects.`
+    : tr('Entirely mined from commit subjects (coarse).');
   return rows + `<div class="note">${esc(note)}</div>`;
 }
 
@@ -1644,7 +1644,7 @@ document.addEventListener('click', (e) => {
 
 /** Flags travel as identifiers so scoring can match them; only display is translated. */
 function flagText(flag) {
-  const m = /^([a-z\u00e7\u011f\u0131\u00f6\u015f\u00fc-]+)\((\d+)\)$/.exec(flag);
+  const m = /^([a-z-]+)\((\d+)\)$/.exec(flag);
   return m ? tr(m[1]) + '(' + m[2] + ')' : tr(flag);
 }
 
@@ -1681,7 +1681,7 @@ function notify(c) {
   if (notified.get(key) === c.subReason) return;
   notified.set(key, c.subReason);
 
-  const title = c.to === 'WAITING_PERMISSION' ? tr('İzin bekleniyor') : tr('Ajan hata verdi');
+  const title = c.to === 'WAITING_PERMISSION' ? tr('Waiting for permission') : tr('The agent errored');
   const body = labelFor(c.sessionId) + (c.subReason ? ' · ' + c.subReason : '');
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     // `tag` collapses repeats into one notification rather than stacking them.

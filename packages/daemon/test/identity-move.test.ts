@@ -102,8 +102,8 @@ test('the ghost leaves the chooser, so one project is one row', () => {
 test('a project still alive elsewhere is not treated as renamed', () => {
   const { s, done } = store();
   try {
-    s.apply(at('pkg:abc', 'İki yerli', ['c:/dev/vt', 'd:/kopya/vt'], 1_000));
-    s.apply(at('git:def', 'Başkası', ['c:/dev/vt'], 2_000));
+    s.apply(at('pkg:abc', 'Two homes', ['c:/dev/vt', 'd:/kopya/vt'], 1_000));
+    s.apply(at('git:def', 'Someone else', ['c:/dev/vt'], 2_000));
     assert.equal(s.identityMoves().size, 0);
     assert.equal(s.candidates().length, 2);
   } finally {

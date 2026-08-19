@@ -52,7 +52,7 @@ export async function runBoard(args: BoardArgs): Promise<number> {
   );
 
   if (wanted.length === 0) {
-    process.stdout.write(tr('Eşleşen proje yok.\n'));
+    process.stdout.write(tr('No matching project.\n'));
     return 0;
   }
 
@@ -87,8 +87,8 @@ function render(
   const out: string[] = [''];
   const all = boards.flatMap((b) => b.spans);
   if (all.length === 0) {
-    out.push(tr('  Hiçbir projede commit mesajlarından faz izi bulunamadı.'));
-    out.push(dim(tr('  Faz adları commit başlıklarında geçmiyorsa geçmiş çıkarılamaz — uydurulmaz.')));
+    out.push(tr('  No project has a phase trace in its commit messages.'));
+    out.push(dim(tr('  If phase names never appear in commit subjects the past cannot be recovered — and is not invented.')));
     return `${out.join('\n')}\n\n`;
   }
 
@@ -99,23 +99,23 @@ function render(
     Math.max(0, Math.min(WIDTH - 1, Math.round(((ms - min) / span) * (WIDTH - 1))));
 
   out.push(
-    `  ${bold(tr('FAZ PANOSU'))} ${dim(
+    `  ${bold(tr('PHASE BOARD'))} ${dim(
       t`${new Date(min).toISOString().slice(0, 10)} → ${new Date(max).toISOString().slice(0, 10)}`,
     )}`,
   );
   out.push(
     dim(
-      `  ${tr('▒ commit geçmişinden çıkarıldı (kaba)')} · ${tr('│ ilk anma')} · ${tr('▐ tamamlandı denildi')}`,
+      `  ${tr('▒ mined from commit history (coarse)')} · ${tr('│ first mention')} · ${tr('▐ declared done')}`,
     ),
   );
 
   for (const b of boards) {
     out.push('');
-    out.push(`  ${cyan(b.name)} ${dim(t`${b.scanned} commit`)}`);
+    out.push(`  ${cyan(b.name)} ${dim(t`${b.scanned} commits`)}`);
     if (b.spans.length === 0) {
       out.push(
         dim(
-          `    ${b.reason === 'no-git' ? tr('git yok — geçmiş çıkarılamaz') : tr('commit başlıklarında faz adı geçmiyor')}`,
+          `    ${b.reason === 'no-git' ? tr('no git — no recoverable history') : tr('no phase name in any commit subject')}`,
         ),
       );
       continue;
@@ -134,18 +134,18 @@ function render(
       const label = `${s.unit} ${s.ordinal}`.padEnd(10);
       const tail =
         s.afterDone > 0
-          ? yellow(t` · bitti denildikten sonra ${s.afterDone} commit`)
+          ? yellow(t` · ${s.afterDone} commits after it was called done`)
           : s.doneAt !== null
-            ? green(t` · ${fmtAge(Date.now() - s.doneAt)} önce bitti`)
-            : dim(tr(' · açık'));
-      out.push(`    ${label} ${dim(bar)} ${dim(t`${s.commits} commit`)}${tail}`);
+            ? green(t` · finished ${fmtAge(Date.now() - s.doneAt)} ago`)
+            : dim(tr(' · open'));
+      out.push(`    ${label} ${dim(bar)} ${dim(t`${s.commits} commits`)}${tail}`);
     }
   }
 
   out.push('');
   out.push(
     dim(
-      `  ${tr('Bu tablo commit başlıklarından çıkarıldı; VibeTracker kurulmadan önceki her şey kaba.')}`,
+      `  ${tr('This chart is mined from commit subjects; everything before VibeTracker was installed is coarse.')}`,
     ),
   );
   return `${out.join('\n')}\n`;

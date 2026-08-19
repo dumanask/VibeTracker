@@ -25,7 +25,7 @@ export class TomlError extends Error {
   line: number;
   column: number;
   constructor(message: string, line: number, column: number) {
-    super(`${message} (satır ${line}, sütun ${column})`);
+    super(`${message} (line ${line}, column ${column})`);
     this.name = 'TomlError';
     this.line = line;
     this.column = column;
@@ -124,7 +124,7 @@ class Parser {
       this.#newline();
       return;
     }
-    throw this.#err(`satır sonunda beklenmeyen karakter: ${JSON.stringify(c)}`);
+    throw this.#err(`unexpected character at end of line: ${JSON.stringify(c)}`);
   }
 
   // ── [table] and [[array of tables]] ───────────────────────────────────
@@ -135,10 +135,10 @@ class Parser {
     if (isArray) this.#i++;
     const path = this.#keyPath();
     this.#skipInline();
-    if (this.#s[this.#i] !== ']') throw this.#err("tablo başlığı ']' ile kapanmalı");
+    if (this.#s[this.#i] !== ']') throw this.#err("a table header must close with ']'");
     this.#i++;
     if (isArray) {
-      if (this.#s[this.#i] !== ']') throw this.#err("dizi tablosu ']]' ile kapanmalı");
+      if (this.#s[this.#i] !== ']') throw this.#err("an array of tables must close with ']]'");
       this.#i++;
     }
 
@@ -156,7 +156,7 @@ class Parser {
         this.#arrays.add(arr as TomlValue[]);
         t[last] = arr;
       } else if (!Array.isArray(arr) || !this.#arrays.has(arr)) {
-        throw this.#err(`"${path.join('.')}" bir dizi tablosu değil`);
+        throw this.#err(`"${path.join('.')}" is not an array of tables`);
       }
       const entry: TomlTable = Parser.#table();
       this.#headerTables.add(entry);
@@ -179,7 +179,7 @@ class Parser {
         this.#headerTables.add(existing);
         this.#current = existing;
       } else {
-        throw this.#err(`"${path.join('.')}" ikinci kez tanımlanıyor`);
+        throw this.#err(`"${path.join('.')}" is defined a second time`);
       }
     }
     this.#currentPath = path;
@@ -210,7 +210,7 @@ bad = true')` returned ok, its own result
 
   #checkKey(key: string, line: number): void {
     if (Parser.#FORBIDDEN.has(key)) {
-      throw new TomlError(`"${key}" anahtar olarak kullanılamaz`, line, 1);
+      throw new TomlError(`"${key}" cannot be used as a key`, line, 1);
     }
   }
 
@@ -229,11 +229,11 @@ bad = true')` returned ok, its own result
     }
     if (isTable(v)) {
       if (this.#sealed.has(v)) {
-        throw new TomlError(`"${key}" satır içi tablo, genişletilemez`, line, 1);
+        throw new TomlError(`"${key}" is an inline table and cannot be extended`, line, 1);
       }
       return v;
     }
-    throw new TomlError(`"${key}" bir tablo değil`, line, 1);
+    throw new TomlError(`"${key}" is not a table`, line, 1);
   }
 
   // ── key = value ───────────────────────────────────────────────────────
@@ -262,14 +262,14 @@ bad = true')` returned ok, its own result
       ) {
         t = v;
       } else {
-        throw this.#err(`"${path.slice(0, k + 1).join('.')}" zaten farklı bir değer`);
+        throw this.#err(`"${path.slice(0, k + 1).join('.')}" is already a different value`);
       }
     }
     const last = path[path.length - 1]!;
     this.#checkKey(last, this.#line);
     const id = `${scope} ${path.join('.')}`;
     if (Object.hasOwn(t, last) || this.#assigned.has(id)) {
-      throw this.#err(`"${path.join('.')}" anahtarı iki kez atanmış`);
+      throw this.#err(`"${path.join('.')}" is assigned twice`);
     }
     this.#assigned.add(id);
     t[last] = value;
@@ -285,7 +285,7 @@ bad = true')` returned ok, its own result
       else {
         const start = this.#i;
         while (this.#i < this.#s.length && BARE.test(this.#s[this.#i]!)) this.#i++;
-        if (this.#i === start) throw this.#err('anahtar adı bekleniyor');
+        if (this.#i === start) throw this.#err('a key name was expected');
         path.push(this.#s.slice(start, this.#i));
       }
       this.#skipInline();
@@ -315,7 +315,7 @@ bad = true')` returned ok, its own result
     let out = '';
     for (;;) {
       const c = this.#s[this.#i];
-      if (c === undefined || c === '\n') throw this.#err('kapanmamış metin');
+      if (c === undefined || c === '\n') throw this.#err('unterminated string');
       if (c === '"') {
         this.#i++;
         return out;
@@ -352,14 +352,14 @@ bad = true')` returned ok, its own result
       case 'U':
         return this.#codepoint(8);
       default:
-        throw this.#err(`bilinmeyen kaçış dizisi: \\${c ?? ''}`);
+        throw this.#err(`unknown escape sequence: \\${c ?? ''}`);
     }
   }
 
   #codepoint(len: number): string {
     const hex = this.#s.slice(this.#i, this.#i + len);
     if (hex.length !== len || !/^[0-9A-Fa-f]+$/.test(hex)) {
-      throw this.#err('geçersiz unicode kaçışı');
+      throw this.#err('invalid unicode escape');
     }
     this.#i += len;
     return String.fromCodePoint(Number.parseInt(hex, 16));
@@ -370,7 +370,7 @@ bad = true')` returned ok, its own result
     this.#i++;
     const end = this.#s.indexOf("'", this.#i);
     const nl = this.#s.indexOf('\n', this.#i);
-    if (end === -1 || (nl !== -1 && nl < end)) throw this.#err('kapanmamış metin');
+    if (end === -1 || (nl !== -1 && nl < end)) throw this.#err('unterminated string');
     const out = this.#s.slice(this.#i, end);
     this.#i = end + 1;
     return out;
@@ -388,7 +388,7 @@ bad = true')` returned ok, its own result
     }
     let out = '';
     for (;;) {
-      if (this.#i >= this.#s.length) throw this.#err('kapanmamış çok satırlı metin');
+      if (this.#i >= this.#s.length) throw this.#err('unterminated multi-line string');
       if (this.#s.startsWith(delim, this.#i)) {
         this.#i += 3;
         // Up to two further delimiter characters belong to the content.
@@ -408,7 +408,7 @@ bad = true')` returned ok, its own result
           let j = this.#i + 1;
           while (this.#s[j] === ' ' || this.#s[j] === '\t' || this.#s[j] === '\r') j++;
           if (this.#s[j] !== '\n') {
-            throw this.#err('satır sonu ters bölüsünden sonra fazladan karakter');
+            throw this.#err('extra characters after a line-ending backslash');
           }
           j++;
           this.#newline();
@@ -437,7 +437,7 @@ bad = true')` returned ok, its own result
         this.#i++;
         return out;
       }
-      if (this.#i >= this.#s.length) throw this.#err('kapanmamış dizi');
+      if (this.#i >= this.#s.length) throw this.#err('unterminated array');
       out.push(this.#value());
       this.#skipTrivia();
       if (this.#s[this.#i] === ',') {
@@ -476,7 +476,7 @@ bad = true')` returned ok, its own result
         this.#sealed.add(t);
         return t;
       }
-      throw this.#err("satır içi tabloda ',' veya '}' bekleniyor");
+      throw this.#err("expected ',' or '}' in an inline table");
     }
   }
 
@@ -501,7 +501,7 @@ bad = true')` returned ok, its own result
       while (this.#i < this.#s.length && /[0-9A-Fa-f_]/.test(this.#s[this.#i]!)) this.#i++;
       const digits = this.#s.slice(from, this.#i).replace(/_/g, '');
       const n = Number.parseInt(digits, radix);
-      if (!digits || Number.isNaN(n)) throw this.#err('geçersiz sayı');
+      if (!digits || Number.isNaN(n)) throw this.#err('invalid number');
       return this.#s[start] === '-' ? -n : n;
     }
     while (this.#i < this.#s.length && /[0-9_.eE+-]/.test(this.#s[this.#i]!)) {
@@ -512,10 +512,10 @@ bad = true')` returned ok, its own result
     }
     const text = this.#s.slice(start, this.#i).replace(/_/g, '');
     if (!/^[+-]?[0-9]/.test(text)) {
-      throw this.#err(`değer bekleniyor, "${text || this.#s[this.#i] || ''}" bulundu`);
+      throw this.#err(`expected a value, found "${text || this.#s[this.#i] || ''}"`);
     }
     const n = Number(text);
-    if (Number.isNaN(n)) throw this.#err(`geçersiz sayı: ${text}`);
+    if (Number.isNaN(n)) throw this.#err(`invalid number: ${text}`);
     return n;
   }
 }

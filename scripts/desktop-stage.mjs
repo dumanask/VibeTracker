@@ -174,7 +174,7 @@ const leftovers = [];
 })(pkgRoot);
 if (leftovers.length > 0) {
   process.stderr.write(
-    `Çözümlenmemiş paket adı kalan dosyalar:\n  ${leftovers.join('\n  ')}\n`,
+    `Files still carrying an unresolved package name:\n  ${leftovers.join('\n  ')}\n`,
   );
   process.exit(1);
 }
@@ -189,7 +189,7 @@ if (leftovers.length > 0) {
 const missing = [...rewritten].filter((rel) => !existsSync(join(STAGE, 'packages', rel)));
 if (missing.length > 0) {
   process.stderr.write(
-    `Var olmayan dosyayı gösteren içe aktarım:\n  ${missing.join('\n  ')}\n`,
+    `An import pointing at a file that does not exist:\n  ${missing.join('\n  ')}\n`,
   );
   process.exit(1);
 }
@@ -215,7 +215,7 @@ writeFileSync(
 );
 
 process.stdout.write(
-  `Masaüstü çalışma zamanı hazır: ${STAGE}\n` +
+  `Desktop runtime staged: ${STAGE}\n` +
     `  ${nodeName} · ${nodeMb.toFixed(1)} MB\n` +
-    `  ${files} kaynak dosyası\n`,
+    `  ${files} source files\n`,
 );

@@ -52,8 +52,8 @@ test('a newly tracked file is not the one the trim throws away', async () => {
     await reader.read(fresh);
     const after = reader.stats();
 
-    assert.equal(after.opens, before.opens, 'aynı dosya yeniden açıldı — önbellek çalışmıyor');
-    assert.ok(after.skipped > before.skipped, 'büyümemiş dosya yine de okundu');
+    assert.equal(after.opens, before.opens, 'the same file was reopened -- the cache is not working');
+    assert.ok(after.skipped > before.skipped, 'a file that did not grow was read anyway');
     await reader.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -81,13 +81,13 @@ test('retain keeps a path that is still being followed', async () => {
     await reader.retain(new Set([claude, codex]));
     await reader.read(claude);
     await reader.read(codex);
-    assert.equal(reader.stats().opens, opened, 'korunan yol yine de yeniden açıldı');
+    assert.equal(reader.stats().opens, opened, 'a retained path was reopened anyway');
 
     // And a path left out really is dropped — the other half of the promise.
     await reader.retain(new Set([claude]));
     appendFileSync(codex, line({ type: 'user', message: { role: 'user', content: 'x' } }), 'utf8');
     await reader.read(codex);
-    assert.ok(reader.stats().opens > opened, 'bırakılan yol kapatılmamış');
+    assert.ok(reader.stats().opens > opened, 'a released path was not closed');
     await reader.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

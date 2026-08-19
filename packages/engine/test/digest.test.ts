@@ -67,7 +67,7 @@ function input(over: Partial<DigestInput> = {}): DigestInput {
       openItems: [],
       drift: [],
     },
-    activity: { commits: [{ subject: 'bir şey', atMs: 1_700_000_000_000 }], titles: ['başlık'] },
+    activity: { commits: [{ subject: 'something', atMs: 1_700_000_000_000 }], titles: ['a title'] },
     lang: 'tr',
     now: 1_700_100_000_000,
     ...over,
@@ -86,17 +86,17 @@ test('a secret in a plan document never reaches the payload', () => {
       plan: {
         ...input().plan,
         phaseLabel: `Faz 2 ${key}`,
-        remaining: [`kalan: anahtarı ${key} ile dene`],
+        remaining: [`remaining: try the key ${key}`],
         documents: [{ relPath: `plans/${jwt}.md`, role: 'PLAN', items: 1, percent: null, ageDays: 1 }],
-        drift: [{ code: 'D1', severity: 'high', text: `token ${jwt} eskimiş` }],
+        drift: [{ code: 'D1', severity: 'high', text: `token ${jwt} has expired` }],
       },
-      activity: { commits: [{ subject: `fix ${key}`, atMs: 1 }], titles: [`iş ${jwt}`] },
+      activity: { commits: [{ subject: `fix ${key}`, atMs: 1 }], titles: [`work ${jwt}`] },
     }),
   );
   const whole = built.system + built.user;
-  assert.ok(!whole.includes('sk-ant-api03'), 'anahtar yükte kaldı');
-  assert.ok(!whole.includes('eyJhbGciOi'), 'JWT yükte kaldı');
-  assert.ok(whole.includes('«redacted:'), 'redaksiyon izi yok — sessizce silinmiş olabilir');
+  assert.ok(!whole.includes('sk-ant-api03'), 'the key stayed in the payload');
+  assert.ok(!whole.includes('eyJhbGciOi'), 'the JWT stayed in the payload');
+  assert.ok(whole.includes('«redacted:'), 'no redaction mark -- it may have been removed silently');
 });
 
 test('an oversized payload drops whole sections and says which', () => {
@@ -105,7 +105,7 @@ test('an oversized payload drops whole sections and says which', () => {
     input({ plan: { ...input().plan, remaining: many, openItems: many } }),
   );
   assert.ok(built.tokens <= 14_000, `yük hâlâ büyük: ${built.tokens}`);
-  assert.ok(built.dropped.length > 0, 'ne düşürüldüğü söylenmiyor');
+  assert.ok(built.dropped.length > 0, 'it does not say what was dropped');
 });
 
 test('the untrusted block is delimited and the system prompt says so', () => {
@@ -126,7 +126,7 @@ const GOOD = {
   percent_estimate: 40,
   percent_basis: 'checklist',
   confidence: 'medium',
-  next_action: 'testleri koştur',
+  next_action: 'run the tests',
   blocker: null,
   stall_reason: null,
   risk_flags: [],
@@ -138,7 +138,7 @@ const GOOD = {
 
 test('a fenced answer with prose around it still parses', () => {
   const r = parseDigest(
-    'Elbette! İşte özet:\n```json\n' + JSON.stringify(GOOD) + '\n```\nUmarım yardımcı olur.',
+    'Of course! Here is the summary:\n```json\n' + JSON.stringify(GOOD) + '\n```\nHope that helps.',
   );
   assert.ok(r.ok);
   assert.equal(r.value.phaseLabelRaw, 'Faz 2');
@@ -148,7 +148,7 @@ test('a fenced answer with prose around it still parses', () => {
 test('an answer that cites nothing is refused', () => {
   const r = parseDigest(JSON.stringify({ ...GOOD, evidence_refs: [] }));
   assert.ok(!r.ok);
-  assert.match(r.reason, /kanıt/);
+  assert.match(r.reason, /evidence/);
 });
 
 /**
@@ -327,7 +327,7 @@ test('a rejected answer is asked once more and then given up on', async () => {
       runDigest({ provider: 'openai', model: 'm', baseUrl: s.base, apiKey: 'k' }, input()),
       (e: ProviderError) => e.kind === 'shape',
     );
-    assert.equal(s.seen.length, 2, 'tam olarak iki deneme olmalı');
+    assert.equal(s.seen.length, 2, 'there must be exactly two attempts');
     // The second attempt says why the first was not accepted.
     const second = s.seen[1]!.body['messages'] as Array<{ content: string }>;
     assert.match(second[1]!.content, /not accepted/);
@@ -358,8 +358,8 @@ test('what leaves the machine is decided by the address, not by the vendor', () 
     leavesMachine({ provider, model: '', baseUrl, apiKey: null });
 
   assert.equal(of('off'), false);
-  assert.equal(of('ollama'), false, 'ollama varsayılanı loopback');
-  assert.equal(of('openai'), true, 'OpenAI varsayılanı internet');
+  assert.equal(of('ollama'), false, 'the ollama default is loopback');
+  assert.equal(of('openai'), true, 'the OpenAI default is the internet');
   // The case the whole abstraction exists for: an OpenAI-shaped endpoint that
   // happens to be a model running on this machine.
   assert.equal(of('openai', 'http://127.0.0.1:1234/v1'), false);

@@ -40,7 +40,7 @@ export function fmtAge(ms: number): string {
   // Units are looked up rather than translated as whole strings: an age
   // appears on nearly every line, and a catalog entry per duration would be
   // thousands of keys for four words.
-  const u = UNITS[getLang()] ?? UNITS.tr;
+  const u = UNITS[getLang()] ?? UNITS.en;
   const s = Math.floor(ms / 1000);
   if (s < 60) return `${s}${u.s}`;
   const m = Math.floor(s / 60);

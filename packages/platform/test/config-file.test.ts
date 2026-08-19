@@ -4,7 +4,7 @@ import { loadConfigText } from '@vibetracker/core';
 import { configTemplate } from '../src/config-file.ts';
 
 const CHOICES = {
-  lang: 'tr',
+  lang: 'en',
   port: 47823,
   bind: '127.0.0.1',
   hooksMode: 'http',
@@ -17,9 +17,9 @@ test('the starter config parses cleanly through our own parser', () => {
   // first-time user, and the failure would look like a corrupt install.
   const { config, issues, fromFile } = loadConfigText(configTemplate({ ...CHOICES }));
   assert.equal(fromFile, true);
-  assert.deepEqual(issues, [], `beklenmedik uyarı: ${JSON.stringify(issues)}`);
+  assert.deepEqual(issues, [], `unexpected issue: ${JSON.stringify(issues)}`);
   assert.equal(config.server.port, 47823);
-  assert.equal(config.server.lang, 'tr');
+  assert.equal(config.server.lang, 'en');
   assert.equal(config.hooks.mode, 'http');
   assert.equal(config.digest.provider, 'off');
   assert.equal(config.privacy.redact, true);
@@ -50,10 +50,10 @@ test('the template reflects the choices made during init', () => {
 
 test('the template keeps its comments', () => {
   const text = configTemplate({ ...CHOICES });
-  assert.ok(text.includes('# VibeTracker yapılandırması'));
+  assert.ok(text.includes('# VibeTracker configuration'));
   // The privacy section's strictness is the one rule a user must know before
   // editing, so it is documented in the file itself rather than only here.
-  assert.match(text, /\[privacy\][\s\S]*bilinmeyen bir anahtar hata sayılır/);
+  assert.match(text, /\[privacy\][\s\S]*an unknown key in this section is an error/);
 });
 
 test('a cli provider survives the round trip, arguments and all', () => {
@@ -69,7 +69,7 @@ test('a cli provider survives the round trip, arguments and all', () => {
     digestArgs: ['-m', '{model}', '--in', '{prompt_file}'],
   });
   const { config, issues } = loadConfigText(text);
-  assert.deepEqual(issues, [], `beklenmedik uyarı: ${JSON.stringify(issues)}`);
+  assert.deepEqual(issues, [], `unexpected issue: ${JSON.stringify(issues)}`);
   assert.equal(config.digest.provider, 'cli');
   assert.equal(config.digest.command, 'gemini');
   assert.deepEqual(config.digest.args, ['-m', '{model}', '--in', '{prompt_file}']);

@@ -115,17 +115,17 @@ function progressLine(p: ProjectView['progress']): string[] {
     out.push('    ' + yellow(`⚠ ${say(d.claim)}`) + ' ' + dim(say(d.evidence)));
   }
   if (p.provenance) out.push('    ' + dim(say(p.provenance)));
-  if (p.nextAction) out.push('    ' + dim(t`sonraki: ${truncate(p.nextAction, 90)}`));
+  if (p.nextAction) out.push('    ' + dim(t`next: ${truncate(p.nextAction, 90)}`));
   return out;
 }
 
 /**
  * Flags travel as identifiers so scoring logic can match them; only the
- * displayed form is translated. The count inside `kirli-sel(529)` is split
+ * displayed form is translated. The count inside `dirty-flood(529)` is split
  * out so one catalog entry covers every project.
  */
 function flagText(flag: string): string {
-  const m = /^([a-zçğıöşü-]+)\((\d+)\)$/.exec(flag);
+  const m = /^([a-z-]+)\((\d+)\)$/.exec(flag);
   return m ? `${tr(m[1]!)}(${m[2]})` : tr(flag);
 }
 
@@ -174,19 +174,19 @@ interface Cell {
  */
 function waitingCell(a: AgentSummary): Cell {
   if (a.waiting === 0) return { text: dim('—'), plain: '—' };
-  const plain = t`${a.waiting} bekliyor`;
+  const plain = t`${a.waiting} waiting`;
   return { text: a.urgency >= 3 ? red(plain) : yellow(plain), plain };
 }
 
 function runningCell(a: AgentSummary): Cell {
   if (a.running > 0) {
-    const plain = t`${a.running} çalışıyor`;
+    const plain = t`${a.running} running`;
     return { text: green(plain), plain };
   }
   // Nothing waiting and nothing running is still two different situations:
   // a session sitting there with nothing to do, and no session at all.
   if (a.waiting === 0) {
-    const plain = a.live > 0 ? tr('boşta') : tr('kapalı');
+    const plain = a.live > 0 ? tr('idle') : tr('off');
     return { text: dim(plain), plain };
   }
   return { text: dim('—'), plain: '—' };
@@ -218,16 +218,16 @@ export function renderCompact(r: StatusReport): string {
   out.push('');
   const head = [
     `${bold('VibeTracker')}`,
-    c.needsYou > 0 ? yellow(t`${c.needsYou} bekliyor`) : dim(tr('bekleyen yok')),
-    dim(t`${c.live} canlı ajan`),
-    dim(t`${followed.length} proje`),
+    c.needsYou > 0 ? yellow(t`${c.needsYou} waiting`) : dim(tr('nothing waiting')),
+    dim(t`${c.live} live agents`),
+    dim(t`${followed.length} projects`),
   ];
-  if (c.untracked > 0) head.push(dim(t`${c.untracked} izlenmiyor`));
+  if (c.untracked > 0) head.push(dim(t`${c.untracked} not tracked`));
   out.push('  ' + head.join(dim(' · ')));
   out.push('');
 
   if (followed.length === 0) {
-    out.push(dim(tr('  İzlenen proje yok. `vt projects add <proje>` ile ekle.')));
+    out.push(dim(tr('  No projects tracked. Add one with `vt projects add <project>`.')));
     out.push('');
     return out.join('\n');
   }
@@ -264,7 +264,7 @@ export function renderCompact(r: StatusReport): string {
   }
 
   out.push('');
-  out.push(dim(tr('  ayrıntı: vt status --full')));
+  out.push(dim(tr('  detail: vt status --full')));
   out.push('');
   return out.join('\n');
 }
@@ -282,12 +282,12 @@ export function renderText(r: StatusReport): string {
 
   const c = r.counts;
   const reusedTxt =
-    c.reused > 0 ? red(t`${c.reused} PID-yeniden-kullanım`) : dim(t`0 PID-yeniden-kullanım`);
+    c.reused > 0 ? red(t`${c.reused} PID reuse`) : dim(t`0 PID reuse`);
   out.push(
-    t`  ${bold(String(c.registryEntries))} kayıt → ${green(t`${c.live} canlı`)} ${dim('·')} ${dim(t`${c.dead} ölü`)} ${dim('·')} ${reusedTxt}`,
+    t`  ${bold(String(c.registryEntries))} records → ${green(t`${c.live} live`)} ${dim('·')} ${dim(t`${c.dead} dead`)} ${dim('·')} ${reusedTxt}`,
   );
   out.push(
-    t`  ${bold(String(c.projects))} proje ${dim('·')} ${c.needsYou > 0 ? yellow(t`${c.needsYou} oturum seni bekliyor`) : dim(t`bekleyen yok`)} ${dim('·')} ${c.ideWindows} IDE penceresi`,
+    t`  ${bold(String(c.projects))} projects ${dim('·')} ${c.needsYou > 0 ? yellow(t`${c.needsYou} sessions waiting on you`) : dim(t`nothing waiting`)} ${dim('·')} ${c.ideWindows} IDE windows`,
   );
   out.push(dim(`  ${r.claudeDir}`));
 
@@ -308,7 +308,7 @@ export function renderText(r: StatusReport): string {
 
   if (waiting.length > 0) {
     out.push('');
-    out.push(bold(t`SENİ BEKLEYENLER`));
+    out.push(bold(t`WAITING ON YOU`));
     for (const { p, s } of waiting) {
       const glyph = STATE_GLYPH[s.state] ?? '?';
       out.push(
@@ -320,9 +320,9 @@ export function renderText(r: StatusReport): string {
 
   // ── projects ────────────────────────────────────────────────────────────
   out.push('');
-  out.push(bold(t`PROJELER`));
+  out.push(bold(t`PROJECTS`));
   if (r.projects.length === 0) {
-    out.push(dim(t`  Görünür oturum yok. Bir ajan oturumu başlat ve tekrar dene.`));
+    out.push(dim(t`  No sessions visible. Start an agent session and try again.`));
   }
 
   for (const p of r.projects) {
@@ -334,8 +334,8 @@ export function renderText(r: StatusReport): string {
     for (const w of p.workspaces) {
       const bits: string[] = [];
       if (w.branch) bits.push(w.branch);
-      if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commit`);
-      if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} kirli`);
+      if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commits`);
+      if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} dirty`);
       if (w.isWorktree) bits.push('worktree');
       if (w.storageKind !== 'local') bits.push(w.storageKind);
       const label = p.workspaces.length > 1 && w.label ? `${w.label}: ` : '';
@@ -379,7 +379,7 @@ export function renderHtml(r: StatusReport): string {
     const unsure = s.confidence < CONFIDENT;
     // Dashed border and a `?` so an inference is never mistaken for an
     // observation at a glance.
-    return `<span class="chip s-${s.state}${unsure ? ' unsure' : ''}" title="${tr('güven')} ${s.confidence.toFixed(2)}">${esc(stateText(s))}${sub}</span>`;
+    return `<span class="chip s-${s.state}${unsure ? ' unsure' : ''}" title="${tr('confidence')} ${s.confidence.toFixed(2)}">${esc(stateText(s))}${sub}</span>`;
   };
 
   // A full document, not a fragment: this file is opened directly from disk, so
@@ -392,7 +392,7 @@ export function renderHtml(r: StatusReport): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>VibeTracker — durum anlık görüntüsü</title>
+<title>VibeTracker — status snapshot</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -464,13 +464,13 @@ export function renderHtml(r: StatusReport): string {
   <div class="meta">${esc(new Date(now).toLocaleString())} · ${esc(r.platform)} · ${esc(r.probeKind)} (${esc(r.probePrecision)}) · ${esc(r.claudeDir)}</div>
 
   <div class="stats">
-    <div class="stat"><b>${r.counts.live}</b><span>${tr('canlı oturum')}</span></div>
-    <div class="stat"><b>${r.counts.registryEntries}</b><span>${tr('kayıt')}</span></div>
-    <div class="stat"><b>${r.counts.dead}</b><span>${tr('ölü')}</span></div>
-    <div class="stat${r.counts.reused > 0 ? ' alert' : ''}"><b>${r.counts.reused}</b><span>${tr('PID yeniden kullanım')}</span></div>
-    <div class="stat"><b>${r.counts.projects}</b><span>${tr('proje')}</span></div>
-    <div class="stat${r.counts.needsYou > 0 ? ' alert' : ''}"><b>${r.counts.needsYou}</b><span>${tr('seni bekliyor')}</span></div>
-    <div class="stat"><b>${r.counts.ideWindows}</b><span>${tr('IDE penceresi')}</span></div>
+    <div class="stat"><b>${r.counts.live}</b><span>${tr('live sessions')}</span></div>
+    <div class="stat"><b>${r.counts.registryEntries}</b><span>${tr('records')}</span></div>
+    <div class="stat"><b>${r.counts.dead}</b><span>${tr('dead')}</span></div>
+    <div class="stat${r.counts.reused > 0 ? ' alert' : ''}"><b>${r.counts.reused}</b><span>${tr('PID reuse')}</span></div>
+    <div class="stat"><b>${r.counts.projects}</b><span>${tr('projects')}</span></div>
+    <div class="stat${r.counts.needsYou > 0 ? ' alert' : ''}"><b>${r.counts.needsYou}</b><span>${tr('waiting on you')}</span></div>
+    <div class="stat"><b>${r.counts.ideWindows}</b><span>${tr('IDE windows')}</span></div>
   </div>
 
   <div class="caps">${Object.entries(r.capabilities)
@@ -484,9 +484,9 @@ export function renderHtml(r: StatusReport): string {
 
   ${
     waiting.length > 0
-      ? `<h2>${tr('Seni bekleyenler')}</h2>
+      ? `<h2>${tr('Waiting on you')}</h2>
   <table>
-    <tr><th>${tr('Proje')}</th><th>${tr('Oturum')}</th><th>${tr('Durum')}</th><th>${tr('Süre')}</th><th>${tr('Ne üzerinde')}</th></tr>
+    <tr><th>${tr('Project')}</th><th>${tr('Session')}</th><th>${tr('State')}</th><th>${tr('For')}</th><th>${tr('Working on')}</th></tr>
     ${waiting
       .map(
         ({ p, s }) => `<tr>
@@ -502,10 +502,10 @@ export function renderHtml(r: StatusReport): string {
       : ''
   }
 
-  <h2>${tr('Projeler')}</h2>
+  <h2>${tr('Projects')}</h2>
   ${
     r.projects.length === 0
-      ? `<p class="empty">${tr('Görünür oturum yok. Bir ajan oturumu başlat ve tekrar dene.')}</p>`
+      ? `<p class="empty">${tr('No sessions visible. Start an agent session and try again.')}</p>`
       : r.projects
           .map(
             (p) => `<div class="card">
@@ -517,8 +517,8 @@ export function renderHtml(r: StatusReport): string {
       .map((w) => {
         const bits: string[] = [];
         if (w.branch) bits.push(w.branch);
-        if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commit`);
-        if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} kirli`);
+        if (w.commitCount !== undefined) bits.push(t`${w.commitCount} commits`);
+        if (w.dirtyCount !== undefined) bits.push(t`${w.dirtyCount} dirty`);
         if (w.isWorktree) bits.push('worktree');
         if (w.storageKind !== 'local') bits.push(w.storageKind);
         const label = p.workspaces.length > 1 && w.label ? `<b>${esc(w.label)}</b> · ` : '';
@@ -526,7 +526,7 @@ export function renderHtml(r: StatusReport): string {
       })
       .join('')}
     <table>
-      <tr><th>${tr('Oturum')}</th><th>${tr('Durum')}</th><th>${tr('Süre')}</th><th>${tr('Kanıt')}</th></tr>
+      <tr><th>${tr('Session')}</th><th>${tr('State')}</th><th>${tr('For')}</th><th>${tr('Evidence')}</th></tr>
       ${p.sessions
         .map(
           (s) => `<tr>
@@ -544,9 +544,9 @@ export function renderHtml(r: StatusReport): string {
   }
 
   <footer>
-    ${tr('Anlık görüntü — canlı değil.')} <code>vt status</code> ${tr('ile yenile.')}
-    ${tr('VibeTracker hiçbir projeye yazmaz ve hiçbir ajanla konuşmaz.')}
-    ${tr('Anthropic, OpenAI, Google, Microsoft veya Cursor ile ilişkili değildir.')}
+    ${tr('A snapshot — not live.')} <code>vt status</code> ${tr('to refresh.')}
+    ${tr('VibeTracker never writes to a project and never talks to an agent.')}
+    ${tr('Not affiliated with Anthropic, OpenAI, Google, Microsoft or Cursor.')}
   </footer>
 </div>
 </body>

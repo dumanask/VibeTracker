@@ -56,7 +56,7 @@ test('neither tool_input nor error text can carry a secret through', () => {
   const dump = JSON.stringify(h.get(SID) ?? {});
   assert.ok(!dump.includes('sk-ant-api03'), `anahtar tutuldu: ${dump}`);
   assert.ok(!dump.includes('eyJhbGciOi'), `JWT tutuldu: ${dump}`);
-  assert.ok(dump.includes('«redacted:'), 'redaksiyon izi olmalı — sessizce silinmemeli');
+  assert.ok(dump.includes('«redacted:'), 'a redaction mark must be left -- nothing is removed silently');
 
   // And the overlay must not smuggle it out through evidence either.
   const v = view({ state: SessionState.Errored });
@@ -119,7 +119,7 @@ test('subagent events belong to the subagent, not the session', () => {
   ]);
   const v = view();
   h.overlay(v);
-  assert.equal(v.state, SessionState.Busy, 'alt-ajanın Stop\'u oturumu bitirmemeli');
+  assert.equal(v.state, SessionState.Busy, 'a subagent Stop must not end the session');
   assert.equal(v.subagents, 2);
 
   h.apply([ev('SubagentStop', { agent_id: 'a1' })]);
@@ -133,7 +133,7 @@ test('a dead process outranks any hook that ever arrived', () => {
   h.apply([ev('PermissionRequest', { tool_name: 'Bash' })]);
   const v = view({ liveness: 'dead', state: SessionState.Orphaned });
   h.overlay(v);
-  assert.equal(v.state, SessionState.Orphaned, 'canlılık ölçülür, rapor edilmez');
+  assert.equal(v.state, SessionState.Orphaned, 'liveness is measured, not reported');
   assert.equal(v.hooked, true);
 });
 
@@ -151,7 +151,7 @@ test('compaction is a busy state with its own reason', () => {
   const v = view();
   h.overlay(v);
   assert.equal(v.state, SessionState.Busy);
-  assert.ok(v.evidence.some((e) => e.includes('sıkıştırma')));
+  assert.ok(v.evidence.some((e) => e.includes('compaction')));
 });
 
 test('garbage in the stream is counted, never thrown', () => {

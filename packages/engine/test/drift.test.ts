@@ -217,7 +217,7 @@ test('D1 still overrules the plan with the branch, and suppresses the number', a
     // Evidence beats claim — and a contradicted plan produces no percentage.
     assert.equal(r.phase?.basis, 'git');
     assert.equal(r.percent, null);
-    assert.match(say(r.percentSuppressed!), /çelişiyor/);
+    assert.match(say(r.percentSuppressed!), /disagree/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -301,7 +301,7 @@ test('two documents with rival ladders produce no phase, and say why', async () 
     const r = await readProjectProgress(root, { now: NOW });
     assert.equal(r.phase, null);
     // Refusing is only useful if the refusal is legible.
-    assert.match(say(r.phaseSuppressed!), /belirsiz/);
+    assert.match(say(r.phaseSuppressed!), /undecided/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

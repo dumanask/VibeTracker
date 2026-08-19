@@ -74,7 +74,7 @@ test('syntax errors carry a line number', () => {
   } catch (e) {
     assert.ok(e instanceof TomlError);
     assert.equal(e.line, 3);
-    assert.match(e.message, /satır 3/);
+    assert.match(e.message, /line 3/);
   }
 });
 
@@ -137,17 +137,17 @@ test('a syntax error degrades to defaults instead of locking the user out', () =
   assert.equal(fromFile, false);
   assert.equal(issues.length, 1);
   assert.equal(issues[0].severity, 'error');
-  assert.match(issues[0].message, /satır 2/);
+  assert.match(issues[0].message, /line 2/);
 });
 
 test('a bad value is reported and the default is kept', () => {
   const { config, issues } = loadConfigText('[server]\nport = 99999\nlang = "de"\n');
   assert.equal(config.server.port, 47823);
-  assert.equal(config.server.lang, 'tr');
+  assert.equal(config.server.lang, 'en');
   const keys = issues.map((i) => i.key);
   assert.deepEqual(keys.sort(), ['server.lang', 'server.port']);
   assert.ok(issues.every((i) => i.severity === 'error'));
-  assert.match(issues.find((i) => i.key === 'server.lang')!.fix!, /tr \| en/);
+  assert.match(issues.find((i) => i.key === 'server.lang')!.fix!, /en \| tr/);
 });
 
 test('an unknown key is a warning — except under [privacy], where it is fatal', () => {
@@ -165,7 +165,7 @@ test('binding beyond loopback warns even though it is allowed', () => {
   assert.equal(config.server.bind, '0.0.0.0');
   const w = issues.find((i) => i.key === 'server.bind');
   assert.equal(w?.severity, 'warn');
-  assert.match(w!.message, /ağdaki herkes/);
+  assert.match(w!.message, /everyone on the network/);
 });
 
 test('turning redaction off is allowed and announced', () => {

@@ -253,7 +253,7 @@ export class DaemonServer {
       try {
         html = await readFile(join(PUBLIC_DIR, 'index.html'), 'utf8');
       } catch {
-        return json(res, 500, { error: tr('arayüz dosyası bulunamadı') });
+        return json(res, 500, { error: tr('interface file not found') });
       }
       // The page needs the token to open its own SSE stream; it is same-origin
       // and already authenticated to be reading this response at all.
@@ -293,7 +293,7 @@ export class DaemonServer {
 
     if (path === '/api/v1/overview') {
       const latest = this.#deps.latest();
-      return json(res, latest ? 200 : 503, latest ?? { error: tr('ilk tarama henüz tamamlanmadı') });
+      return json(res, latest ? 200 : 503, latest ?? { error: tr('the first scan has not finished yet') });
     }
 
     if (path === '/api/v1/stream') {
@@ -304,13 +304,13 @@ export class DaemonServer {
     // change, because it is a viewing decision and walking to a terminal to
     // hide a project defeats a window pinned over your work.
     if (path === '/api/v1/tracking') {
-      if (req.method !== 'POST') return json(res, 405, { error: tr('POST gerekli') });
-      if (!this.#deps.setTracking) return json(res, 501, { error: tr('bu sürümde yok') });
+      if (req.method !== 'POST') return json(res, 405, { error: tr('POST required') });
+      if (!this.#deps.setTracking) return json(res, 501, { error: tr('not available in this version') });
       let body: unknown;
       try {
         body = JSON.parse(await readBody(req, TRACKING_BODY_LIMIT));
       } catch {
-        return json(res, 400, { error: tr('gövde okunamadı') });
+        return json(res, 400, { error: tr('could not read the body') });
       }
       const b = body as { mode?: unknown; selected?: unknown; add?: unknown; remove?: unknown };
       // Validated rather than trusted: this ends up in a config file the user
@@ -331,14 +331,14 @@ export class DaemonServer {
       // sixty rows — must use this one: sending its visible set as the whole
       // truth silently un-follows every project it did not happen to show.
       if (b.add !== undefined || b.remove !== undefined) {
-        if (!this.#deps.changeTracking) return json(res, 501, { error: tr('bu sürümde yok') });
+        if (!this.#deps.changeTracking) return json(res, 501, { error: tr('not available in this version') });
         const add = ids(b.add);
         const remove = ids(b.remove);
         try {
           const count = await this.#deps.changeTracking(add, remove);
           return json(res, 200, { ok: true, mode: 'selected', count });
         } catch {
-          return json(res, 500, { error: tr('yapılandırma yazılamadı') });
+          return json(res, 500, { error: tr('could not write the configuration') });
         }
       }
 
@@ -347,7 +347,7 @@ export class DaemonServer {
       try {
         await this.#deps.setTracking(mode, selected);
       } catch {
-        return json(res, 500, { error: tr('yapılandırma yazılamadı') });
+        return json(res, 500, { error: tr('could not write the configuration') });
       }
       return json(res, 200, { ok: true, mode, count: selected.length });
     }
@@ -356,19 +356,19 @@ export class DaemonServer {
     // not a project id, so it gets its own endpoint rather than a magic value
     // in `add`: the failure modes are different and the answers are different.
     if (path === '/api/v1/projects/path') {
-      if (req.method !== 'POST') return json(res, 405, { error: tr('POST gerekli') });
-      if (!this.#deps.addPath) return json(res, 501, { error: tr('bu sürümde yok') });
+      if (req.method !== 'POST') return json(res, 405, { error: tr('POST required') });
+      if (!this.#deps.addPath) return json(res, 501, { error: tr('not available in this version') });
       let body: unknown;
       try {
         body = JSON.parse(await readBody(req, TRACKING_BODY_LIMIT));
       } catch {
-        return json(res, 400, { error: tr('gövde okunamadı') });
+        return json(res, 400, { error: tr('could not read the body') });
       }
       const raw = (body as { path?: unknown }).path;
       // Length-capped before it reaches the filesystem: this string becomes a
       // `realpath` call and then a line in a config file a human edits.
       if (typeof raw !== 'string' || raw.length === 0 || raw.length > 4096) {
-        return json(res, 400, { error: tr('dizin yolu gerekli') });
+        return json(res, 400, { error: tr('a directory path is required') });
       }
       const added = await this.#deps.addPath(raw);
       if (!added.ok) {
@@ -376,14 +376,14 @@ export class DaemonServer {
         // it": telling them apart is the difference between the user fixing a
         // typo and the user filing a bug.
         return added.reason === 'notdir'
-          ? json(res, 404, { error: tr('böyle bir dizin yok') })
-          : json(res, 500, { error: tr('yapılandırma yazılamadı') });
+          ? json(res, 404, { error: tr('no such directory') })
+          : json(res, 500, { error: tr('could not write the configuration') });
       }
       return json(res, 200, { ok: true, projectId: added.projectId, displayName: added.displayName });
     }
 
     if (path === '/api/v1/candidates') {
-      if (!this.#deps.candidates) return json(res, 501, { error: tr('bu sürümde yok') });
+      if (!this.#deps.candidates) return json(res, 501, { error: tr('not available in this version') });
       const candidates = this.#deps.candidates();
       // Said out loud, because a client that does not know the list is capped
       // will treat it as the whole truth. Exactly-at-the-cap reads as
@@ -395,8 +395,8 @@ export class DaemonServer {
     // Stopping is a mutation, so it is POST: a GET would let any page that
     // guessed the token kill the daemon through an <img> tag.
     if (path === '/api/v1/shutdown') {
-      if (req.method !== 'POST') return json(res, 405, { error: tr('POST gerekli') });
-      if (!this.#deps.onShutdown) return json(res, 501, { error: tr('bu sürümde yok') });
+      if (req.method !== 'POST') return json(res, 405, { error: tr('POST required') });
+      if (!this.#deps.onShutdown) return json(res, 501, { error: tr('not available in this version') });
       // Answer first, exit after: the caller should learn it worked rather
       // than see a dropped connection and have to guess.
       json(res, 200, { ok: true, stopping: true });
@@ -411,16 +411,16 @@ export class DaemonServer {
     // not always the wanted one.
     if (path === '/api/v1/digest') {
       if (req.method === 'GET') {
-        if (!this.#deps.digest) return json(res, 501, { error: tr('bu sürümde yok') });
+        if (!this.#deps.digest) return json(res, 501, { error: tr('not available in this version') });
         return json(res, 200, await this.#deps.digest());
       }
-      if (req.method !== 'POST') return json(res, 405, { error: tr('POST gerekli') });
-      if (!this.#deps.setDigest) return json(res, 501, { error: tr('bu sürümde yok') });
+      if (req.method !== 'POST') return json(res, 405, { error: tr('POST required') });
+      if (!this.#deps.setDigest) return json(res, 501, { error: tr('not available in this version') });
       let body: unknown;
       try {
         body = JSON.parse(await readBody(req, TRACKING_BODY_LIMIT));
       } catch {
-        return json(res, 400, { error: tr('gövde okunamadı') });
+        return json(res, 400, { error: tr('could not read the body') });
       }
       // The refusal codes come back from the engine; the sentences are made
       // here, because this is the layer that knows a person is reading them.
@@ -429,17 +429,17 @@ export class DaemonServer {
         | { ok: false; reason: string };
       if (saved.ok === false) {
         const why: Record<string, string> = {
-          cli: tr('Kendi komutunu çalıştıran seçenek buradan ayarlanamaz — config dosyasından yazılır.'),
-          provider: tr('Böyle bir sağlayıcı yok.'),
-          model: tr('Model adı geçersiz.'),
-          base_url: tr('Adres geçersiz.'),
-          base_url_scheme: tr('Adres http:// veya https:// olmalı.'),
-          key_env: tr('Ortam değişkeni adı geçersiz.'),
-          key_env_looks_like_key: tr('Buraya anahtarın kendisi değil, onu tutan ortam değişkeninin adı yazılır.'),
-          shape: tr('gövde okunamadı'),
-          failed: tr('yapılandırma yazılamadı'),
+          cli: tr('The option that runs a command of your own cannot be set from here — write it in the config file.'),
+          provider: tr('No such provider.'),
+          model: tr('Invalid model name.'),
+          base_url: tr('Invalid address.'),
+          base_url_scheme: tr('The address must be http:// or https://.'),
+          key_env: tr('Invalid environment variable name.'),
+          key_env_looks_like_key: tr('This field takes the name of the environment variable holding the key, not the key itself.'),
+          shape: tr('could not read the body'),
+          failed: tr('could not write the configuration'),
         };
-        const message = why[saved.reason] ?? tr('gövde okunamadı');
+        const message = why[saved.reason] ?? tr('could not read the body');
         return json(res, saved.reason === 'failed' ? 500 : 400, {
           error: message,
           reason: saved.reason,
@@ -450,10 +450,10 @@ export class DaemonServer {
 
     if (path === '/api/v1/board') {
       const id = url.searchParams.get('project');
-      if (!id) return json(res, 400, { error: tr('project parametresi gerekli') });
-      if (!this.#deps.board) return json(res, 501, { error: tr('faz panosu bu sürümde yok') });
+      if (!id) return json(res, 400, { error: tr('the project parameter is required') });
+      if (!this.#deps.board) return json(res, 501, { error: tr('the phase board is not available in this build') });
       const data = await this.#deps.board(id);
-      return json(res, data ? 200 : 404, data ?? { error: tr('proje bulunamadı') });
+      return json(res, data ? 200 : 404, data ?? { error: tr('project not found') });
     }
 
     return json(res, 404, { error: 'yok' });

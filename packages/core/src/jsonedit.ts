@@ -133,7 +133,7 @@ class Parser {
       this.pos += m[0].length;
       return { kind: 'number', start, end: this.pos, value: Number(m[0]) };
     }
-    throw new JsonParseError('değer bekleniyordu', this.pos);
+    throw new JsonParseError('a value was expected', this.pos);
   }
 
   lit(kind: JsonNodeKind, len: number, value: boolean | null): JsonNode {
@@ -177,7 +177,7 @@ class Parser {
       out += ch;
       i++;
     }
-    throw new JsonParseError('kapanmamış dize', this.pos);
+    throw new JsonParseError('unterminated string', this.pos);
   }
 
   parseObject(): JsonNode {

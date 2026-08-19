@@ -166,7 +166,7 @@ test('every cell in a project row has a column to sit in', () => {
   const templates = [...html.matchAll(/([^{}]*\.prow\b[^{}]*)\{([^}]*)\}/g)]
     .filter((m) => /grid-template-columns:/.test(m[2]!))
     .map((m) => ({ selector: m[1]!.trim(), body: m[2]!, at: m.index! }));
-  assert.ok(templates.length >= 3, `satır şablonu sayısı: ${templates.length}`);
+  assert.ok(templates.length >= 3, `row templates found: ${templates.length}`);
 
   const tracksOf = (body: string): number =>
     /grid-template-columns:([^;]+);/.exec(body)![1]!.trim().split(/\s+/).length;
@@ -195,7 +195,7 @@ test('every cell in a project row has a column to sit in', () => {
     assert.equal(
       tracksOf(tpl.body),
       cells.length - hidden.size,
-      `${scope} satırı: ${declared} · gizlenen: ${[...hidden].join(', ') || '(yok)'}`,
+      `${scope} row: ${declared} · hidden: ${[...hidden].join(', ') || '(none)'}`,
     );
   }
 });
@@ -205,7 +205,7 @@ test('every cell in a project row has a column to sit in', () => {
  *
  * The old row named whichever state was dominant and printed `live/total`
  * beside it, so a project with three sessions waiting on the user and one
- * still working announced "3 bekliyor  5/5" and left the reader to work out
+ * still working announced "3 waiting  5/5" and left the reader to work out
  * where the other two had gone.
  */
 test('a project doing both shows both counts', () => {
@@ -236,8 +236,8 @@ test('a project doing both shows both counts', () => {
   });
 
   const html = els.get('projects')!.innerHTML;
-  assert.match(html, /2 bekliyor/);
-  assert.match(html, /1 çalışıyor/);
+  assert.match(html, /2 waiting/);
+  assert.match(html, /1 running/);
   // And the pair that used to mislead is gone for good.
   assert.ok(!/>3\/3</.test(html), 'the live/total pair is back');
 });
@@ -287,19 +287,19 @@ test('a session from another agent is badged, and Claude Code is not', () => {
 test('the timer advances clocks instead of rebuilding the list', () => {
   const html = readFileSync(PANEL, 'utf8');
 
-  assert.match(html, /setInterval\(tickClocks, 1000\)/, 'saniyelik tik hâlâ render çağırıyor');
+  assert.match(html, /setInterval\(tickClocks, 1000\)/, 'the one-second tick still calls render');
   assert.doesNotMatch(
     html,
     /setInterval\(\(\) => \{ if \(report\) render\(\); \}/,
-    'tam yeniden çizim hâlâ zamanlayıcıya bağlı',
+    'a full redraw is still on the timer',
   );
 
   // Every elapsed-time cell has to carry its own reference point, or the tick
   // has nothing to recompute from and the clocks quietly stop.
   const dwellCells = [...html.matchAll(/<span class="(dwell|xy)"([^>]*)>/g)];
-  assert.ok(dwellCells.length >= 3, `geçen süre hücresi bulunamadı: ${dwellCells.length}`);
+  assert.ok(dwellCells.length >= 3, `no dwell cell found: ${dwellCells.length}`);
   for (const [, cls, attrs] of dwellCells) {
-    assert.match(attrs!, /data-since=/, `${cls} hücresi referans zamanı taşımıyor`);
+    assert.match(attrs!, /data-since=/, `the ${cls} cell carries no reference time`);
   }
 
   // And the tick reads exactly that attribute.
@@ -381,8 +381,8 @@ test('saving the chooser sends a change, not a whole selection', async () => {
 test('a partial chooser says so', () => {
   const html = readFileSync(PANEL, 'utf8');
   assert.match(html, /candidatesPartial = !!body\.truncated/);
-  assert.match(html, /candidatesPartial = true/, 'yedek listeden sonra kısmi işaretlenmiyor');
-  assert.match(html, /candidatesPartial \?/, 'kısmi olduğu ekranda söylenmiyor');
+  assert.match(html, /candidatesPartial = true/, 'the fallback list is not marked partial');
+  assert.match(html, /candidatesPartial \?/, 'the screen does not say the list is partial');
 });
 
 /**
@@ -409,10 +409,10 @@ test('the digest is drawn as a claim, with its model and its age on it', () => {
     percentEstimate: 70,
     percentBasis: 'commits',
     confidence: 'medium',
-    nextAction: 'CI koştur',
+    nextAction: 'run CI',
     blocker: 'depo itilmedi',
     stallReason: null,
-    riskFlags: ['imzasız'],
+    riskFlags: ['unsigned'],
     evidence: [{ kind: 'commit', ref: 'abc' }],
     conflicts: [],
     unchanged: false,
@@ -423,7 +423,7 @@ test('the digest is drawn as a claim, with its model and its age on it', () => {
   assert.match(html, /class="digest"/);
   assert.match(html, /Denetim/);
   assert.match(html, /Özet cümlesi\./);
-  assert.match(html, /CI koştur/);
+  assert.match(html, /run CI/);
   assert.match(html, /depo itilmedi/);
   // Which model said it, and how long ago — both, always.
   assert.match(html, /openai/);

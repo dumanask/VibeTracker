@@ -46,9 +46,9 @@ const COPY = [
 ];
 
 const LICENSE_NOTE =
-  'Lisans henüz seçilmedi. `npm publish` bilerek engellendi: lisanssız yayın,\n' +
-  'kullanma hakkı belirsiz kod dağıtmak demektir. Bir LICENSE dosyası ekle\n' +
-  '(plan Apache-2.0 öneriyor) ve package.json içindeki "license" alanını güncelle.';
+  'No licence has been chosen yet. `npm publish` is deliberately blocked:\n' +
+  'publishing without one ships code nobody knows their rights to. Add a\n' +
+  'LICENSE file (the plan suggests Apache-2.0) and set "license" in package.json.';
 
 function entryOf(pkg) {
   const meta = JSON.parse(readFileSync(join(ROOT, 'packages', pkg, 'package.json'), 'utf8'));
@@ -198,8 +198,8 @@ const [major, minor] = process.versions.node.split('.').map(Number);
 if (major < 22 || (major === 22 && minor < 20)) {
   console.error(
     \`VibeTracker Node 22.20+ gerektiriyor (bulunan: \${process.version}).\\n\` +
-      'Bu sürüm, derleme adımı olmadan TypeScript çalıştırmak ve node:sqlite\\n' +
-      'kullanmak için gerekli — daha eskisinde başlayamaz.',
+      'That version is what it takes to run TypeScript with no build step and\\n' +
+      'to use node:sqlite -- anything older cannot start.',
   );
   process.exit(1);
 }
@@ -218,7 +218,7 @@ process.exit(r.status ?? 70);
 const mainSrc = readFileSync(join(ROOT, 'packages', 'daemon', 'src', 'main.ts'), 'utf8');
 const versionMatch = /VERSION = '([^']+)'/.exec(mainSrc);
 if (!versionMatch) {
-  console.error('Sürüm bulunamadı: packages/daemon/src/main.ts içinde VERSION yok.');
+  console.error('No version found: packages/daemon/src/main.ts has no VERSION.');
   process.exit(1);
 }
 const version = versionMatch[1];
@@ -231,7 +231,7 @@ const fileCount = copySources();
 for (const item of COPY) {
   const from = join(ROOT, item.from);
   if (!existsSync(from)) {
-    console.warn(`  atlandı (yok): ${item.from}`);
+    console.warn(`  skipped (absent): ${item.from}`);
     continue;
   }
   const to = join(STAGE, item.to);
@@ -258,7 +258,7 @@ for (const f of walk(STAGE)) {
   if (FORBIDDEN.some((re) => re.test(rel))) suspicious.push(rel);
 }
 if (suspicious.length > 0) {
-  console.error(`Şüpheli dosyalar pakete girecekti:\n  ${suspicious.join('\n  ')}`);
+  console.error(`Suspicious files were about to be packed:\n  ${suspicious.join('\n  ')}`);
   process.exit(1);
 }
 
@@ -273,7 +273,7 @@ for (const f of walk(join(STAGE, 'src'))) {
   if (SPECIFIER.test(readFileSync(f, 'utf8'))) leftovers.push(relative(STAGE, f));
 }
 if (leftovers.length > 0) {
-  console.error(`Çevrilmemiş paket adı kalmış:\n  ${leftovers.join('\n  ')}`);
+  console.error(`An unresolved package name was left behind:\n  ${leftovers.join('\n  ')}`);
   process.exit(1);
 }
 
@@ -296,15 +296,15 @@ for (const f of walk(join(STAGE, 'src'))) {
   }
 }
 if (missing.length > 0) {
-  console.error(`Var olmayan dosyayı gösteren içe aktarım:\n  ${missing.join('\n  ')}`);
+  console.error(`An import pointing at a file that does not exist:\n  ${missing.join('\n  ')}`);
   process.exit(1);
 }
 
 const bytes = [...walk(STAGE)].reduce((n, f) => n + statSync(f).size, 0);
 console.log(
-  `\nPaket hazır: ${STAGE}\n` +
-    `  ${fileCount} kaynak dosyası · toplam ${(bytes / 1024).toFixed(0)} KB\n` +
-    `  sürüm ${version} · bağımlılık yok\n`,
+  `\nPackage ready: ${STAGE}\n` +
+    `  ${fileCount} source files · ${(bytes / 1024).toFixed(0)} KB in total\n` +
+    `  version ${version} · no dependencies\n`,
 );
 if (!existsSync(join(ROOT, 'LICENSE'))) console.log(`  ⚠ ${LICENSE_NOTE.split('\n')[0]}\n`);
 console.log(`Tarball:  cd ${relative(ROOT, STAGE) || '.'} && npm pack`);

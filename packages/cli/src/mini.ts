@@ -80,41 +80,41 @@ async function existingWindow(): Promise<number | null> {
  */
 function noteLabels(): NoteLabels {
   return {
-    waiting: tr('bekliyor'),
-    running: tr('çalışıyor'),
-    idle: tr('boşta'),
-    off: tr('kapalı'),
-    clear: tr('temiz'),
-    choose: tr('izlenecekleri seç'),
-    nopick: tr('proje bulunamadı'),
-    empty: tr('izlenen proje yok'),
-    nodaemon: tr('daemon yok'),
+    waiting: tr('waiting'),
+    running: tr('running'),
+    idle: tr('idle'),
+    off: tr('off'),
+    clear: tr('clear'),
+    choose: tr('choose what to track'),
+    nopick: tr('project not found'),
+    empty: tr('no projects tracked'),
+    nodaemon: tr('no daemon'),
     product: 'VibeTracker',
-    load: tr('sistem yükü'),
-    addPath: tr('klasör seç'),
-    chooseDir: tr('İzlenecek proje klasörünü seç'),
-    pathAdded: tr('eklendi'),
-    pathBad: tr('klasör eklenemedi'),
-    pathNotDir: tr('böyle bir dizin yok'),
-    pickFail: tr('daemon yanıt vermiyor'),
-    pickDenied: tr('daemon bizi tanımadı'),
+    load: tr('system load'),
+    addPath: tr('add a folder'),
+    chooseDir: tr('Choose the project folder to track'),
+    pathAdded: tr('added'),
+    pathBad: tr('could not add that folder'),
+    pathNotDir: tr('no such directory'),
+    pickFail: tr('daemon not answering'),
+    pickDenied: tr('daemon refused us'),
     // Spoken. The name goes in front, so these are the rest of the sentence.
-    speakWaiting: tr('beklemeye geçti'),
-    speakMany: tr('proje beklemeye geçti'),
+    speakWaiting: tr('is now waiting for you'),
+    speakMany: tr('projects are now waiting for you'),
     // The same two lines in the other language the catalog ships, because the
     // window may find no voice that speaks this one. Deciding here would be
     // wrong: only the window can see which voices are installed.
     speakWaitingAlt: trInto(altLang(), 'beklemeye geçti'),
     speakManyAlt: trInto(altLang(), 'proje beklemeye geçti'),
-    voiceNone: tr('ses yok'),
-    voiceMismatch: tr('dil eşleşmedi'),
+    voiceNone: tr('no voice'),
+    voiceMismatch: tr('language mismatch'),
     // Shown in the title strip while the pointer rests on a button.
-    btnPick: tr('izlenecekleri seç'),
-    btnSpeak: tr('sesli haber'),
-    btnFull: tr('tam pano'),
-    btnShade: tr('şerit'),
-    btnBadge: tr('rozet'),
-    btnClose: tr('kapat'),
+    btnPick: tr('choose what to track'),
+    btnSpeak: tr('voice alerts'),
+    btnFull: tr('full dashboard'),
+    btnShade: tr('shade'),
+    btnBadge: tr('badge'),
+    btnClose: tr('close'),
   };
 }
 
@@ -130,7 +130,7 @@ function altLang(): Lang {
 export async function runMini(args: MiniArgs): Promise<number> {
   const info = readRuntimeInfo();
   if (!info) {
-    process.stderr.write(tr('Daemon çalışmıyor. Önce `vt daemon` çalıştır.\n'));
+    process.stderr.write(tr('The daemon is not running. Start it with `vt daemon`.\n'));
     return 3;
   }
 
@@ -144,15 +144,15 @@ export async function runMini(args: MiniArgs): Promise<number> {
     const open = noteAlive();
     if (args.unpin) {
       if (open === null) {
-        process.stdout.write(tr('Açık bir post-it penceresi yok.') + '\n');
+        process.stdout.write(tr('No sticky-note window is open.') + '\n');
         return 3;
       }
       stopNote(open);
-      process.stdout.write(tr('Post-it penceresi kapatıldı.') + '\n');
+      process.stdout.write(tr('Sticky-note window closed.') + '\n');
       return 0;
     }
     if (open !== null) {
-      process.stdout.write(t`Post-it penceresi zaten açık (pid ${open}).\n`);
+      process.stdout.write(t`The sticky-note window is already open (pid ${open}).\n`);
       return 0;
     }
     const started = startNote({
@@ -167,14 +167,14 @@ export async function runMini(args: MiniArgs): Promise<number> {
       langAlt: altLang(),
     });
     if (started.ok) {
-      process.stdout.write(t`Post-it penceresi açıldı (pid ${started.pid}).\n`);
+      process.stdout.write(t`Sticky-note window opened (pid ${started.pid}).\n`);
       process.stdout.write(
-        tr('  Çerçevesiz ve üstte. Başlıkta: + seç / ♪ ses / tam görünüm / şerit / rozet / kapat.\n'),
+        tr('  Frameless and on top. In the strip: + choose / ♪ voice / full view / shade / badge / close.\n'),
       );
       return 0;
     }
     process.stdout.write(
-      tr('Yerel pencere başlatılamadı; tarayıcı penceresine düşülüyor.\n'),
+      tr('Could not start the native window; falling back to the browser one.\n'),
     );
   }
 
@@ -185,14 +185,14 @@ export async function runMini(args: MiniArgs): Promise<number> {
   if (args.unpin) {
     const open = await existingWindow();
     if (open === null) {
-      process.stdout.write(tr('Açık bir post-it penceresi yok.') + '\n');
+      process.stdout.write(tr('No sticky-note window is open.') + '\n');
       return 3;
     }
     const released = await pinWindow(open, { unpin: true, timeoutMs: 2000 });
     process.stdout.write(
       released.ok
-        ? tr('Artık üstte tutulmuyor.') + '\n'
-        : tr('Üstte tutma kaldırılamadı.') + '\n',
+        ? tr('No longer kept on top.') + '\n'
+        : tr('Could not release it from the top.') + '\n',
     );
     return released.ok ? 0 : 70;
   }
@@ -204,9 +204,9 @@ export async function runMini(args: MiniArgs): Promise<number> {
   const already = await existingWindow();
   if (already !== null) {
     const again = await pinWindow(already, { timeoutMs: 2000 });
-    process.stdout.write(t`Post-it penceresi zaten açık (pid ${already}).\n`);
+    process.stdout.write(t`The sticky-note window is already open (pid ${already}).\n`);
     if (!again.ok && !args.noPin) {
-      process.stdout.write(tr('Üstte tutulamadı.') + '\n');
+      process.stdout.write(tr('Could not keep it on top.') + '\n');
     }
     return 0;
   }
@@ -214,9 +214,9 @@ export async function runMini(args: MiniArgs): Promise<number> {
   const browser = findBrowser();
   if (!browser) {
     process.stderr.write(
-      tr('Chromium tabanlı bir tarayıcı bulunamadı (Edge, Chrome, Brave, Vivaldi).\n'),
+      tr('No Chromium-based browser found (Edge, Chrome, Brave, Vivaldi).\n'),
     );
-    process.stderr.write(tr('Paneli kendin açabilirsin:\n'));
+    process.stderr.write(tr('You can open the dashboard yourself:\n'));
     process.stdout.write(`${url}\n`);
     return 3;
   }
@@ -229,21 +229,21 @@ export async function runMini(args: MiniArgs): Promise<number> {
     y: args.y,
   });
   if (!win) {
-    process.stderr.write(t`Pencere açılamadı: ${browser.path}\n`);
+    process.stderr.write(t`Could not open the window: ${browser.path}\n`);
     return 70;
   }
 
   writeMiniState({ pid: win.pid, startedAt: Date.now() });
-  process.stdout.write(t`Post-it penceresi açıldı · ${browser.family} · pid ${win.pid}\n`);
+  process.stdout.write(t`Sticky-note window opened · ${browser.family} · pid ${win.pid}\n`);
 
   if (args.noPin) {
-    process.stdout.write(tr('Üstte tutulmuyor (--no-pin).\n'));
+    process.stdout.write(tr('Not kept on top (--no-pin).\n'));
     return 0;
   }
 
   const pinned = await pinWindow(win.pid);
   if (pinned.ok) {
-    process.stdout.write(tr('Diğer pencerelerin üstünde tutuluyor.\n'));
+    process.stdout.write(tr('Kept above your other windows.\n'));
     return 0;
   }
 
@@ -251,12 +251,12 @@ export async function runMini(args: MiniArgs): Promise<number> {
   // Saying which part failed is the difference between a limitation and a bug.
   const why =
     pinned.reason === 'unsupported'
-      ? tr('Bir tarayıcı penceresini üstte tutmak yalnızca Windows üzerinde yapılabiliyor.')
+      ? tr('Pinning a browser window on top is only possible on Windows.')
       : pinned.reason === 'no-window'
-        ? tr('Pencere zamanında görünmedi — üstte tutulamadı.')
+        ? tr('The window did not appear in time — it could not be pinned.')
         : pinned.reason === 'process-gone'
-          ? tr('Pencere açılır açılmaz kapandı.')
-          : tr('Üstte tutulamadı.');
+          ? tr('The window closed as soon as it opened.')
+          : tr('Could not keep it on top.');
   process.stdout.write(`${why}\n`);
   // The honest alternative, not a shrug. Pinning a *browser* window needs
   // SetWindowPos, and that is Win32 -- but the desktop app owns its own
@@ -264,9 +264,9 @@ export async function runMini(args: MiniArgs): Promise<number> {
   // here is the difference between a limitation and a dead end.
   if (pinned.reason === 'unsupported') {
     process.stdout.write(
-      tr('Gerçek bir üstte-kalan post-it için masaüstü uygulamasını kur: tepsi menüsü → Post-it.\n'),
+      tr('For a real always-on-top sticky note, install the desktop app: tray menu -> Post-it.\n'),
     );
   }
-  process.stdout.write(tr('Pencere yine de açık; elle üstte tutabilirsin.\n'));
+  process.stdout.write(tr('The window is open anyway; you can pin it yourself.\n'));
   return 0;
 }

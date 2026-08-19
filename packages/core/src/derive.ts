@@ -76,7 +76,7 @@ export function deriveState(input: DeriveInput): DerivedState {
   const openTool = facts.openTools[0];
 
   if (openTool) {
-    evidence.push(t`tail:açık araç ${openTool}`);
+    evidence.push(t`tail:open tool ${openTool}`);
     const toolClass = classifyTool(openTool);
     const deadline = stallDeadline(openTool, true);
 
@@ -88,7 +88,7 @@ export function deriveState(input: DeriveInput): DerivedState {
     // minute. When one does, the agent is not slow — it is sitting on a
     // permission prompt. No process tree is needed to know this.
     if (toolClass === 'local-instant' && ageMs > LOCAL_TOOL_PERMISSION_MS) {
-      evidence.push(t`izin:yerel araç ${fmtAge(ageMs)} açık, milisaniyede bitmeliydi`);
+      evidence.push(t`perm:local tool open for ${fmtAge(ageMs)}, should finish in milliseconds`);
       return {
         state: SessionState.WaitingPermission,
         subReason: `tool:${openTool}`,
@@ -99,7 +99,7 @@ export function deriveState(input: DeriveInput): DerivedState {
 
     if (toolClass === 'spawns-children' && descendants) {
       if (!descendants.startTimesKnown) {
-        evidence.push(t`süreç:${descendants.total} alt süreç (başlangıç zamanı yok)`);
+        evidence.push(t`proc:${descendants.total} descendants (no start time)`);
         if (descendants.total > 0) {
           return {
             state: SessionState.Busy,
@@ -109,9 +109,9 @@ export function deriveState(input: DeriveInput): DerivedState {
           };
         }
       } else if (descendants.recent > 0) {
-        evidence.push(t`süreç:${descendants.recent} yeni alt süreç çalışıyor`);
+        evidence.push(t`proc:${descendants.recent} new descendants running`);
         if (ageMs > deadline) {
-          evidence.push(t`stall:${fmtAge(ageMs)} ilerleme yok (sınır ${fmtAge(deadline)})`);
+          evidence.push(t`stall:no progress for ${fmtAge(ageMs)} (limit ${fmtAge(deadline)})`);
           return {
             state: SessionState.Stalled,
             subReason: `tool:${openTool}`,
@@ -123,8 +123,8 @@ export function deriveState(input: DeriveInput): DerivedState {
       } else if (ageMs > SPAWN_GRACE_MS) {
         evidence.push(
           descendants.total > 0
-            ? t`izin:yeni alt süreç yok (${descendants.total} eski alt süreç, muhtemelen MCP)`
-            : tr('izin:hiç alt süreç yok, komut başlatılmamış'),
+            ? t`perm:no new descendants (${descendants.total} older ones, probably MCP)`
+            : tr('perm:no descendants at all, the command never started'),
         );
         return {
           state: SessionState.WaitingPermission,
@@ -139,7 +139,7 @@ export function deriveState(input: DeriveInput): DerivedState {
       return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.8, evidence };
     }
     if (ageMs > deadline) {
-      evidence.push(t`stall:${fmtAge(ageMs)} ilerleme yok (sınır ${fmtAge(deadline)})`);
+      evidence.push(t`stall:no progress for ${fmtAge(ageMs)} (limit ${fmtAge(deadline)})`);
       return {
         state: SessionState.Stalled,
         subReason: `tool:${openTool}`,
@@ -151,12 +151,12 @@ export function deriveState(input: DeriveInput): DerivedState {
   }
 
   if (ageMs < RECENT_WRITE_MS) {
-    evidence.push(t`tail:${fmtAge(ageMs)} önce yazdı`);
+    evidence.push(t`tail:wrote ${fmtAge(ageMs)} ago`);
     return { state: SessionState.Busy, subReason: 'thinking', confidence: 0.75, evidence };
   }
 
   if (facts.lastEntryRole === 'assistant') {
-    evidence.push(t`tail:son=asistan, ${fmtAge(ageMs)} sessiz`);
+    evidence.push(t`tail:last=assistant, silent for ${fmtAge(ageMs)}`);
     return {
       state: SessionState.WaitingInput,
       subReason: 'turn_complete',
@@ -169,15 +169,15 @@ export function deriveState(input: DeriveInput): DerivedState {
   // extended-thinking turn writes nothing for minutes while still burning CPU.
   // Silence plus no CPU is a hang.
   if (busyCpu) {
-    evidence.push(tr('tail:sessiz ama cpu yakıyor'));
+    evidence.push(tr('tail:silent but burning cpu'));
     return { state: SessionState.Busy, subReason: 'thinking', confidence: 0.7, evidence };
   }
 
   if (ageMs > stallDeadline(undefined, true)) {
-    evidence.push(t`stall:son=kullanıcı, ${fmtAge(ageMs)} sessiz, cpu yok`);
+    evidence.push(t`stall:last=user, silent for ${fmtAge(ageMs)}, no cpu`);
     return { state: SessionState.Stalled, subReason: 'thinking', confidence: 0.6, evidence };
   }
 
-  evidence.push(t`tail:son=${facts.lastEntryRole ?? 'bilinmiyor'}, ${fmtAge(ageMs)} sessiz`);
+  evidence.push(t`tail:last=${facts.lastEntryRole ?? 'bilinmiyor'}, silent for ${fmtAge(ageMs)}`);
   return { state: SessionState.Busy, subReason: 'thinking', confidence: 0.5, evidence };
 }

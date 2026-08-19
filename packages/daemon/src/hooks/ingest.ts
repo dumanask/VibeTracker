@@ -183,7 +183,7 @@ export class HookIngest {
             now,
           );
         } else if (/idle/i.test(kind)) {
-          this.#set(s, SessionState.WaitingInput, 'idle_prompt', 'hook:boşta bildirimi', now);
+          this.#set(s, SessionState.WaitingInput, 'idle_prompt', 'hook:idle notification', now);
         }
         // Any other notification kind is informational; state is left alone.
         return;
@@ -198,7 +198,7 @@ export class HookIngest {
         // Only bound under --high-fidelity.
         s.pendingTool = undefined;
         const started = safeField(p.tool_name, '?');
-        this.#set(s, SessionState.Busy, `tool:${started}`, `hook:araç başladı (${started})`, now);
+        this.#set(s, SessionState.Busy, `tool:${started}`, `hook:tool started (${started})`, now);
         return;
 
       case 'PostToolUse':
@@ -207,12 +207,12 @@ export class HookIngest {
         // would stay pending forever.
         if (p.tool_name && s.pendingTool === safeField(p.tool_name, '')) s.pendingTool = undefined;
         if (s.state === SessionState.WaitingPermission) {
-          this.#set(s, SessionState.Busy, 'thinking', 'hook:araç bitti, izin verilmişti', now);
+          this.#set(s, SessionState.Busy, 'thinking', 'hook:tool finished, permission had been granted', now);
         }
         return;
 
       case 'PostToolUseFailure':
-        s.lastError = p.error ? truncateReason(p.error) : safeField(p.tool_name, 'araç hatası');
+        s.lastError = p.error ? truncateReason(p.error) : safeField(p.tool_name, 'tool error');
         // Compared in the same form it was stored in, or a name that needed
         // redacting would never match the one waiting and the pending tool
         // would stay pending forever.
@@ -228,25 +228,25 @@ export class HookIngest {
 
       case 'StopFailure':
         s.pendingTool = undefined;
-        s.lastError = p.error ? truncateReason(p.error) : 'tur başarısız';
+        s.lastError = p.error ? truncateReason(p.error) : 'turn failed';
         this.#set(s, SessionState.Errored, 'stop_failure', `hook:tur hatayla bitti`, now);
         return;
 
       case 'PreCompact':
         s.compacting = true;
-        this.#set(s, SessionState.Busy, 'compacting', 'hook:sıkıştırma başladı', now);
+        this.#set(s, SessionState.Busy, 'compacting', 'hook:compaction started', now);
         return;
 
       case 'PostCompact':
         s.compacting = false;
         if (s.subReason === 'compacting') {
-          this.#set(s, SessionState.Busy, 'thinking', 'hook:sıkıştırma bitti', now);
+          this.#set(s, SessionState.Busy, 'thinking', 'hook:compaction finished', now);
         }
         return;
 
       case 'SessionStart':
         s.ended = undefined;
-        this.#set(s, SessionState.Starting, safeField(p.source, 'start'), 'hook:oturum başladı', now);
+        this.#set(s, SessionState.Starting, safeField(p.source, 'start'), 'hook:session started', now);
         return;
 
       case 'SessionEnd':

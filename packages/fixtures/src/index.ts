@@ -75,17 +75,17 @@ function pick<T>(items: readonly T[], i: number): T {
 }
 
 const TITLES = [
-  'Panel için SSE akışı',
-  'Şema göçü ve geri alma',
-  'e2e testleri yeşile çekme',
+  'SSE stream for the dashboard',
+  'Schema migration and rollback',
+  'Getting the e2e tests green',
   'Rakip analizi tablosu',
-  'Faz 2 kapanışı',
+  'Closing out phase 2',
 ];
 
 const PROMPTS = [
-  'testleri çalıştır ve düzelt',
+  'run the tests and fix them',
   'build al, exe üret',
-  'şu dosyayı incele',
+  'take a look at this file',
   'plana göre devam et',
 ];
 

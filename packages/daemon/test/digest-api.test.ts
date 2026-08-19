@@ -61,7 +61,7 @@ async function withServer(
   const configFile = join(dir, 'config.toml');
   writeFileSync(
     configFile,
-    ['config_version = 1', '', '[digest]', '# hangi LLM, ve kimin hesabından', 'provider = "off"', ''].join('\n'),
+    ['config_version = 1', '', '[digest]', '# which LLM, and on whose account', 'provider = "off"', ''].join('\n'),
     'utf8',
   );
   let current = start;
@@ -137,7 +137,7 @@ test('a choice made in the page lands in the config file, comments intact', asyn
     const text = readFileSync(configFile, 'utf8');
     assert.match(text, /provider = "ollama"/);
     assert.match(text, /model = "qwen2\.5-coder:7b"/);
-    assert.match(text, /# hangi LLM, ve kimin hesabından/, 'the comment survived the write');
+    assert.match(text, /# which LLM, and on whose account/, 'the comment survived the write');
   });
 });
 

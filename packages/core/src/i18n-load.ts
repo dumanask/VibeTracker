@@ -69,7 +69,7 @@ export function loadLang(lang: Lang): { ok: boolean; entries: number; detail?: s
   const file = join(LOCALE_DIR, `${lang}.json`);
   if (!existsSync(file)) {
     setLang(SOURCE_LANG, {});
-    return { ok: false, entries: 0, detail: `${file} bulunamadı` };
+    return { ok: false, entries: 0, detail: `${file} not found` };
   }
   try {
     const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;

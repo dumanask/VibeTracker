@@ -189,7 +189,7 @@ function parseArgs(argv: string[]): Args {
       }
       default:
         if (a.startsWith('-')) {
-          process.stderr.write(t`Bilinmeyen seçenek: ${a}\n`);
+          process.stderr.write(t`Unknown option: ${a}\n`);
           process.exit(2);
         }
         rest.push(a);
@@ -218,11 +218,10 @@ function reportMissingIfAsked(): void {
   try {
     writeFileSync(out, `${JSON.stringify(body, null, 2)}
 `, 'utf8');
-    process.stderr.write(`[i18n] ${keys.length} çevrilmemiş metin → ${out}
+    process.stderr.write(`[i18n] ${keys.length} untranslated strings → ${out}
 `);
   } catch (e) {
-    process.stderr.write(t`[i18n] yazılamadı: ${(e as Error).message}
-`);
+    process.stderr.write(t`[i18n] could not write: ${(e as Error).message}\n`);
   }
 }
 
@@ -234,8 +233,10 @@ async function main(): Promise<number> {
   // broken config simply leaves the source language in place.
   let configLang: string | undefined;
   try {
-    const { config } = await loadConfig();
-    configLang = config.server.lang;
+    const { config, fromFile } = await loadConfig();
+    // Only a config file that exists gets to decide; without one the OS locale
+    // still does, which is how a Turkish install starts out in Turkish.
+    configLang = fromFile ? config.server.lang : undefined;
     // The user's own secret shapes, installed before anything can be printed.
     // Every CLI surface redacts through the same module, so this is the one
     // place it has to happen for all of them.
@@ -269,9 +270,7 @@ async function main(): Promise<number> {
       return stopDaemon();
     }
     if (args.sub !== undefined) {
-      process.stderr.write(t`Bilinmeyen alt-komut: ${args.sub}
-Kullanım: vt daemon [stop]
-`);
+      process.stderr.write(t`Unknown subcommand: ${args.sub}\nUsage: vt daemon [stop]\n`);
       return 64;
     }
     const { runDaemon } = await import('./daemon-cmd.ts');
@@ -343,7 +342,7 @@ Kullanım: vt daemon [stop]
         return statusHooks(hookArgs);
       default:
         process.stderr.write(
-          t`Bilinmeyen alt-komut: ${args.sub}\nKullanım: vt hooks install|uninstall|status\n`,
+          t`Unknown subcommand: ${args.sub}\nUsage: vt hooks install|uninstall|status\n`,
         );
         return 2;
     }
@@ -360,7 +359,7 @@ Kullanım: vt daemon [stop]
       case 'status':
         return showAutostart();
       default:
-        process.stderr.write(t`Bilinmeyen alt-komut: ${args.sub}\nKullanım: vt autostart install|uninstall|status\n`);
+        process.stderr.write(t`Unknown subcommand: ${args.sub}\nUsage: vt autostart install|uninstall|status\n`);
         return 2;
     }
   }
@@ -389,7 +388,7 @@ Kullanım: vt daemon [stop]
     return runProjects({ sub: args.sub, names: args.operands ?? [], json: args.json });
   }
   if (args.command !== 'status') {
-    process.stderr.write(t`Bilinmeyen komut: ${args.command}\n\n${usage()}`);
+    process.stderr.write(t`Unknown command: ${args.command}\n\n${usage()}`);
     return 2;
   }
 
@@ -428,7 +427,7 @@ Kullanım: vt daemon [stop]
   if (args.html) {
     const target = resolve(args.html);
     await writeFile(target, renderHtml(report), 'utf8');
-    process.stdout.write(t`HTML anlık görüntü: ${target}\n`);
+    process.stdout.write(t`HTML snapshot: ${target}\n`);
   }
 
   // A successful run exits 0. Reporting "an agent is waiting for you" through a

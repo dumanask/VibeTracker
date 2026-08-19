@@ -105,7 +105,7 @@ function configLines(): { present: boolean; lines: string[] } {
   try {
     text = readFileSync(path, 'utf8');
   } catch (e) {
-    return { present: true, lines: [t`(okunamadı: ${(e as Error).message})`] };
+    return { present: true, lines: [t`(unreadable: ${(e as Error).message})`] };
   }
   const out: string[] = [];
   for (const raw of text.split(/\r?\n/)) {
@@ -113,7 +113,7 @@ function configLines(): { present: boolean; lines: string[] } {
     if (line.trim() === '') continue;
     const m = /^\s*([A-Za-z0-9_."-]+)\s*=/.exec(line);
     if (m && SECRET_CONFIG_KEYS.test(m[1]!.replace(/["']/g, ''))) {
-      out.push(t`${m[1]} = «gizlendi»`);
+      out.push(t`${m[1]} = «hidden»`);
       continue;
     }
     out.push(redact(line));
@@ -122,15 +122,15 @@ function configLines(): { present: boolean; lines: string[] } {
 }
 
 function tailLines(path: string | null, count: number): { path: string | null; lines: string[] } {
-  if (!path || !existsSync(path)) return { path: path ? tr('«var değil»') : null, lines: [] };
+  if (!path || !existsSync(path)) return { path: path ? tr('«absent»') : null, lines: [] };
   try {
     const text = readFileSync(path, 'utf8');
     const lines = text.split(/\r?\n/).filter(Boolean).slice(-count);
     // The log already refuses prompts and file contents, but a diagnostic
     // bundle is exactly the wrong place to trust that.
-    return { path: tr('«günlük»'), lines: lines.map((l) => redact(l)) };
+    return { path: tr('«log»'), lines: lines.map((l) => redact(l)) };
   } catch (e) {
-    return { path: tr('«günlük»'), lines: [t`(okunamadı: ${(e as Error).message})`] };
+    return { path: tr('«log»'), lines: [t`(unreadable: ${(e as Error).message})`] };
   }
 }
 
@@ -202,12 +202,12 @@ function stripPaths(s: string): string {
 /** Human-readable inventory of what the bundle will contain. */
 function manifest(b: Bundle): string[] {
   return [
-    t`sürüm ve platform bilgisi          ${b.tool.version} · ${b.machine.platform} ${b.machine.release} · ${b.machine.locale}`,
-    t`yetenek matrisi                    ${b.capabilities.length} kontrol sonucu`,
-    t`yapılandırma                       ${b.config.present ? t`${b.config.lines.length} satır (yorumlar atıldı, sır benzeri değerler gizlendi)` : 'yok'}`,
-    t`proje yolları                      ${b.paths.length} adet — YALNIZCA şekil: derinlik, ASCII dışı karakter, depolama türü`,
-    t`veri dosyası boyutları             ${b.data.length} sayı`,
-    t`günlük kuyruğu                     ${b.log.lines.length} satır (redaksiyondan geçti)`,
+    t`version and platform             ${b.tool.version} · ${b.machine.platform} ${b.machine.release} · ${b.machine.locale}`,
+    t`capability matrix                ${b.capabilities.length} check results`,
+    t`configuration                    ${b.config.present ? t`${b.config.lines.length} lines (comments dropped, secret-shaped values hidden)` : 'yok'}`,
+    t`project paths                    ${b.paths.length} — SHAPE ONLY: depth, non-ASCII characters, storage kind`,
+    t`data file sizes                  ${b.data.length} numbers`,
+    t`log tail                         ${b.log.lines.length} lines (redacted)`,
   ];
 }
 
@@ -218,21 +218,21 @@ export async function writeBundle(
 ): Promise<number> {
   const bundle = buildBundle(checks, projectPaths);
 
-  process.stdout.write(t`\nTeşhis paketi içeriği (dosya HENÜZ yazılmadı):\n\n`);
+  process.stdout.write(t`\nDiagnostic bundle contents (the file has NOT been written yet):\n\n`);
   for (const line of manifest(bundle)) process.stdout.write(`  • ${line}\n`);
   process.stdout.write(
-    tr('\nPakete ASLA girmeyenler:\n') +
-      tr('  · .credentials.json      · transcript metni      · prompt metni\n') +
-      tr('  · kaynak kod             · dosya içerikleri      · gerçek proje adları/yolları\n'),
+    tr('\nNEVER in the bundle:\n') +
+      tr('  · .credentials.json      · transcript text       · prompt text\n') +
+      tr('  · source code            · file contents         · real project names/paths\n'),
   );
 
   if (!args.yes) {
     if (!isInteractive()) {
-      process.stderr.write(tr('\nOnay istenemiyor (terminal yok). --yes ekle.\n'));
+      process.stderr.write(tr('\nCannot ask for confirmation (no terminal). Add --yes.\n'));
       return 2;
     }
-    if (!(await confirm(t`\n${args.out} yazılsın mı?`, false))) {
-      process.stdout.write(tr('İptal edildi. Dosya yazılmadı.\n'));
+    if (!(await confirm(t`\nWrite ${args.out}?`, false))) {
+      process.stdout.write(tr('Cancelled. Nothing was written.\n'));
       return 0;
     }
   }
@@ -241,12 +241,12 @@ export async function writeBundle(
   try {
     writeFileSync(args.out, text, { encoding: 'utf8', mode: 0o600 });
   } catch (e) {
-    process.stderr.write(t`Yazılamadı: ${(e as Error).message}\n`);
+    process.stderr.write(t`Could not write: ${(e as Error).message}\n`);
     return 1;
   }
   process.stdout.write(
-    t`\nYazıldı: ${args.out}  (${(text.length / 1024).toFixed(1)} KB)\n` +
-      tr('Göndermeden önce bir kez kendin oku — bu senin makinenden çıkan tek dosya.\n'),
+    t`\nWritten: ${args.out}  (${(text.length / 1024).toFixed(1)} KB)\n` +
+      tr('Read it once yourself before sending — this is the only file leaving your machine.\n'),
   );
   return 0;
 }

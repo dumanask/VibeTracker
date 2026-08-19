@@ -97,8 +97,8 @@ function readSettings(path: string): { raw: string; root: JsonNode } {
     const e = err as JsonParseError;
     const line = raw.slice(0, e.offset).split('\n').length;
     throw new Error(
-      t`${path} geçerli JSON değil (satır ${line}: ${e.message}). ` +
-        t`Dosyanı bozmamak için hiçbir değişiklik yapılmadı.`,
+      t`${path} is not valid JSON (line ${line}: ${e.message}). ` +
+        t`Nothing was changed, so your file stays intact.`,
     );
   }
 }
@@ -138,12 +138,12 @@ function inspect(path: string, url: string): Installed {
 function warnIfCommented(state: Installed, path: string): void {
   if (!state.commented) return;
   process.stderr.write(
-    t`\n⚠ ${path} yorum satırı içeriyor.\n` +
-      t`  Claude Code bu dosyayı katı JSON olarak okuyor ve yorum gördüğünde\n` +
-      t`  DOSYANIN TAMAMINI yok sayıyor ("Invalid or malformed JSON") — yani\n` +
-      t`  buradaki ayarların hiçbiri şu an geçerli değil, kuracağımız hook'lar da\n` +
-      t`  olmayacak. Bu, bizim değişikliğimizden önce de böyleydi.\n` +
-      t`  Önce yorumları kaldır, sonra tekrar çalıştır. Doğrulamak için: claude doctor\n\n`,
+    t`\n⚠ ${path} contains comment lines.\n` +
+      t`  Claude Code reads this file as strict JSON and when it sees a comment it\n` +
+      t`  ignores THE ENTIRE FILE ("Invalid or malformed JSON") — meaning none of\n` +
+      t`  the settings here are in force right now, and neither would the hooks we\n` +
+      t`  install. This was already true before we touched anything.\n` +
+      t`  Remove the comments first, then run again. To verify: claude doctor\n\n`,
   );
 }
 
@@ -172,7 +172,7 @@ export async function installHooks(args: HooksArgs): Promise<number> {
   });
 
   if (missing.length === 0 && stale.length === 0) {
-    process.stdout.write(t`Hook'lar zaten güncel (${wanted.length} olay).\n${path}\n`);
+    process.stdout.write(t`Hooks are already up to date (${wanted.length} events).\n${path}\n`);
     return 0;
   }
 
@@ -182,27 +182,27 @@ export async function installHooks(args: HooksArgs): Promise<number> {
 
   process.stdout.write(renderDiff(state.raw, next, path));
   process.stdout.write(
-    t`\n${missing.length} olay eklenecek` +
-      (stale.length ? t`, ${stale.length} olay tazelenecek` : '') +
-      (state.foreign ? t` · senin ${state.foreign} hook'una dokunulmayacak` : '') +
+    t`\n${missing.length} events will be added` +
+      (stale.length ? t`, ${stale.length} events will be refreshed` : '') +
+      (state.foreign ? t` · your ${state.foreign} hooks will be left alone` : '') +
       '\n',
   );
   process.stdout.write(
-    t`\nBu, ajanın her turunda ${url} adresine bir POST ekler. Daemon kapalıysa\n` +
-      t`bağlantı anında reddedilir; ajan beklemez.\n`,
+    t`\nThis adds one POST to ${url} on every agent turn. If the daemon is down the\n` +
+      t`connection is refused immediately; the agent does not wait.\n`,
   );
 
-  if (!(await confirm(args.yes, tr('Uygulansın mı?')))) {
-    process.stdout.write(tr('Vazgeçildi. Hiçbir şey yazılmadı.\n'));
+  if (!(await confirm(args.yes, tr('Apply?')))) {
+    process.stdout.write(tr('Abandoned. Nothing was written.\n'));
     return 0;
   }
 
   const backup = writeAtomic(path, next);
-  process.stdout.write(t`\nYazıldı: ${path}\n`);
-  if (backup) process.stdout.write(t`Yedek:   ${backup}\n`);
+  process.stdout.write(t`\nWritten: ${path}\n`);
+  if (backup) process.stdout.write(t`Backup: ${backup}\n`);
   process.stdout.write(
-    t`Geri almak için: vt hooks uninstall\n` +
-      t`Etkili olması için yeni bir ajan oturumu başlat (mevcut oturumlar eski ayarla çalışır).\n`,
+    t`To undo: vt hooks uninstall\n` +
+      t`Start a new agent session for this to take effect (existing sessions run on the old settings).\n`,
   );
   return 0;
 }
@@ -331,7 +331,7 @@ export async function uninstallHooks(args: HooksArgs): Promise<number> {
   const path = settingsFile(args);
   const url = hookUrl(args.port);
   if (!existsSync(path)) {
-    process.stdout.write(t`${path} yok — kaldırılacak bir şey de yok.\n`);
+    process.stdout.write(t`No ${path} — so there is nothing to remove.\n`);
     return 0;
   }
 
@@ -345,8 +345,8 @@ export async function uninstallHooks(args: HooksArgs): Promise<number> {
   warnIfCommented(state, path);
   if (state.ours.size === 0) {
     process.stdout.write(
-      t`Bizim hook'umuz yok.` +
-        (state.foreign ? t` (${state.foreign} hook senin, dokunulmadı)` : '') +
+      t`We have no hooks here.` +
+        (state.foreign ? t` (${state.foreign} hooks are yours, untouched)` : '') +
         `\n`,
     );
     return 0;
@@ -373,18 +373,18 @@ export async function uninstallHooks(args: HooksArgs): Promise<number> {
 
   process.stdout.write(renderDiff(state.raw, text, path));
   process.stdout.write(
-    t`\n${removed} girdi kaldırılacak` +
-      (state.foreign ? t` · senin ${state.foreign} hook'una dokunulmayacak` : '') +
+    t`\n${removed} entries will be removed` +
+      (state.foreign ? t` · your ${state.foreign} hooks will be left alone` : '') +
       '\n',
   );
-  if (!(await confirm(args.yes, tr('Uygulansın mı?')))) {
-    process.stdout.write(tr('Vazgeçildi. Hiçbir şey yazılmadı.\n'));
+  if (!(await confirm(args.yes, tr('Apply?')))) {
+    process.stdout.write(tr('Abandoned. Nothing was written.\n'));
     return 0;
   }
 
   const backup = writeAtomic(path, text);
-  process.stdout.write(t`\nKaldırıldı: ${path}\n`);
-  if (backup) process.stdout.write(t`Yedek:      ${backup}\n`);
+  process.stdout.write(t`\nRemoved: ${path}\n`);
+  if (backup) process.stdout.write(t`Backup:     ${backup}\n`);
   return 0;
 }
 
@@ -422,13 +422,13 @@ export async function statusHooks(args: HooksArgs): Promise<number> {
   }
 
   warnIfCommented(state, path);
-  process.stdout.write(t`\nAyar dosyası: ${path}\n`);
-  process.stdout.write(t`Hook URL    : ${url}\n\n`);
+  process.stdout.write(t`\nSettings file: ${path}\n`);
+  process.stdout.write(t`Hook URL     : ${url}\n\n`);
 
   if (state.ours.size === 0) {
-    process.stdout.write(tr('Kurulu değil. `vt hooks install` ile kur.\n'));
+    process.stdout.write(tr('Not installed. Install with `vt hooks install`.\n'));
     process.stdout.write(
-      tr('Hook olmadan "izin bekliyor" durumu ölçülmez, çıkarım yapılır — panelde `?` ile gösterilir.\n\n'),
+      tr('Without hooks, "waiting for permission" is inferred rather than measured — the dashboard marks it with `?`.\n\n'),
     );
     return 0;
   }
@@ -437,15 +437,15 @@ export async function statusHooks(args: HooksArgs): Promise<number> {
   for (const e of wanted) {
     const cur = state.ours.get(e);
     const mark = !cur ? '·' : cur.token === token ? '✔' : '!';
-    const note = !cur ? tr('kurulu değil') : cur.token === token ? 'kurulu' : tr('token eski — tazele');
+    const note = !cur ? tr('not installed') : cur.token === token ? 'kurulu' : tr('stale token — refresh');
     process.stdout.write(` ${mark} ${e.padEnd(20)} ${note}\n`);
   }
   const extra = [...state.ours.keys()].filter((e) => !wanted.includes(e));
   for (const e of extra) {
-    process.stdout.write(t` ! ${e.padEnd(20)} kurulu ama artık kullanılmıyor\n`);
+    process.stdout.write(t` ! ${e.padEnd(20)} installed but no longer in use\n`);
   }
   if (state.foreign > 0) {
-    process.stdout.write(t`\nSenin ${state.foreign} hook'un var; onlara hiç dokunulmuyor.\n`);
+    process.stdout.write(t`\nYou have ${state.foreign} hooks of your own; they are never touched.\n`);
   }
   process.stdout.write('\n');
   return 0;
@@ -477,7 +477,7 @@ async function confirm(yes: boolean, question: string): Promise<boolean> {
   if (yes) return true;
   if (!process.stdin.isTTY) {
     process.stderr.write(
-      t`\nOnay istenemiyor (terminal yok). Bilinçli olarak uygulamak için --yes ekle.\n`,
+      t`\nCannot ask for confirmation (no terminal). To apply this deliberately, add --yes.\n`,
     );
     return false;
   }

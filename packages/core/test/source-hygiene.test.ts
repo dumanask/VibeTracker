@@ -56,7 +56,7 @@ test('no source file contains an invisible control character', () => {
   assert.deepEqual(
     offenders,
     [],
-    `Görünmez kontrol karakteri bulundu. Kaçış dizisi kullan ('\\u0000'):\n  ${offenders.join('\n  ')}`,
+    `Invisible control character found. Write it as an escape ('\\u0000'):\n  ${offenders.join('\n  ')}`,
   );
 });
 
@@ -69,7 +69,7 @@ test('no source file carries a byte-order mark', () => {
     const buf = readFileSync(file);
     if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) offenders.push(relative(ROOT, file));
   }
-  assert.deepEqual(offenders, [], `BOM bulundu:\n  ${offenders.join('\n  ')}`);
+  assert.deepEqual(offenders, [], `Byte-order mark found:\n  ${offenders.join('\n  ')}`);
 });
 
 test('locale catalogs are valid JSON objects of strings', () => {
@@ -77,7 +77,7 @@ test('locale catalogs are valid JSON objects of strings', () => {
   for (const file of files(dir, ['.json'])) {
     const raw = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
     for (const [k, v] of Object.entries(raw)) {
-      assert.equal(typeof v, 'string', `${relative(ROOT, file)}: ${k} metin değil`);
+      assert.equal(typeof v, 'string', `${relative(ROOT, file)}: ${k} is not a string`);
     }
   }
 });

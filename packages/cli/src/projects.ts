@@ -154,11 +154,11 @@ function line(p: TrackableProject, tracked: boolean, extra: string): string {
  */
 function activity(p: ProjectView): string {
   const a = p.summary ?? summarizeAgents(p);
-  if (a.total === 0) return tr('oturum yok');
+  if (a.total === 0) return tr('no sessions');
   const bits: string[] = [];
-  if (a.waiting > 0) bits.push(t`${a.waiting} bekliyor`);
-  if (a.running > 0) bits.push(t`${a.running} çalışıyor`);
-  if (bits.length === 0) bits.push(a.live > 0 ? t`${a.live} canlı ajan` : tr('kapalı'));
+  if (a.waiting > 0) bits.push(t`${a.waiting} waiting`);
+  if (a.running > 0) bits.push(t`${a.running} running`);
+  if (bits.length === 0) bits.push(a.live > 0 ? t`${a.live} live agents` : tr('off'));
   return bits.join(' · ');
 }
 
@@ -166,7 +166,7 @@ export async function runProjects(args: ProjectsArgs): Promise<number> {
   const sub = args.sub ?? 'list';
   if (!['list', 'add', 'rm', 'remove', 'all'].includes(sub)) {
     process.stderr.write(
-      t`Bilinmeyen alt-komut: ${sub}\nKullanım: vt projects [list|add <proje…>|rm <proje…>|all]\n`,
+      t`Unknown subcommand: ${sub}\nUsage: vt projects [list|add <project…>|rm <project…>|all]\n`,
     );
     return 64;
   }
@@ -201,8 +201,8 @@ export async function runProjects(args: ProjectsArgs): Promise<number> {
     process.stdout.write(
       '\n' +
         (tracking.mode === 'all'
-          ? tr('Şu anda tüm projeler izleniyor.\n')
-          : t`Şu anda seçtiğin ${tracking.selected.length} proje izleniyor.\n`),
+          ? tr('Every project is being tracked.\n')
+          : t`Tracking the ${tracking.selected.length} projects you chose.\n`),
     );
     process.stdout.write('\n');
     // Tracked comes from the config, not from the scan: `discover()`
@@ -218,26 +218,26 @@ export async function runProjects(args: ProjectsArgs): Promise<number> {
     const known = new Set(trackables.map((p) => p.projectId));
     const ghosts = tracking.selected.filter((id) => !known.has(id));
     for (const id of ghosts) {
-      process.stdout.write(`  ${dim('○')} ${dim(id)}  ${dim(tr('seçili ama şu an görünmüyor'))}\n`);
+      process.stdout.write(`  ${dim('○')} ${dim(id)}  ${dim(tr('selected but not visible right now'))}\n`);
     }
 
     process.stdout.write(
       '\n' +
-        dim(tr('  vt projects add <proje>   izlemeye ekle\n')) +
-        dim(tr('  vt projects rm <proje>    izlemeden çıkar\n')) +
-        dim(tr('  vt projects all           hepsine dön\n')),
+        dim(tr('  vt projects add <project>   start tracking it\n')) +
+        dim(tr('  vt projects rm <project>    stop tracking it\n')) +
+        dim(tr('  vt projects all             go back to all of them\n')),
     );
     return 0;
   }
 
   if (sub === 'all') {
     await persist(trackAll());
-    process.stdout.write(t`Tüm projeler izleniyor (${projects.length} proje).\n`);
+    process.stdout.write(t`Tracking every project (${projects.length} projects).\n`);
     return 0;
   }
 
   if (args.names.length === 0) {
-    process.stderr.write(t`Hangi proje? Kullanım: vt projects ${sub} <proje…>\n`);
+    process.stderr.write(t`Which project? Usage: vt projects ${sub} <project…>\n`);
     return 64;
   }
 
@@ -259,17 +259,17 @@ export async function runProjects(args: ProjectsArgs): Promise<number> {
         roots.push(byPath);
         continue;
       }
-      process.stderr.write(t`Böyle bir proje yok: ${name}\n`);
-      process.stderr.write(dim(tr('  `vt projects` ile listeyi görebilirsin.\n')));
-      process.stderr.write(dim(tr('  Ajanın hiç açmadığı bir proje için dizin yolu yazabilirsin.\n')));
+      process.stderr.write(t`No such project: ${name}\n`);
+      process.stderr.write(dim(tr('  Run `vt projects` to see the list.\n')));
+      process.stderr.write(dim(tr('  For a project no agent has ever opened, give a directory path.\n')));
       return 65;
     }
     if (m.kind === 'many') {
-      process.stderr.write(t`${name} birden fazla projeye uyuyor:\n`);
+      process.stderr.write(t`${name} matches more than one project:\n`);
       for (const c of m.candidates) {
         process.stderr.write(`  ${c.displayName}  ${dim(c.projectId)}\n`);
       }
-      process.stderr.write(dim(tr('  Kimliğiyle yaz.\n')));
+      process.stderr.write(dim(tr('  Use its id instead.\n')));
       return 65;
     }
     ids.push(m.project.projectId);
@@ -293,15 +293,15 @@ export async function runProjects(args: ProjectsArgs): Promise<number> {
 
   if (change.switchedToSelected) {
     process.stdout.write(
-      cyan(tr('Artık yalnızca seçtiğin projeler gösterilecek.\n')) +
-        dim(tr('  Hepsine dönmek için: vt projects all\n')),
+      cyan(tr('From now on only the projects you chose are shown.\n')) +
+        dim(tr('  To go back to all of them: vt projects all\n')),
     );
   }
-  for (const id of change.added) process.stdout.write(t`+ ${nameOf(id)} izleniyor\n`);
-  for (const id of change.removed) process.stdout.write(t`− ${nameOf(id)} artık izlenmiyor\n`);
+  for (const id of change.added) process.stdout.write(t`+ ${nameOf(id)} is now tracked\n`);
+  for (const id of change.removed) process.stdout.write(t`− ${nameOf(id)} is no longer tracked\n`);
   if (change.added.length === 0 && change.removed.length === 0) {
-    process.stdout.write(tr('Değişiklik yok.\n'));
+    process.stdout.write(tr('Nothing changed.\n'));
   }
-  process.stdout.write(t`İzlenen: ${change.next.selected.length} proje\n`);
+  process.stdout.write(t`Tracked: ${change.next.selected.length} projects\n`);
   return 0;
 }

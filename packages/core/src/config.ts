@@ -203,7 +203,7 @@ export function configuredRoots(config: Config): Array<{ projectId: string; path
 export function defaultConfig(): Config {
   return {
     config_version: CONFIG_VERSION,
-    server: { port: 47823, bind: '127.0.0.1', lang: 'tr', interval_ms: 3000 },
+    server: { port: 47823, bind: '127.0.0.1', lang: 'en', interval_ms: 3000 },
     agents: { enabled: ['claude-code', 'all'], claude_dir: '' },
     hooks: { mode: 'http', high_fidelity: false },
     digest: {
@@ -272,7 +272,7 @@ const STRICT_SECTIONS = new Set(['privacy', 'security']);
  * hold them together.
  */
 export const ENUMS = {
-  lang: ['tr', 'en'],
+  lang: ['en', 'tr'],
   hookMode: ['http', 'command', 'off'],
   digestProvider: [
     'off',
@@ -314,7 +314,7 @@ class Reader {
     const v = t[key];
     if (v === undefined) return fallback;
     if (typeof v === 'boolean') return v;
-    this.err(`${section}.${key}`, `true veya false olmalı, "${show(v)}" verilmiş`);
+    this.err(`${section}.${key}`, `must be true or false, got "${show(v)}"`);
     return fallback;
   }
 
@@ -322,7 +322,7 @@ class Reader {
     const v = t[key];
     if (v === undefined) return fallback;
     if (typeof v === 'string') return v;
-    this.err(`${section}.${key}`, `metin olmalı, "${show(v)}" verilmiş`);
+    this.err(`${section}.${key}`, `must be a string, got "${show(v)}"`);
     return fallback;
   }
 
@@ -338,8 +338,8 @@ class Reader {
     if (typeof v === 'string' && (allowed as readonly string[]).includes(v)) return v as T;
     this.err(
       `${section}.${key}`,
-      `geçersiz değer "${show(v)}"`,
-      `şunlardan biri olmalı: ${allowed.join(' | ')}`,
+      `invalid value "${show(v)}"`,
+      `must be one of: ${allowed.join(' | ')}`,
     );
     return fallback;
   }
@@ -354,19 +354,19 @@ class Reader {
     const v = t[key];
     if (v === undefined) return fallback;
     if (typeof v !== 'number' || !Number.isFinite(v)) {
-      this.err(`${section}.${key}`, `sayı olmalı, "${show(v)}" verilmiş`);
+      this.err(`${section}.${key}`, `must be a number, got "${show(v)}"`);
       return fallback;
     }
     if (range?.integer && !Number.isInteger(v)) {
-      this.err(`${section}.${key}`, `tam sayı olmalı, ${v} verilmiş`);
+      this.err(`${section}.${key}`, `must be a whole number, got ${v}`);
       return fallback;
     }
     if (range?.min !== undefined && v < range.min) {
-      this.err(`${section}.${key}`, `en az ${range.min} olmalı, ${v} verilmiş`);
+      this.err(`${section}.${key}`, `must be at least ${range.min}, got ${v}`);
       return fallback;
     }
     if (range?.max !== undefined && v > range.max) {
-      this.err(`${section}.${key}`, `en fazla ${range.max} olabilir, ${v} verilmiş`);
+      this.err(`${section}.${key}`, `must be at most ${range.max}, got ${v}`);
       return fallback;
     }
     return v;
@@ -376,12 +376,12 @@ class Reader {
     const v = t[key];
     if (v === undefined) return fallback;
     if (!Array.isArray(v)) {
-      this.err(`${section}.${key}`, `metin dizisi olmalı, "${show(v)}" verilmiş`);
+      this.err(`${section}.${key}`, `must be an array of strings, got "${show(v)}"`);
       return fallback;
     }
     const bad = v.findIndex((x) => typeof x !== 'string');
     if (bad !== -1) {
-      this.err(`${section}.${key}[${bad}]`, `metin olmalı, "${show(v[bad])}" verilmiş`);
+      this.err(`${section}.${key}[${bad}]`, `must be a string, got "${show(v[bad])}"`);
       return fallback;
     }
     return v as string[];
@@ -391,7 +391,7 @@ class Reader {
     const v = root[key];
     if (v === undefined) return {};
     if (typeof v === 'object' && v !== null && !Array.isArray(v)) return v;
-    this.err(key, `[${key}] bir bölüm olmalı`, `"${key} = …" yerine "[${key}]" başlığı kullan`);
+    this.err(key, `[${key}] must be a section`, `write a "[${key}]" heading instead of "${key} = …"`);
     return {};
   }
 
@@ -401,9 +401,9 @@ class Reader {
       if (known.includes(k)) continue;
       const key = `${section}.${k}`;
       if (STRICT_SECTIONS.has(section)) {
-        this.err(key, 'bilinmeyen ayar', `yazım hatası olabilir; bilinenler: ${known.join(', ')}`);
+        this.err(key, 'unknown setting', `possibly a typo; the known ones are: ${known.join(', ')}`);
       } else {
-        this.warn(key, 'bilinmeyen ayar — yok sayıldı', 'daha yeni bir sürüm için yazılmış olabilir');
+        this.warn(key, 'unknown setting — ignored', 'it may have been written for a newer version');
       }
     }
   }
@@ -411,7 +411,7 @@ class Reader {
 
 function show(v: TomlValue | undefined): string {
   if (typeof v === 'string') return v.length > 40 ? `${v.slice(0, 40)}…` : v;
-  if (Array.isArray(v)) return `[${v.length} öğe]`;
+  if (Array.isArray(v)) return `[${v.length} items]`;
   if (typeof v === 'object' && v !== null) return '{…}';
   return String(v);
 }
@@ -444,13 +444,13 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
     r.warn(
       'config_version',
       `config sürümü ${version}, bu VibeTracker ${CONFIG_VERSION} biliyor`,
-      'daha yeni bir sürüm için yazılmış — tanımadığı ayarlar yok sayılacak',
+      'written for a newer version — settings it does not recognise will be ignored',
     );
   }
 
   for (const k of Object.keys(raw)) {
     if (!KNOWN_SECTIONS.includes(k)) {
-      r.warn(k, 'bilinmeyen bölüm — yok sayıldı');
+      r.warn(k, 'unknown section — ignored');
     }
   }
 
@@ -463,8 +463,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
     // so it never happens quietly.
     r.warn(
       'server.bind',
-      `panel "${bind}" üzerinde dinleyecek — ağdaki herkes erişebilir`,
-      'yalnızca bu makine için: bind = "127.0.0.1"',
+      `the dashboard will listen on "${bind}" — everyone on the network can reach it`,
+      'for this machine only: bind = "127.0.0.1"',
     );
   }
 
@@ -634,7 +634,7 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
   if (config.tracking.mode === 'selected' && config.tracking.selected.length === 0) {
     r.warn(
       'tracking.selected',
-      'izlenecek proje seçilmemiş — hepsi gösteriliyor',
+      'no project picked to track — all of them are shown',
       'vt projects add <proje> ile seç, ya da mode = all yaz',
     );
     config.tracking.mode = 'all';
@@ -645,8 +645,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
   if (!config.privacy.redact) {
     r.warn(
       'privacy.redact',
-      'redaksiyon kapalı — hata metinleri ve alıntılar olduğu gibi saklanacak',
-      'sırlar transcript metninde geçebiliyor; kapalı tutmayı bilerek seçtiysen sorun yok',
+      'redaction is off — error text and excerpts are stored as they are',
+      'secrets do turn up in transcript text; fine if you turned this off deliberately',
     );
   }
 
@@ -654,7 +654,7 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
   for (const [id, value] of Object.entries(projects)) {
     const section = `projects."${id}"`;
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      r.err(section, 'bir bölüm olmalı');
+      r.err(section, 'must be a section');
       continue;
     }
     const p = value as TomlTable;
@@ -689,8 +689,8 @@ export function loadConfigText(text: string): LoadedConfig {
         {
           key: 'config.toml',
           severity: 'error',
-          message: `okunamadı: ${msg}`,
-          fix: 'varsayılan ayarlarla devam ediliyor — dosyayı düzeltip yeniden başlat',
+          message: `could not be read: ${msg}`,
+          fix: 'carrying on with the defaults — fix the file and restart',
         },
       ],
       fromFile: false,

@@ -21,7 +21,7 @@ import {
  *
  * Every fixture below is a sanitized reconstruction of a real document from
  * the reference machine — same structure, same vocabulary, no private content.
- * The two marked TUZAK ("trap") cases are the ones a naive counter gets
+ * The two cases marked TRAP are the ones a naive counter gets
  * confidently wrong, and they are the reason this engine has a role classifier
  * at all.
  */
@@ -55,7 +55,7 @@ test('stem matching survives Turkish suffixes but not word interiors', () => {
 
 // ── TRAP 1: a log of finished work is not a finished project ──────────────
 
-const TUZAK1_CHANGELOG = `# Mevcut Durum ve Devam Notu
+const TRAP1_CHANGELOG = `# Mevcut Durum ve Devam Notu
 
 ## 2026-08-14 yapılanlar
 | İş | Durum |
@@ -80,29 +80,29 @@ const TUZAK1_CHANGELOG = `# Mevcut Durum ve Devam Notu
 | Belgeler güncellendi | ✅ |
 `;
 
-test('TUZAK 1: an all-ticked worklog is not reported as 100%', () => {
-  const r = analyzeDocument('05-MEVCUT-DURUM-VE-DEVAM-NOTU.md', TUZAK1_CHANGELOG);
-  assert.equal(r.percent.percent, null, 'yüzde bastırılmalıydı');
+test('TRAP 1: an all-ticked worklog is not reported as 100%', () => {
+  const r = analyzeDocument('05-MEVCUT-DURUM-VE-DEVAM-NOTU.md', TRAP1_CHANGELOG);
+  assert.equal(r.percent.percent, null, 'the percentage should have been suppressed');
   assert.notEqual(r.role, 'PLAN');
   // And it says why, in words a person can act on. The reason is a phrase
   // (template + arguments), not a finished sentence, so it survives
   // translation — see `phrase.ts`.
-  assert.ok(say(r.percent.suppressed!.detail).length > 10, 'bastırma sebebi açıklanmalı');
+  assert.ok(say(r.percent.suppressed!.detail).length > 10, 'the reason for suppressing it must be given');
   // The role gate fires before the counting gate, so the reason names the
   // classification rather than the tick ratio — which is the more useful of
   // the two answers: it says the document was never a plan.
-  assert.match(say(r.percent.suppressed!.detail), /plan değil/);
+  assert.match(say(r.percent.suppressed!.detail), /not a plan/);
 });
 
 test('an all-ticked document is caught even with a neutral filename', () => {
   // The filename hint is removed so only the structural rule can save us.
-  const r = analyzeDocument('notlar.md', TUZAK1_CHANGELOG);
+  const r = analyzeDocument('notlar.md', TRAP1_CHANGELOG);
   assert.equal(r.percent.percent, null);
 });
 
 // ── TRAP 2: competitor ticks are not progress ─────────────────────────────
 
-const TUZAK2_RESEARCH = `# Pazar ve Rakip Analizi
+const TRAP2_RESEARCH = `# Pazar ve Rakip Analizi
 
 | Özellik | BridgeMind | MetaGPT | n8n | Dify | Bizde |
 |---|---|---|---|---|---|
@@ -118,9 +118,9 @@ const TUZAK2_RESEARCH = `# Pazar ve Rakip Analizi
 | Denetim kaydı | ✅ | ✅ | ❌ | ✅ | ✅ |
 `;
 
-test('TUZAK 2: ticks in a comparison table never become progress', () => {
-  const r = analyzeDocument('pazar-ve-firsatlar.md', TUZAK2_RESEARCH);
-  assert.equal(r.percent.percent, null, 'rakip tablosu ilerleme sayılmamalı');
+test('TRAP 2: ticks in a comparison table never become progress', () => {
+  const r = analyzeDocument('pazar-ve-firsatlar.md', TRAP2_RESEARCH);
+  assert.equal(r.percent.percent, null, 'a competitor table is not progress');
   assert.equal(r.role, 'RESEARCH');
 });
 
@@ -153,7 +153,7 @@ test('the extractor ignores comparison ticks even inside a real plan', () => {
   const r = analyzeDocument('gelistirme-plani.md', mixed);
   const table = r.items.filter((i) => i.extractor === 'table');
   assert.equal(table.length, 8, `durum sütunundan 8 madde beklendi, ${table.length} geldi`);
-  assert.equal(r.percent.counts.done, 3, 'yalnızca durum sütunundaki ✅ sayılmalı');
+  assert.equal(r.percent.counts.done, 3, 'only the ticks in the status column count');
   assert.equal(r.percent.percent, 38);
 });
 
@@ -224,7 +224,7 @@ test('the same phase named a dozen times is one rung', () => {
 `;
   const ladders = buildLadder(headingPhases(doc, defaultSymbols()));
   assert.equal(ladders[0]!.entries.length, 2);
-  assert.equal(ladders[0]!.entries[0]!.status, 'done', 'en ileri durum kazanmalı');
+  assert.equal(ladders[0]!.entries[0]!.status, 'done', 'the furthest status wins');
 });
 
 // ── legends ───────────────────────────────────────────────────────────────

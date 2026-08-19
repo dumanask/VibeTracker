@@ -70,15 +70,15 @@ test('the PID-reuse guard separates a recycled PID from a live one', async () =>
     const counts = { live: 0, reused: 0, dead: 0, unknown: 0 };
     for (const v of batch.verdicts.values()) counts[v]++;
     const { live, reused, dead } = counts;
-    assert.equal(batch.guardAvailable, true, 'koruma uygulanamamış');
-    assert.equal(batch.formatDriftSuspected, false, 'toplu format kayması yanlış tespit edilmiş');
+    assert.equal(batch.guardAvailable, true, 'the guard could not be applied');
+    assert.equal(batch.formatDriftSuspected, false, 'batch format drift was detected wrongly');
 
     // Dead PIDs are above every platform maximum, so this is exact.
     assert.equal(dead, f.deadPids.length);
     // Some entries match our own process's start time and some deliberately
     // do not; the batch heuristic must not conclude "format drift" from that.
-    assert.ok(live > 0, 'hiç canlı yok — koruma toplu olarak devre dışı kalmış olabilir');
-    assert.ok(reused > 0, 'geri dönüşmüş PID tespit edilmedi');
+    assert.ok(live > 0, 'nothing live -- the guard may have switched itself off wholesale');
+    assert.ok(reused > 0, 'a recycled PID was not detected');
   } finally {
     await probe.dispose();
     f.cleanup();
@@ -93,8 +93,8 @@ test('IDE locks are read, including a stale one', async () => {
     // `alive` is filled in later by the scan, from the probe — the reader
     // itself never guesses at liveness, so it is false here for both.
     assert.ok(locks.every((l) => l.alive === false));
-    assert.ok(locks.some((l) => l.pid === process.pid), 'canlı pid taşıyan kilit yok');
-    assert.ok(locks.some((l) => l.pid === 4_100_000), 'bayat kilit üretilmemiş');
+    assert.ok(locks.some((l) => l.pid === process.pid), 'no lock carries a live pid');
+    assert.ok(locks.some((l) => l.pid === 4_100_000), 'no stale lock was generated');
     assert.ok(locks.every((l) => l.workspaceFolders.length === 1));
     // The lock file carries an auth token; nothing may surface it.
     assert.ok(!JSON.stringify(locks).includes('never-read'));
@@ -114,13 +114,13 @@ test('a transcript with a broken line and an unknown type still parses', async (
 
     // Find the transcript belonging to this session.
     const facts = await findFacts(reader, f.projectsDir, first.sessionId);
-    assert.ok(facts, 'transcript bulunamadı');
-    assert.ok(facts.parseFailures >= 1, 'bozuk satır sayılmamış');
+    assert.ok(facts, 'transcript not found');
+    assert.ok(facts.parseFailures >= 1, 'the broken line was not counted');
     assert.ok(facts.unknownTypes.includes('some-future-record'));
     assert.ok(facts.linesParsed > 30);
     // The last line is an 82-byte `mode` record with no timestamp; a reader
     // that treats the final line as the conversation position gets this wrong.
-    assert.ok(facts.lastEntryAt !== undefined, 'son mesaj zamanı bulunamadı');
+    assert.ok(facts.lastEntryAt !== undefined, 'no time for the last message');
     assert.ok(facts.aiTitle && facts.aiTitle.length > 0);
   } finally {
     await reader.close();
@@ -134,22 +134,22 @@ test('the sparse transcript is huge on paper and tiny on disk', async () => {
   try {
     assert.ok(f.hugeTranscript);
     const st = statSync(f.hugeTranscript);
-    assert.ok(st.size >= 600 * 1024 * 1024, 'dosya yeterince büyük değil');
+    assert.ok(st.size >= 600 * 1024 * 1024, 'the file is not big enough');
     // `blocks` is 512-byte units. A genuinely 600 MB file would be ~1.2M of
     // them; a sparse one is a few. Some filesystems do not report it, so this
     // is a soft check — the size assertion above is the one that matters.
     const allocated = (st.blocks ?? 0) * 512;
     if (st.blocks) {
-      assert.ok(allocated < st.size / 2, `seyrek değil: ${allocated} bayt ayrılmış`);
+      assert.ok(allocated < st.size / 2, `not sparse: ${allocated} bytes allocated`);
     }
 
     // And the reader must return the tail in milliseconds, not minutes.
     const t0 = performance.now();
     const facts = await reader.read(f.hugeTranscript, { tailBytes: 256 * 1024 });
     const ms = performance.now() - t0;
-    assert.ok(facts, 'devasa transcript okunamadı');
+    assert.ok(facts, 'the huge transcript could not be read');
     assert.equal(facts.aiTitle, 'Devasa transcript');
-    assert.ok(ms < 5000, `kuyruk okuma ${Math.round(ms)} ms sürdü — tam tarama yapılmış olabilir`);
+    assert.ok(ms < 5000, `the tail read took ${Math.round(ms)} ms -- it may have scanned the whole file`);
   } finally {
     await reader.close();
     f.cleanup();
@@ -234,15 +234,15 @@ test('a hand-picked project survives with no live agent, and says it is closed',
     );
     assert.ok(
       closed.projects.length > open.projects.length,
-      'kapalı projeler geri gelmedi',
+      'archived projects did not come back',
     );
     const extra = closed.projects.filter(
       (p) => !open.projects.some((q) => q.projectId === p.projectId),
     );
     for (const p of extra) {
-      assert.equal(p.summary.live, 0, `${p.displayName}: canlı oturumu var`);
+      assert.equal(p.summary.live, 0, `${p.displayName}: has a live session`);
       assert.equal(p.summary.kind, 'none');
-      assert.ok(p.sessions.length > 0, `${p.displayName}: hiç oturum taşımıyor`);
+      assert.ok(p.sessions.length > 0, `${p.displayName}: carries no session at all`);
       assert.ok(p.sessions.every((x) => x.state === 'ORPHANED'));
     }
   } finally {
@@ -263,7 +263,7 @@ test('without a pick, a project with nothing running stays off the board', async
   try {
     const r = await scan({ ...LIGHT }, ctx);
     for (const p of r.projects) {
-      assert.ok(p.summary.live > 0, `${p.displayName}: canlı ajanı yokken listelenmiş`);
+      assert.ok(p.summary.live > 0, `${p.displayName}: listed with no live agent`);
     }
   } finally {
     await ctx.close();
@@ -314,10 +314,10 @@ test('a recycled PID is reported as reused, not as a process that ended', async 
     const sessions = r.projects.flatMap((p) => p.sessions);
     const reused = sessions.filter((s) => s.liveness === 'reused');
     const dead = sessions.filter((s) => s.liveness === 'dead');
-    assert.ok(reused.length > 0, 'fixture geri dönüşmüş PID üretmedi');
+    assert.ok(reused.length > 0, 'the fixture produced no recycled PID');
     assert.ok(dead.length > 0, 'fixture ölü PID üretmedi');
     for (const s of reused) {
-      assert.deepEqual(s.evidence, ['proc:pid-reused'], 'geri dönüşmüş PID "süreç gitti" diyor');
+      assert.deepEqual(s.evidence, ['proc:pid-reused'], 'a recycled PID reports itself as "process gone"');
       assert.equal(s.state, 'ORPHANED');
     }
     for (const s of dead) assert.deepEqual(s.evidence, ['proc:gone']);
@@ -343,9 +343,9 @@ test('a second scan through the same context reuses its open transcripts', async
     const first = ctx.tail().stats();
     await scan({ ...LIGHT }, ctx);
     const second = ctx.tail().stats();
-    assert.ok(first.opens > 0, 'ilk tarama hiç transcript açmadı');
-    assert.equal(second.opens, first.opens, 'ikinci tarama transcriptleri yeniden açtı');
-    assert.ok(second.skipped > first.skipped, 'büyümemiş transcript yine okundu');
+    assert.ok(first.opens > 0, 'the first scan opened no transcript');
+    assert.equal(second.opens, first.opens, 'the second scan reopened the transcripts');
+    assert.ok(second.skipped > first.skipped, 'a transcript that did not grow was read anyway');
   } finally {
     await ctx.close();
     f.cleanup();

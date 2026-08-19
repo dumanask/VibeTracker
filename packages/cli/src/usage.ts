@@ -26,83 +26,83 @@ import { t, tr } from '@vibetracker/core';
 type Row = [invocation: string, description: string];
 
 const commands = (): Row[] => [
-  ['vt init', tr('İlk kurulum — diskin taranmaz, sorular sorulur')],
-  [`vt status [${tr('seçenekler')}]`, tr('Tüm ajan oturumlarının anlık durumu (tek seferlik)')],
-  ['vt daemon [--open]', tr('Sürekli izleme + canlı web paneli')],
-  ['vt daemon stop', tr("Çalışan daemon'ı düzgünce durdur")],
-  ['vt open', tr("Çalışan daemon'ın panelini tarayıcıda aç")],
-  ['vt mini', tr('Post-it penceresi — küçük, üstte kalan panel')],
-  ['vt doctor [--json]', tr('Bu makinede neyin çalışıp neyin çalışmadığı')],
-  [`vt doctor --bundle [${tr('dosya')}]`, tr('Paylaşılabilir teşhis paketi (beyaz listeli)')],
-  [`vt config <${tr('alt-komut')}>`, tr('Yapılandırmayı göster/doğrula (show|path|check)')],
-  [`vt hooks <${tr('alt-komut')}>`, tr('Kesin izin/tur tespiti (install|uninstall|status)')],
-  [`vt autostart <${tr('alt-komut')}>`, tr("Oturum açılışında daemon'ı başlat (install|uninstall|status)")],
-  ['vt uninstall [--keep-data]', tr('Her şeyi geri al ve ne yapıldığını yaz')],
+  ['vt init', tr('First-run setup — your disk is never scanned')],
+  [`vt status [${tr('options')}]`, tr('One-shot snapshot of every agent session')],
+  ['vt daemon [--open]', tr('Continuous watch + live web dashboard')],
+  ['vt daemon stop', tr("Stop a running daemon cleanly")],
+  ['vt open', tr("Open a running daemon's dashboard in the browser")],
+  ['vt mini', tr('Sticky-note window — small, stays on top')],
+  ['vt doctor [--json]', tr('What works and what does not, on this machine')],
+  [`vt doctor --bundle [${tr('file')}]`, tr('Shareable diagnostic bundle (allowlist-based)')],
+  [`vt config <${tr('subcommand')}>`, tr('Show/validate configuration (show|path|check)')],
+  [`vt hooks <${tr('subcommand')}>`, tr('Exact permission/turn detection (install|uninstall|status)')],
+  [`vt autostart <${tr('subcommand')}>`, tr("Start the daemon at log on (install|uninstall|status)")],
+  ['vt uninstall [--keep-data]', tr('Undo everything, and print what was undone')],
   // A distinct key from the `proje` stat label: the same Turkish word is a
   // singular metavariable here and a plural count there, and one catalog
   // entry cannot be both.
-  [`vt board [${tr('proje-adı')}]`, tr('Faz panosu — commit geçmişinden çıkarılmış zaman çizelgesi')],
-  [`vt projects [${tr('alt-komut')}]`, tr('İzlenecek projeleri seç (list|add|rm|all)')],
-  [`vt digest [${tr('proje-adı')}]`, tr('LLM özeti — faz adı, engel, sonraki adım (varsayılan kapalı)')],
-  ['vt digest providers', tr('Hangi LLM kullanılıyor, hangileri seçilebilir')],
-  ['vt digest key <anahtar>', tr("API anahtarını 0600 bir dosyaya yaz (config'e asla yazılmaz)")],
-  ['vt demo [--all]', tr('Sentetik ortamda panel — gerçek veriye dokunmaz')],
-  ['vt lang [missing]', tr('Dil durumu; çevrilmemiş metinleri listele')],
-  ['vt --help', tr('Bu yardım')],
+  [`vt board [${tr('project')}]`, tr('Phase board — a timeline mined from commit history')],
+  [`vt projects [${tr('subcommand')}]`, tr('Choose which projects to track (list|add|rm|all)')],
+  [`vt digest [${tr('project')}]`, tr('LLM summary — phase name, blocker, next action (off by default)')],
+  ['vt digest providers', tr('Which LLM is in use, and which ones you can choose')],
+  ['vt digest key <anahtar>', tr("Write the API key to a 0600 file (never written to the config)")],
+  ['vt demo [--all]', tr('The dashboard on synthetic data — real state is never touched')],
+  ['vt lang [missing]', tr('Translation status; list untranslated strings')],
+  ['vt --help', tr('This help')],
 ];
 
 const miniOptions = (): Row[] => [
-  ['vt mini full|shade|badge', tr('Üç boyuttan biriyle aç')],
-  ['vt mini unpin', tr('Açık pencereyi kapat')],
-  ['--browser', tr('Tarayıcı penceresini kullan (yerel pencere yerine)')],
-  ['--size <gxy>', tr('Tarayıcı penceresi boyutu, örn. 360x260')],
-  ['--at <x,y>', tr('Ekrandaki konum')],
-  ['--no-pin', tr('Aç ama üstte tutma')],
+  ['vt mini full|shade|badge', tr('Open in one of the three sizes')],
+  ['vt mini unpin', tr('Close the open window')],
+  ['--browser', tr('Use the browser window instead of the native one')],
+  ['--size <gxy>', tr('Browser window size, e.g. 360x260')],
+  ['--at <x,y>', tr('Position on screen')],
+  ['--no-pin', tr('Open it but do not keep it on top')],
 ];
 
 const options = (): Row[] => [
-  [`--html <${tr('dosya')}>`, tr('Kendi kendine yeten HTML anlık görüntüsü yaz')],
-  ['--json', tr('Raporu JSON olarak yazdır (makine okunur)')],
-  ['--full', tr('Yalın liste yerine oturum oturum ayrıntı')],
-  ['--every', tr('İzleme seçimini yok say, tüm projeleri göster')],
-  ['--all', tr('Ölü/yetim oturumları da göster')],
-  ['--temp', tr('Geçici/scratch çalışma dizinlerini de göster')],
-  ['--quick', tr('CPU örneklemesini atla ("düşünüyor mu takıldı mı" ayrımı zayıflar)')],
-  ['--tail <kb>', tr('Transcript kuyruk penceresi, KB (varsayılan 256)')],
-  ['--signal-waiting', tr('Bekleyen oturum varsa çıkış kodu 10 döndür')],
-  ['--lang <tr|en>', tr("Bu çalıştırma için dil (VT_LANG ve config'in üstünde)")],
-  ['--dry-run', tr('vt digest: gönderilecek metni göster, gönderme')],
-  ['--version, -V', tr('Sürüm, platform ve Node sürümü — hata bildirirken bunu ekle')],
+  [`--html <${tr('file')}>`, tr('Write a self-contained HTML snapshot')],
+  ['--json', tr('Print the report as JSON (machine readable)')],
+  ['--full', tr('Per-session detail instead of the compact list')],
+  ['--every', tr('Ignore the tracking selection and show every project')],
+  ['--all', tr('Include dead/orphaned sessions')],
+  ['--temp', tr('Include temporary/scratch working directories')],
+  ['--quick', tr('Skip CPU sampling (weakens "thinking vs stalled")')],
+  ['--tail <kb>', tr('Transcript tail window, KB (default 256)')],
+  ['--signal-waiting', tr('Exit 10 when a session is waiting')],
+  ['--lang <tr|en>', tr("Language for this run (overrides VT_LANG and the config)")],
+  ['--dry-run', tr('vt digest: show the text that would be sent, do not send it')],
+  ['--version, -V', tr('Version, platform and Node version — include this when reporting a bug')],
 ];
 
 const daemonOptions = (): Row[] => [
-  ['--open', tr('Başlayınca paneli tarayıcıda aç')],
-  ['--port <n>', tr('Dinlenecek port (varsayılan 47823)')],
-  ['--interval <ms>', tr('Tarama aralığı (varsayılan 3000)')],
+  ['--open', tr('Open the dashboard once started')],
+  ['--port <n>', tr('Port to listen on (default 47823)')],
+  ['--interval <ms>', tr('Scan interval (default 3000)')],
 ];
 
 const hookOptions = (): Row[] => [
-  ['--yes', tr("Diff'i göster ama onay sorma (betikler için)")],
-  ['--high-fidelity', tr('PreToolUse/PostToolUse da bağla (yüksek hacim, varsayılan kapalı)')],
+  ['--yes', tr("Show the diff but do not ask (for scripts)")],
+  ['--high-fidelity', tr('Also bind PreToolUse/PostToolUse (high volume, off by default)')],
 ];
 
 const initOptions = (): Row[] => [
-  ['--yes', tr('Soru sorma, güvenli varsayılanları kabul et')],
-  ['--force', tr('Var olan yapılandırmanın üstüne yeniden kur')],
+  ['--yes', tr('Ask nothing, accept the safe defaults')],
+  ['--force', tr('Re-run setup over an existing configuration')],
 ];
 
 const uninstallOptions = (): Row[] => [
-  ['--keep-data', tr('Veritabanı, günlük ve yapılandırma kalsın (yalnızca sistemden ayrıl)')],
+  ['--keep-data', tr('Keep the database, log and config (only detach from the system)')],
 ];
 
 const exitCodes = (): Row[] => [
-  ['0', tr('başarılı')],
-  ['1', tr('doctor: en az bir kontrol başarısız')],
-  ['2', tr('kullanım hatası')],
-  ['3', tr('daemon zaten çalışıyor / çalışmıyor')],
-  ['4', tr('port başkası tarafından kullanılıyor')],
-  ['10', tr('bekleyen oturum var (yalnızca --signal-waiting ile)')],
-  ['70', tr('beklenmedik hata')],
+  ['0', tr('success')],
+  ['1', tr('doctor: a check failed')],
+  ['2', tr('usage error')],
+  ['3', tr('daemon already running / not running')],
+  ['4', tr('port held by something else')],
+  ['10', tr('a session is waiting (only with --signal-waiting)')],
+  ['70', tr('unexpected error')],
 ];
 
 /**
@@ -120,28 +120,28 @@ export function usage(): string {
     '',
     block(commands()),
     '',
-    tr('Seçenekler'),
+    tr('Options'),
     block(options()),
     '',
-    tr('daemon seçenekleri'),
+    tr('daemon options'),
     block(daemonOptions()),
     '',
-    tr('hooks seçenekleri'),
+    tr('hooks options'),
     block(hookOptions()),
     '',
-    tr('init seçenekleri'),
+    tr('init options'),
     block(initOptions()),
     '',
-    tr('uninstall seçenekleri'),
+    tr('uninstall options'),
     block(uninstallOptions()),
     '',
-    tr('mini seçenekleri'),
+    tr('mini options'),
     block(miniOptions()),
     '',
-    tr('Çıkış kodları'),
+    tr('Exit codes'),
     block(exitCodes()),
     '',
-    tr('VibeTracker hiçbir projene yazmaz, hiçbir ajanla konuşmaz ve ağa çıkmaz.'),
+    tr('VibeTracker never writes to your projects, never talks to an agent, never goes online.'),
     '',
   ].join('\n');
 }

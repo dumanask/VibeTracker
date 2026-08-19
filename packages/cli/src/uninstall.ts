@@ -64,18 +64,18 @@ const GLYPH: Record<Outcome, string> = {
 function touchpoints(autostartWhere: string): Array<{ id: string; what: string; where: string }> {
   const d = dataDir();
   return [
-    { id: 'autostart', what: tr('Oturum açılışı görevi'), where: autostartWhere },
-    { id: 'hooks', what: tr('Hook girdileri'), where: join(claudeDir(), 'settings.json') },
-    { id: 'config', what: tr('Yapılandırma'), where: configPath() },
-    { id: 'db', what: tr('Veritabanı'), where: join(d, 'vibetracker.db') },
-    { id: 'log', what: tr('Günlük'), where: join(d, 'daemon.log') },
-    { id: 'runtime', what: tr('Çalışma bilgisi'), where: join(d, 'daemon.json') },
-    { id: 'hooktoken', what: tr('Hook anahtarı'), where: join(d, 'hook-token') },
+    { id: 'autostart', what: tr('Log-on task'), where: autostartWhere },
+    { id: 'hooks', what: tr('Hook entries'), where: join(claudeDir(), 'settings.json') },
+    { id: 'config', what: tr('Configuration'), where: configPath() },
+    { id: 'db', what: tr('Database'), where: join(d, 'vibetracker.db') },
+    { id: 'log', what: tr('Log'), where: join(d, 'daemon.log') },
+    { id: 'runtime', what: tr('Runtime info'), where: join(d, 'daemon.json') },
+    { id: 'hooktoken', what: tr('Hook token'), where: join(d, 'hook-token') },
     // Named separately because it is a browser profile — tens of megabytes
     // that a user scanning the manifest deserves to see called out rather
     // than folded silently into "data directory".
-    { id: 'miniprofile', what: tr('Post-it penceresi profili'), where: miniProfileDir() },
-    { id: 'datadir', what: tr('Veri dizini'), where: d },
+    { id: 'miniprofile', what: tr('Sticky-note window profile'), where: miniProfileDir() },
+    { id: 'datadir', what: tr('Data directory'), where: d },
   ];
 }
 
@@ -88,40 +88,40 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   const auto = await autostartStatus();
   const points = touchpoints(auto.where);
 
-  process.stdout.write(tr('\nVibeTracker kaldırılıyor.\n\nDokunulmuş olabilecek yerler:\n'));
+  process.stdout.write(tr('\nRemoving VibeTracker.\n\nPlaces that may have been touched:\n'));
   for (const p of points) {
     const exists = p.id === 'autostart' ? auto.installed : existsSync(p.where);
     process.stdout.write(`  ${exists ? '•' : '·'} ${p.what.padEnd(24)} ${p.where}\n`);
   }
   process.stdout.write(
     '\nDokunulmayacaklar:\n' +
-      t`  · Ajan durumu, transcript'ler, .credentials.json   ${claudeDir()}\n` +
-      tr('  · Projelerinin kendi klasörleri (zaten hiç yazılmadı)\n'),
+      t`  · Agent state, transcripts, .credentials.json   ${claudeDir()}\n` +
+      tr('  · Your projects\' own folders (never written to in the first place)\n'),
   );
   if (args.keepData) {
-    process.stdout.write(tr('\n--keep-data verildi: veritabanı, günlük ve yapılandırma korunacak.\n'));
+    process.stdout.write(tr('\n--keep-data given: the database, log and configuration will be kept.\n'));
   }
 
   if (!args.yes) {
     if (!isInteractive()) {
-      process.stderr.write(tr('\nOnay istenemiyor (terminal yok). --yes ekle.\n'));
+      process.stderr.write(tr('\nCannot ask for confirmation (no terminal). Add --yes.\n'));
       return 2;
     }
-    if (!(await confirm(tr('\nDevam edilsin mi?'), false))) {
-      process.stdout.write(tr('İptal edildi. Hiçbir şeye dokunulmadı.\n'));
+    if (!(await confirm(tr('\nContinue?'), false))) {
+      process.stdout.write(tr('Cancelled. Nothing was touched.\n'));
       return 0;
     }
   }
 
   // ── 1. autostart, first: nothing should restart mid-removal ───────────
   if (!auto.supported) {
-    entries.push({ what: tr('Oturum açılışı görevi'), where: '—', outcome: 'absent', note: tr('bu platformda yok') });
+    entries.push({ what: tr('Log-on task'), where: '—', outcome: 'absent', note: tr('not applicable on this platform') });
   } else if (!auto.installed) {
-    entries.push({ what: tr('Oturum açılışı görevi'), where: auto.where, outcome: 'absent' });
+    entries.push({ what: tr('Log-on task'), where: auto.where, outcome: 'absent' });
   } else {
     const code = await uninstallAutostart();
     entries.push({
-      what: tr('Oturum açılışı görevi'),
+      what: tr('Log-on task'),
       where: auto.where,
       outcome: code === 0 ? 'removed' : 'failed',
     });
@@ -138,14 +138,14 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   // a manifest that misstates what it touched is worse than no manifest.
   const running = readRuntimeInfo();
   if (!running) {
-    entries.push({ what: tr('Çalışan daemon'), where: '—', outcome: 'absent' });
+    entries.push({ what: tr('Running daemon'), where: '—', outcome: 'absent' });
   } else {
     const code = await stopDaemon();
     entries.push({
-      what: tr('Çalışan daemon'),
+      what: tr('Running daemon'),
       where: t`port ${running.port} · pid ${running.pid}`,
       outcome: code === 0 ? 'removed' : 'failed',
-      note: code === 0 ? undefined : tr('cevap vermedi — süreci elle kapatman gerekebilir'),
+      note: code === 0 ? undefined : tr('did not answer — you may need to stop the process yourself'),
     });
   }
 
@@ -159,27 +159,27 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   const note = noteAlive();
   if (note !== null) {
     stopNote(note);
-    entries.push({ what: tr('Post-it penceresi'), where: t`pid ${note}`, outcome: 'removed' });
+    entries.push({ what: tr('Sticky-note window'), where: t`pid ${note}`, outcome: 'removed' });
   }
   const mini = readMiniState();
   if (!mini) {
     if (note === null) {
-      entries.push({ what: tr('Post-it penceresi'), where: '—', outcome: 'absent' });
+      entries.push({ what: tr('Sticky-note window'), where: '—', outcome: 'absent' });
     }
   } else {
     const closed = closeMiniWindow(mini.pid);
     entries.push({
-      what: tr('Post-it penceresi'),
+      what: tr('Sticky-note window'),
       where: t`pid ${mini.pid}`,
       outcome: closed ? 'removed' : 'absent',
-      note: closed ? undefined : tr('zaten kapalıydı'),
+      note: closed ? undefined : tr('was already closed'),
     });
   }
 
   // ── 2. the file we do not own ─────────────────────────────────────────
   const settings = join(claudeDir(), 'settings.json');
   if (!existsSync(settings)) {
-    entries.push({ what: tr('Hook girdileri'), where: settings, outcome: 'absent' });
+    entries.push({ what: tr('Hook entries'), where: settings, outcome: 'absent' });
   } else {
     // uninstallHooks removes only entries carrying our marker and our URL,
     // and leaves a backup. Someone else's hooks in the same file survive.
@@ -191,15 +191,15 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
     const code = await uninstallHooks({ yes: true, highFidelity: false, port: args.port });
     const after = readSafe(settings);
     entries.push({
-      what: tr('Hook girdileri'),
+      what: tr('Hook entries'),
       where: settings,
       outcome: code !== 0 ? 'failed' : before === after ? 'absent' : 'removed',
       note:
         code !== 0
           ? undefined
           : before === after
-            ? tr('bizim girdimiz yoktu; dosya bit-birebir aynı bırakıldı')
-            : tr('yalnızca "_vt" işaretli girdiler; yedek bırakıldı'),
+            ? tr('we had no entries; the file was left byte for byte identical')
+            : tr('only entries marked "_vt"; a backup was left'),
     });
   }
 
@@ -224,7 +224,7 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
           what: p.what,
           where: p.where,
           outcome: 'removed',
-          note: leftovers.length > 0 ? t`içindekiler: ${leftovers.join(', ')}` : undefined,
+          note: leftovers.length > 0 ? t`contents: ${leftovers.join(', ')}` : undefined,
         });
       } catch (e) {
         entries.push({ what: p.what, where: p.where, outcome: 'failed', note: (e as Error).message });
@@ -251,9 +251,9 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
     if (existsSync(cdir) && safeList(cdir).length === 0) {
       try {
         rmdirSync(cdir);
-        entries.push({ what: tr('Yapılandırma dizini'), where: cdir, outcome: 'removed' });
+        entries.push({ what: tr('Configuration directory'), where: cdir, outcome: 'removed' });
       } catch {
-        entries.push({ what: tr('Yapılandırma dizini'), where: cdir, outcome: 'kept', note: 'silinemedi' });
+        entries.push({ what: tr('Configuration directory'), where: cdir, outcome: 'kept', note: 'silinemedi' });
       }
     }
   }
@@ -264,10 +264,10 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   // count rather than staying silent is the point: the manifest has to be
   // complete even when the answer is zero.
   entries.push({
-    what: tr('Proje içi .vibe/state.json'),
+    what: tr('In-project .vibe/state.json'),
     where: '—',
     outcome: 'absent',
-    note: tr('hiç yazılmadı (bu sürüm projelere hiç yazmıyor)'),
+    note: tr('never written (this release writes nothing to projects)'),
   });
 
   // ── manifest ──────────────────────────────────────────────────────────
@@ -281,21 +281,21 @@ export async function runUninstall(args: UninstallArgs): Promise<number> {
   const failed = entries.filter((e) => e.outcome === 'failed');
   if (failed.length > 0) {
     process.stderr.write(
-      t`\n${failed.length} öğe kaldırılamadı. Daemon hâlâ çalışıyor olabilir: 'vt daemon stop' deneyip tekrar çalıştır.\n`,
+      t`\n${failed.length} items could not be removed. The daemon may still be running: try 'vt daemon stop' and run again.\n`,
     );
     return 1;
   }
 
   process.stdout.write(
     args.keepData
-      ? tr('\nSistemden ayrıldı. Verin duruyor; yeniden kurmak için: vt init\n')
-      : tr('\nTemiz. Ajan durum dizinine hiç dokunulmadı.\n'),
+      ? tr('\nDetached from the system. Your data is still there; to set up again: vt init\n')
+      : tr('\nClean. The agent state directory was never touched.\n'),
   );
   return 0;
 }
 
 function label(o: Outcome): string {
-  return { removed: 'silindi', kept: 'korundu', absent: 'yoktu', failed: 'HATA', skipped: tr('atlandı') }[o];
+  return { removed: 'silindi', kept: 'korundu', absent: 'yoktu', failed: 'HATA', skipped: tr('skipped') }[o];
 }
 
 function sizeOf(path: string): string | undefined {

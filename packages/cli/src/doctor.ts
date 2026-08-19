@@ -112,12 +112,12 @@ function checkNode(): Check {
   const ok = maj > MIN_NODE[0] || (maj === MIN_NODE[0] && min >= MIN_NODE[1]);
   return {
     id: 'node',
-    label: tr('Node sürümü'),
+    label: tr('Node version'),
     status: ok ? 'ok' : 'fail',
-    detail: t`${process.version} (gereken ≥ v${MIN_NODE[0]}.${MIN_NODE[1]})`,
+    detail: t`${process.version} (needs ≥ v${MIN_NODE[0]}.${MIN_NODE[1]})`,
     fix: ok
       ? undefined
-      : tr("node:sqlite ve TypeScript'in derlemesiz çalışması bu sürümü gerektiriyor."),
+      : tr("node:sqlite and running TypeScript without a build step require this version."),
   };
 }
 
@@ -136,27 +136,27 @@ async function checkProbe(ctx: ScanContext): Promise<Check[]> {
   const out: Check[] = [
     {
       id: 'probe',
-      label: tr('Süreç sondası'),
+      label: tr('Process probe'),
       status: err ? 'fail' : seen > 0 ? 'ok' : 'warn',
       detail: err
         ? `${probe.kind}: ${err}`
-        : t`${probe.kind} · ilk cevap ${ms} ms · kendi PID'imiz ${seen > 0 ? tr('görüldü') : tr('GÖRÜLMEDİ')}`,
-      fix: err ? tr('Canlılık tespiti "PID var mı" seviyesine düşer.') : undefined,
+        : t`${probe.kind} · first answer ${ms} ms · our own PID ${seen > 0 ? tr('seen') : tr('NOT SEEN')}`,
+      fix: err ? tr('Liveness detection falls back to "does the PID exist".') : undefined,
     },
   ];
 
   const precision = probe.precision;
   out.push({
     id: 'pid-reuse',
-    label: tr('PID-reuse koruması'),
+    label: tr('PID-reuse guard'),
     status: precision === 'exact' ? 'ok' : precision === 'second' ? 'warn' : 'fail',
     detail:
       precision === 'exact'
-        ? tr('tam (başlangıç zamanı bit-birebir karşılaştırılabiliyor)')
+        ? tr('exact (start time compares bit for bit)')
         : precision === 'second'
-          ? tr('saniye çözünürlüklü — aynı saniyede geri dönüşen PID kaçabilir')
-          : tr('yok — bu platformda başlangıç zamanı okunamıyor'),
-    fix: precision === 'exact' ? undefined : tr('Platform sınırı; kullanıcı tarafında yapılacak bir şey yok.'),
+          ? tr('one-second resolution — a PID recycled within the same second can slip through')
+          : tr('none — start time cannot be read on this platform'),
+    fix: precision === 'exact' ? undefined : tr('A platform limit; there is nothing to fix on your side.'),
   });
   return out;
 }
@@ -169,16 +169,16 @@ async function checkAgentDir(): Promise<Check[]> {
   if (!existsSync(dir)) {
     out.push({
       id: 'agent-dir',
-      label: tr('Ajan durum dizini'),
+      label: tr('Agent state directory'),
       status: 'fail',
-      detail: t`${dir} bulunamadı`,
-      fix: tr('Claude Code kurulu mu? Farklı bir yerdeyse $CLAUDE_CONFIG_DIR ile göster.'),
+      detail: t`${dir} not found`,
+      fix: tr('Is Claude Code installed? If it lives elsewhere, point at it with $CLAUDE_CONFIG_DIR.'),
     });
     return out;
   }
   out.push({
     id: 'agent-dir',
-    label: tr('Ajan durum dizini'),
+    label: tr('Agent state directory'),
     status: 'ok',
     detail: dir + (override ? tr(' ($CLAUDE_CONFIG_DIR)') : ''),
   });
@@ -201,27 +201,27 @@ async function checkAgentDir(): Promise<Check[]> {
 
   out.push({
     id: 'session-registry',
-    label: tr('Oturum kaydı'),
+    label: tr('Session registry'),
     status: sessions > 0 ? 'ok' : virgin ? 'todo' : sessions === 0 ? 'warn' : 'fail',
     detail: virgin
-      ? tr('henüz hiç oturum yok — bu dizin yeni')
+      ? tr('no sessions yet — this directory is new')
       : sessions >= 0
-        ? t`sessions/ içinde ${sessions} kayıt`
-        : tr('sessions/ okunamadı'),
+        ? t`${sessions} records in sessions/`
+        : tr('sessions/ unreadable'),
     fix: virgin
-      ? tr('Bir kez `claude` çalıştır; panel bir sonraki açılışta dolu başlar.')
+      ? tr('Run `claude` once; the dashboard starts populated next time.')
       : sessions === 0
-        ? tr('Hiç oturum kaydı yok. Bir kez `claude` çalıştırdıktan sonra tekrar bak.')
+        ? tr('No session records at all. Run `claude` once and look again.')
         : sessions < 0
-          ? tr('Bu dosya belgelenmemiş; Claude Code sürümün onu artık yazmıyor olabilir.')
+          ? tr('This file is undocumented; your Claude Code version may no longer write it.')
           : undefined,
   });
   out.push({
     id: 'ide-locks',
-    label: tr('IDE pencereleri'),
+    label: tr('IDE windows'),
     status: locks > 0 ? 'ok' : 'info',
-    detail: locks >= 0 ? t`ide/ içinde ${locks} kilit` : tr('ide/ okunamadı'),
-    fix: locks === 0 ? tr('Açık IDE penceresi yok; pencere gruplama devre dışı.') : undefined,
+    detail: locks >= 0 ? t`${locks} locks in ide/` : tr('ide/ unreadable'),
+    fix: locks === 0 ? tr('No IDE window open; window grouping is disabled.') : undefined,
   });
 
   // Not a capability check — a standing reminder of what lives next to the data
@@ -230,9 +230,9 @@ async function checkAgentDir(): Promise<Check[]> {
   if (existsSync(cred)) {
     out.push({
       id: 'credentials',
-      label: tr('Kimlik dosyası'),
+      label: tr('Credentials file'),
       status: 'info',
-      detail: t`${cred} mevcut — VibeTracker bu dosyayı hiç açmaz`,
+      detail: t`${cred} present — VibeTracker never opens this file`,
     });
   }
   return out;
@@ -273,17 +273,17 @@ async function checkTranscriptRead(): Promise<Check> {
   } catch {
     return {
       id: 'transcript-read',
-      label: tr('Transcript okuma'),
+      label: tr('Transcript reading'),
       status: 'warn',
-      detail: tr('projects/ okunamadı'),
+      detail: tr('projects/ unreadable'),
     };
   }
   if (!biggest) {
     return {
       id: 'transcript-read',
-      label: tr('Transcript okuma'),
+      label: tr('Transcript reading'),
       status: 'info',
-      detail: tr('henüz transcript yok'),
+      detail: tr('no transcripts yet'),
     };
   }
 
@@ -304,14 +304,14 @@ async function checkTranscriptRead(): Promise<Check> {
 
   return {
     id: 'transcript-read',
-    label: tr('Transcript okuma'),
+    label: tr('Transcript reading'),
     status: slow ? 'warn' : 'ok',
     detail:
-      t`en büyük dosya ${mb} MB · 256 KB kuyruk açılışı ` +
+      t`largest file ${mb} MB · 256 KB tail open ` +
       t`${first.toFixed(0)} ms → ${second.toFixed(0)} ms`,
     fix: slow
-      ? tr('Açılış maliyeti yüksek (muhtemelen antivirüs taraması). Daemon tanıtıcıları ') +
-        tr('açık tuttuğu için bunu bir kez öder; tek seferlik `vt status` her seferinde öder.')
+      ? tr('Open cost is high (an antivirus scan, most likely). The daemon pays it once ') +
+        tr('because it keeps handles open; a one-shot `vt status` pays it every time.')
       : undefined,
   };
 }
@@ -337,11 +337,11 @@ async function checkScan(ctx: ScanContext): Promise<Check[]> {
   const out: Check[] = [
     {
       id: 'scan',
-      label: tr('Tam tarama'),
+      label: tr('Full scan'),
       status: 'ok',
       detail:
-        t`${ms} ms · ${c.registryEntries} kayıt → ${c.live} canlı / ${c.dead} ölü / ` +
-        t`${c.reused} PID-yeniden-kullanım · ${c.projects} proje`,
+        t`${ms} ms · ${c.registryEntries} records → ${c.live} live / ${c.dead} dead / ` +
+        t`${c.reused} PID reuse · ${c.projects} projects`,
     },
   ];
 
@@ -349,14 +349,14 @@ async function checkScan(ctx: ScanContext): Promise<Check[]> {
   if (guard && !guard.ok) {
     out.push({
       id: 'pid-reuse-data',
-      label: tr('PID-reuse verisi'),
+      label: tr('PID-reuse data'),
       status: 'warn',
-      detail: guard.detail ?? tr('koruma uygulanamadı'),
-      fix: tr('Ajan karşılaştırılabilir bir başlangıç zamanı yazmıyor ya da formatı değişmiş. Oturumlar canlı sayıldı.'),
+      detail: guard.detail ?? tr('the guard could not be applied'),
+      fix: tr('The agent writes no comparable start time, or its format changed. Sessions were counted as live.'),
     });
   }
   for (const w of report.warnings) {
-    out.push({ id: 'warning', label: tr('Tarama uyarısı'), status: 'warn', detail: w });
+    out.push({ id: 'warning', label: tr('Scan warning'), status: 'warn', detail: w });
   }
   return out;
 }
@@ -375,10 +375,10 @@ async function checkGit(): Promise<Check> {
       id: 'git',
       label: 'git',
       status: 'warn',
-      detail: tr('bulunamadı'),
+      detail: tr('not found'),
       fix:
-        tr('Proje kimliği kök commit yerine paket adına ya da yola düşer: aynı projenin iki ') +
-        tr('kopyası ayrı kartlar olarak görünebilir. Dal ve kirli dosya sayısı gösterilmez.'),
+        tr('Project identity falls back to the package name or the path instead of the root commit: two ') +
+        tr('copies of one project may appear as separate cards. Branch and dirty counts are not shown.'),
     };
   }
 }
@@ -406,16 +406,16 @@ async function checkDigest(): Promise<Check> {
   try {
     ({ config: cfg } = await load());
   } catch {
-    return { id: 'digest', label: tr('LLM özeti'), status: 'info', detail: tr('yapılandırma okunamadı') };
+    return { id: 'digest', label: tr('LLM summary'), status: 'info', detail: tr('the configuration could not be read') };
   }
   const d = cfg.digest;
   if (d.provider === 'off') {
     return {
       id: 'digest',
-      label: tr('LLM özeti'),
+      label: tr('LLM summary'),
       status: 'info',
-      detail: tr('kapalı — her sayı yerel hesaplanıyor, hiçbir şey gönderilmiyor'),
-      fix: tr('Açmak istersen seçenekler için: vt digest providers'),
+      detail: tr('off — every number is computed locally, nothing is sent'),
+      fix: tr('If you want to turn it on, the options are: vt digest providers'),
     };
   }
   const cli = isCli(d.provider);
@@ -432,10 +432,10 @@ async function checkDigest(): Promise<Check> {
   });
   const where =
     out === 'yes'
-      ? tr('veri makineden çıkar')
+      ? tr('data leaves the machine')
       : out === 'no'
-        ? tr('veri makineden çıkmaz')
-        : tr('veri çıkar mı bilinmiyor');
+        ? tr('data does not leave the machine')
+        : tr('whether data leaves is unknown');
 
   // A configured provider that names a program nobody can run is a failure
   // that would otherwise wait until the day somebody actually wanted a
@@ -447,24 +447,24 @@ async function checkDigest(): Promise<Check> {
     if (!exe) {
       return {
         id: 'digest',
-        label: tr('LLM özeti'),
+        label: tr('LLM summary'),
         status: 'warn',
-        detail: `${d.provider} · ${tr('komut yazılmamış')}`,
-        fix: tr('Config dosyasında [digest] command ayarla, ya da: vt digest providers'),
+        detail: `${d.provider} · ${tr('no command set')}`,
+        fix: tr('Set [digest] command in the config file, or: vt digest providers'),
       };
     }
     if (!path) {
       return {
         id: 'digest',
-        label: tr('LLM özeti'),
+        label: tr('LLM summary'),
         status: 'warn',
-        detail: `${d.provider} · "${exe}" ${tr("PATH'te bulunamadı")}`,
-        fix: tr('Kur, ya da başka bir sağlayıcı seç: vt digest providers'),
+        detail: `${d.provider} · "${exe}" ${tr("not found on PATH")}`,
+        fix: tr('Install it, or pick another provider: vt digest providers'),
       };
     }
     return {
       id: 'digest',
-      label: tr('LLM özeti'),
+      label: tr('LLM summary'),
       status: 'ok',
       detail: `${d.provider} · ${path}${model ? ' · ' + model : ''} · ${where}`,
     };
@@ -473,15 +473,15 @@ async function checkDigest(): Promise<Check> {
   if (wants(d.provider, d.base_url) && key.key === null) {
     return {
       id: 'digest',
-      label: tr('LLM özeti'),
+      label: tr('LLM summary'),
       status: 'warn',
-      detail: `${d.provider} · ${model} · ${tr('anahtar yok')}`,
-      fix: t`${key.envName ?? tr('ortam değişkeni')} ayarla, ya da: vt digest key <anahtar>`,
+      detail: `${d.provider} · ${model} · ${tr('no key')}`,
+      fix: t`Set ${key.envName ?? tr('an environment variable')}, or: vt digest key <key>`,
     };
   }
   return {
     id: 'digest',
-    label: tr('LLM özeti'),
+    label: tr('LLM summary'),
     status: 'ok',
     detail: `${d.provider} · ${model}${base ? ' · ' + base : ''} · ${where}`,
   };
@@ -493,19 +493,19 @@ function checkDataDir(): Check {
   if (!existsSync(db)) {
     return {
       id: 'db',
-      label: tr('Veritabanı'),
+      label: tr('Database'),
       status: 'info',
-      detail: t`${db} henüz yok (ilk \`vt daemon\` ile oluşur)`,
+      detail: t`${db} does not exist yet (the first \`vt daemon\` creates it)`,
     };
   }
   const size = statSync(db).size;
   const wal = existsSync(db + '-wal') ? statSync(db + '-wal').size : 0;
   return {
     id: 'db',
-    label: tr('Veritabanı'),
+    label: tr('Database'),
     status: size > 500 * 1024 * 1024 ? 'warn' : 'ok',
     detail: t`${(size / 1048576).toFixed(1)} MB (+${(wal / 1048576).toFixed(1)} MB WAL) · ${db}`,
-    fix: size > 500 * 1024 * 1024 ? tr('Sert tavan aşıldı; daemon agresif saklamaya geçer.') : undefined,
+    fix: size > 500 * 1024 * 1024 ? tr('The hard cap is exceeded; the daemon switches to aggressive retention.') : undefined,
   };
 }
 
@@ -539,17 +539,17 @@ async function checkDaemon(): Promise<Check[]> {
         label: 'Daemon',
         status: health.lastError ? 'warn' : 'ok',
         detail:
-          t`port ${port} · ${up} dk çalışıyor · ${health.scans} tarama · ` +
-          t`son ${health.lastScanMs} ms · ${health.rssMb} MB RSS` +
-          (health.lastError ? t` · son hata: ${health.lastError}` : ''),
+          t`port ${port} · up ${up} min · ${health.scans} scans · ` +
+          t`last ${health.lastScanMs} ms · ${health.rssMb} MB RSS` +
+          (health.lastError ? t` · last error: ${health.lastError}` : ''),
       },
     ];
     if (tail) {
       out.push({
         id: 'tail-cache',
-        label: tr('Transcript tanıtıcıları'),
+        label: tr('Transcript handles'),
         status: 'ok',
-        detail: t`${tail.openHandles} açık · ${tail.reads} okuma / ${tail.skipped} değişmemiş`,
+        detail: t`${tail.openHandles} open · ${tail.reads} reads / ${tail.skipped} unchanged`,
       });
     }
     return out;
@@ -561,11 +561,11 @@ async function checkDaemon(): Promise<Check[]> {
       label: 'Daemon',
       status: foreign ? 'fail' : 'info',
       detail: foreign
-        ? t`port ${port} başka bir program tarafından kullanılıyor`
-        : t`çalışmıyor (port ${port} boş)`,
+        ? t`port ${port} is held by another program`
+        : t`not running (port ${port} is free)`,
       fix: foreign
-        ? tr("Hook URL'leri sabit olduğu için VibeTracker sessizce başka porta geçmez. O programı durdur ya da --port ile taşı.")
-        : tr('`vt daemon --open` ile başlat.'),
+        ? tr("Hook URLs are fixed, so VibeTracker never moves to another port quietly. Stop that program, or move with --port.")
+        : tr('Start it with `vt daemon --open`.'),
     },
   ];
 }
@@ -574,7 +574,7 @@ async function checkAutostart(): Promise<Check> {
   const st = await autostartStatus();
   return {
     id: 'autostart',
-    label: tr('Otomatik başlatma'),
+    label: tr('Autostart'),
     // "Installed" is not the same as "will start". A systemd unit that was
     // written but never enabled, and a task left pointing at a checkout that
     // has moved, both exist and both start nothing -- and a tick beside either
@@ -589,7 +589,7 @@ async function checkAutostart(): Promise<Check> {
     detail: st.detail,
     fix:
       st.supported && (!st.installed || st.stale || st.active === false)
-        ? tr('`vt autostart install` ile kur.')
+        ? tr('Install it with `vt autostart install`.')
         : undefined,
   };
 }
@@ -619,32 +619,32 @@ async function checkHooks(): Promise<Check[]> {
   if (raw && hasComments(raw)) {
     out.push({
       id: 'settings-json',
-      label: tr('Ayar dosyası'),
+      label: tr('Settings file'),
       status: 'fail',
-      detail: t`${settings} yorum satırı içeriyor`,
+      detail: t`${settings} contains comment lines`,
       fix:
-        tr('Claude Code bu dosyayı katı JSON okuyor ve yorum gördüğünde tamamını yok sayıyor — ') +
-        tr('buradaki hiçbir ayar geçerli değil. Doğrulamak için: claude doctor'),
+        tr('Claude Code reads this file as strict JSON and ignores the whole file when it sees a comment — ') +
+        tr('so none of these settings are in force. To verify: claude doctor'),
     });
   }
 
   // These three settings each silently neutralize hooks. A user who set one
   // months ago will not connect it to "the dashboard never shows permissions".
   for (const [key, label] of [
-    ['disableAllHooks', tr('tüm hooklar kapatılmış')],
-    ['allowManagedHooksOnly', tr('yalnızca yönetilen hooklara izin var')],
-    ['allowedHttpHookUrls', tr('HTTP hook URL beyaz listesi var')],
+    ['disableAllHooks', tr('all hooks are disabled')],
+    ['allowManagedHooksOnly', tr('only managed hooks are allowed')],
+    ['allowedHttpHookUrls', tr('an HTTP hook URL allowlist is present')],
   ] as const) {
     if (raw && new RegExp(`"${key}"`).test(raw)) {
       out.push({
         id: `setting-${key}`,
-        label: tr('Hook politikası'),
+        label: tr('Hook policy'),
         status: 'warn',
         detail: `${key}: ${label}`,
         fix:
           key === 'allowedHttpHookUrls'
-            ? t`Listede ${hookUrlFor()} yoksa ajan bizim hookumuzu engeller ("HTTP hook blocked").`
-            : tr('Bu ayar açıkken hooklarımız hiç çalışmaz.'),
+            ? t`If ${hookUrlFor()} is not on the list the agent blocks our hook ("HTTP hook blocked").`
+            : tr('While this setting is on, our hooks never run.'),
       });
     }
   }
@@ -652,10 +652,10 @@ async function checkHooks(): Promise<Check[]> {
   if (!installed) {
     out.push({
       id: 'hooks',
-      label: tr('İzin-bekliyor tespiti'),
+      label: tr('Waiting-for-permission detection'),
       status: 'todo',
-      detail: tr('hook kurulu değil — süreç ağacı ve araç sınıfından çıkarım yapılıyor'),
-      fix: tr('`vt hooks install` kesin tespit sağlar (izin istemi, tur sonu, alt-ajanlar).'),
+      detail: tr('no hooks installed — inferred from the process tree and the tool class'),
+      fix: tr('`vt hooks install` gives exact detection (permission prompts, turn ends, subagents).'),
     });
     return out;
   }
@@ -679,18 +679,18 @@ async function checkHooks(): Promise<Check[]> {
   const received = health?.hooks?.received ?? 0;
   out.push({
     id: 'hooks',
-    label: tr('İzin-bekliyor tespiti'),
+    label: tr('Waiting-for-permission detection'),
     status: !health ? 'info' : received > 0 ? 'ok' : 'warn',
     detail: !health
-      ? tr('hook kurulu; daemon çalışmadığı için olay akışı kontrol edilemedi')
+      ? tr('hooks installed; the event stream could not be checked because the daemon is not running')
       : received > 0
-        ? t`${received} olay alındı · ${Object.keys(health?.hooks?.byEvent ?? {}).length} farklı tip` +
-          ((health?.hooks?.dropped ?? 0) > 0 ? t` · ${health?.hooks?.dropped} DÜŞTÜ` : '')
-        : tr('hook kurulu ama hiç olay gelmedi'),
+        ? t`${received} events received · ${Object.keys(health?.hooks?.byEvent ?? {}).length} distinct types` +
+          ((health?.hooks?.dropped ?? 0) > 0 ? t` · ${health?.hooks?.dropped} DROPPED` : '')
+        : tr('hooks installed but no event ever arrived'),
     fix:
       health && received === 0
-        ? tr('Mevcut ajan oturumları ayarları başlangıçta okur — yeni bir oturum başlat. ') +
-          tr('Sürerse: claude doctor ile ayar dosyasını doğrula.')
+        ? tr('Existing agent sessions read settings at startup — start a new session. ') +
+          tr('If it persists: verify the settings file with claude doctor.')
         : undefined,
   });
   return out;
@@ -744,19 +744,19 @@ async function checkOtherAgents(ctx: ScanContext): Promise<Check[]> {
         id: `agent-${a.id}`,
         label: a.displayName,
         status: 'todo',
-        detail: tr('kurulu değil'),
+        detail: tr('not installed'),
       });
       continue;
     }
     const bits: string[] = [];
-    bits.push(caps.sessions ? t`${hints} klasör` : t`${hints} klasör · oturum okunmuyor`);
+    bits.push(caps.sessions ? t`folders: ${hints}` : t`folders: ${hints} · sessions not read`);
     if (caps.sessions) {
-      bits.push(caps.liveProcess ? tr('canlılık: pid') : tr('canlılık: son yazma'));
-      if (caps.turnState) bits.push(tr('tur durumu'));
-      if (caps.openTools) bits.push(tr('açık araç'));
+      bits.push(caps.liveProcess ? tr('liveness: pid') : tr('liveness: last write'));
+      if (caps.turnState) bits.push(tr('turn state'));
+      if (caps.openTools) bits.push(tr('open tools'));
     }
     if (detect.lastActivityAt > 0) {
-      bits.push(t`son ${fmtAge(Date.now() - detect.lastActivityAt)} önce`);
+      bits.push(t`last ${fmtAge(Date.now() - detect.lastActivityAt)} ago`);
     }
     if (error) bits.push(error);
     // The note goes in the detail, not in `fix`. `fix` renders as an arrow and
@@ -779,7 +779,7 @@ async function checkOtherAgents(ctx: ScanContext): Promise<Check[]> {
   if (unknown.length > 0) {
     out.push({
       id: 'agent-unadapted',
-      label: tr('Adaptörü olmayan ajanlar'),
+      label: tr('Agents with no adapter'),
       status: 'todo',
       detail: unknown.join(', '),
     });
@@ -807,26 +807,26 @@ function checkMiniWindow(): Check {
   if (process.platform === 'win32') {
     return {
       id: 'mini',
-      label: tr('Post-it penceresi'),
+      label: tr('Sticky-note window'),
       status: 'ok',
-      detail: tr('yerleşik panel · üstte kalır · vt mini'),
+      detail: tr('built-in panel · stays on top · vt mini'),
     };
   }
   if (!browser) {
     return {
       id: 'mini',
-      label: tr('Post-it penceresi'),
+      label: tr('Sticky-note window'),
       status: 'warn',
-      detail: tr('Chromium ailesinden tarayıcı bulunamadı'),
-      fix: tr('Chrome/Chromium/Brave/Edge kur, ya da masaüstü uygulamasını kullan.'),
+      detail: tr('no Chromium-family browser found'),
+      fix: tr('Install Chrome/Chromium/Brave/Edge, or use the desktop app.'),
     };
   }
   return {
     id: 'mini',
-    label: tr('Post-it penceresi'),
+    label: tr('Sticky-note window'),
     status: 'warn',
-    detail: `${browser.family} · ${browser.path} · ${tr('üstte tutulamaz')}`,
-    fix: tr('Üstte kalan gerçek bir post-it için masaüstü uygulaması: tepsi menüsü → Post-it.'),
+    detail: `${browser.family} · ${browser.path} · ${tr('cannot be kept on top')}`,
+    fix: tr('For a real sticky note that stays on top, use the desktop app: tray menu → Post-it.'),
   };
 }
 
@@ -843,21 +843,21 @@ async function checkVoice(): Promise<Check> {
   if (process.platform !== 'win32') {
     return {
       id: 'voice',
-      label: tr('Sesli haber'),
+      label: tr('Spoken alerts'),
       status: 'todo',
-      detail: tr('yalnızca Windows post-it penceresi konuşur'),
+      detail: tr('only the Windows sticky note speaks'),
     };
   }
   const report = await listVoices();
   if (!report.supported) {
     return {
       id: 'voice',
-      label: tr('Sesli haber'),
+      label: tr('Spoken alerts'),
       status: 'warn',
       detail: report.error
-        ? t`ses motoru okunamadı: ${report.error}`
-        : tr('kurulu ses yok — pencere sessiz kalır'),
-      fix: tr('Ayarlar → Saat ve dil → Konuşma üzerinden bir ses ekle.'),
+        ? t`speech engine unreadable: ${report.error}`
+        : tr('no voices installed — the window stays silent'),
+      fix: tr('Add a voice under Settings -> Time & language -> Speech.'),
     };
   }
   const lang = getLang();
@@ -865,11 +865,11 @@ async function checkVoice(): Promise<Check> {
   // The gap between the two registries, stated as a number: this is what tells
   // someone that a voice they installed is visible to the engine we use and
   // invisible to the one .NET ships with.
-  const engines = t`${report.engine} · WinRT ${report.winrtCount} / SAPI5 ${report.sapiCount} ses`;
+  const engines = t`${report.engine} · WinRT ${report.winrtCount} / SAPI5 ${report.sapiCount} voices`;
   if (match) {
     return {
       id: 'voice',
-      label: tr('Sesli haber'),
+      label: tr('Spoken alerts'),
       status: 'ok',
       detail: t`${match.name} (${match.lang}) · ${engines}`,
     };
@@ -878,12 +878,12 @@ async function checkVoice(): Promise<Check> {
   const fallback = speaksLanguage(report, alt);
   return {
     id: 'voice',
-    label: tr('Sesli haber'),
+    label: tr('Spoken alerts'),
     status: 'warn',
     detail: fallback
-      ? t`${lang} sesi yok — cümle ${alt} olarak ${fallback.name} ile okunuyor · ${engines}`
-      : t`${lang} sesi yok — sistem varsayılanıyla okunuyor · ${engines}`,
-    fix: t`Ayarlar → Saat ve dil → Konuşma üzerinden ${lang} sesi ekle.`,
+      ? t`no ${lang} voice — the line is read in ${alt} by ${fallback.name} · ${engines}`
+      : t`no ${lang} voice — read with the system default · ${engines}`,
+    fix: t`Add a ${lang} voice under Settings -> Time & language -> Speech.`,
   };
 }
 
@@ -893,12 +893,12 @@ function checkWriteSafety(): Check {
   const overlap = ours.some((p) => p.toLowerCase().startsWith(agent.toLowerCase()));
   return {
     id: 'write-safety',
-    label: tr('Yazma güvenliği'),
+    label: tr('Write safety'),
     status: overlap ? 'fail' : 'ok',
     detail: overlap
-      ? tr('VibeTracker verisi ajan durum dizininin İÇİNDE — bu olmamalı')
-      : t`ajan dizini salt-okunur · yazdıklarımız yalnızca ${ours[0]}`,
-    fix: overlap ? tr("Veri dizinini taşı; ajanın transcript'leri yeri doldurulamaz.") : undefined,
+      ? tr('VibeTracker data lives INSIDE the agent state directory — it must not')
+      : t`agent directory read-only · we write only to ${ours[0]}`,
+    fix: overlap ? tr("Move the data directory; the agent transcripts are irreplaceable.") : undefined,
   };
 }
 
@@ -924,8 +924,8 @@ function render(checks: Check[]): string {
   const n = (s: Status): number => checks.filter((c) => c.status === s).length;
   out.push('');
   out.push(
-    t` ${n('ok')} tamam ${dim('·')} ${n('warn')} uyarı ${dim('·')} ${n('fail')} hata ` +
-      t`${dim('·')} ${n('todo')} henüz yok`,
+    t` ${n('ok')} ok ${dim('·')} ${n('warn')} warnings ${dim('·')} ${n('fail')} errors ` +
+      t`${dim('·')} ${n('todo')} not built yet`,
   );
   out.push('');
   return out.join('\n');

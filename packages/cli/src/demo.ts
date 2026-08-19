@@ -35,14 +35,14 @@ export async function runDemo(args: DemoArgs): Promise<number> {
   // and a progress line in the middle of a JSON document is the kind of bug
   // that only ever shows up in someone else's script.
   const say = (text: string): void => void process.stderr.write(text);
-  say(t`Sentetik ortam kuruluyor: ${root}\n`);
+  say(t`Building a synthetic environment: ${root}\n`);
 
   const fixture = await buildFixture({ root, live: 3, dead: 5, reused: 2, huge: args.huge });
   say(
-    t`  ${fixture.livePids.length} canlı · ${fixture.deadPids.length} ölü · ${fixture.reusedPids.length} PID geri dönüşmüş\n`,
+    t`  ${fixture.livePids.length} live · ${fixture.deadPids.length} dead · ${fixture.reusedPids.length} recycled PIDs\n`,
   );
   if (fixture.hugeTranscript) {
-    say(tr('  seyrek 600 MB transcript üretildi (diskte birkaç KB)\n'));
+    say(tr('  a sparse 600 MB transcript was generated (a few KB on disk)\n'));
   }
 
   // The scan reads `$CLAUDE_CONFIG_DIR`, so pointing it at the fixture is the
@@ -70,10 +70,10 @@ export async function runDemo(args: DemoArgs): Promise<number> {
     } else if (args.html) {
       const { writeFile } = await import('node:fs/promises');
       await writeFile(args.html, renderHtml(report), 'utf8');
-      say(t`HTML anlık görüntü: ${args.html}\n`);
+      say(t`HTML snapshot: ${args.html}\n`);
     } else {
       process.stdout.write(`${renderText(report)}\n`);
-      say(tr('Bu tamamen sentetik bir ortamdır. Gerçek ajan durumuna dokunulmadı.\n'));
+      say(tr('This is an entirely synthetic environment. Real agent state was not touched.\n'));
     }
   } finally {
     await ctx.close();

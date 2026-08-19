@@ -13,16 +13,16 @@ import type { AdapterNote } from './types.ts';
 export function noteText(note: AdapterNote): string {
   switch (note) {
     case 'no-registry':
-      return tr('oturum kaydı yok — canlılık son yazma anına dayanıyor');
+      return tr('no session registry — liveness rests on the last write');
     case 'folders-only':
-      return tr('yalnızca klasör listesi — oturum durumu okunmuyor');
+      return tr('folder list only — session state is not read');
     case 'never-used':
-      return tr('kurulu ama henüz kullanılmamış');
+      return tr('installed, never used yet');
     case 'schema-drift':
-      return tr('şema değişmiş: oturum var ama mesajları okunamıyor');
+      return tr('schema moved: sessions exist but their messages cannot be read');
     case 'log-only':
-      return tr('oturum tablosu boş — çalıştırmalar log dosyasından okunuyor');
+      return tr('session table empty — runs are read from the log file');
     case 'unreadable':
-      return tr('veritabanı okunamadı');
+      return tr('database could not be read');
   }
 }

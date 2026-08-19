@@ -27,7 +27,7 @@ export async function runDaemon(args: DaemonArgs): Promise<number> {
     if (err instanceof AlreadyRunningError) {
       const info = readRuntimeInfo();
       process.stderr.write(`${err.message}\n`);
-      if (info) process.stderr.write(t`Panel: ${dashboardUrl(info.port, info.token)}\n`);
+      if (info) process.stderr.write(t`Dashboard: ${dashboardUrl(info.port, info.token)}\n`);
       return 3;
     }
     if (err instanceof PortTakenError) {
@@ -39,14 +39,14 @@ export async function runDaemon(args: DaemonArgs): Promise<number> {
 
   const info = readRuntimeInfo();
   const url = info ? dashboardUrl(info.port, info.token) : `http://127.0.0.1:${daemon.port}/`;
-  process.stdout.write(t`VibeTracker çalışıyor · ${url}\n`);
-  process.stdout.write(t`Durdurmak için Ctrl+C. Çalışma bilgisi: ${runtimeFilePath()}\n`);
-  process.stdout.write(t`Günlük: ${logFilePath()}\n`);
+  process.stdout.write(t`VibeTracker running · ${url}\n`);
+  process.stdout.write(t`Ctrl+C to stop. Runtime info: ${runtimeFilePath()}\n`);
+  process.stdout.write(t`Log: ${logFilePath()}\n`);
   if (args.open) await openBrowser(url);
 
   await new Promise<void>((resolve) => {
     const shutdown = (): void => {
-      process.stdout.write(tr('\nkapatılıyor…\n'));
+      process.stdout.write(tr('\nshutting down…\n'));
       void daemon.stop().then(resolve, resolve);
     };
     process.once('SIGINT', shutdown);
@@ -68,7 +68,7 @@ export function dashboardUrl(port: number, token: string): string {
 export async function openDashboard(): Promise<number> {
   const info = readRuntimeInfo();
   if (!info) {
-    process.stderr.write(tr('Daemon çalışmıyor. Önce `vt daemon` çalıştır.\n'));
+    process.stderr.write(tr('The daemon is not running. Start it with `vt daemon`.\n'));
     return 3;
   }
   const url = dashboardUrl(info.port, info.token);
@@ -144,7 +144,7 @@ async function openBrowser(url: string): Promise<void> {
 export async function stopDaemon(): Promise<number> {
   const info = readRuntimeInfo();
   if (!info) {
-    process.stdout.write(tr('Daemon çalışmıyor.\n'));
+    process.stdout.write(tr('The daemon is not running.\n'));
     return 3;
   }
 
@@ -155,14 +155,14 @@ export async function stopDaemon(): Promise<number> {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
-      process.stderr.write(t`Daemon durdurulamadı: HTTP ${res.status}\n`);
+      process.stderr.write(t`Could not stop the daemon: HTTP ${res.status}\n`);
       return 70;
     }
   } catch {
     // The runtime file can outlive the process it describes — a hard kill, a
     // power cut. Saying "not running" is more useful than reporting a network
     // error about a daemon that is already gone.
-    process.stdout.write(t`Daemon cevap vermiyor (pid ${info.pid}) — muhtemelen zaten kapalı.\n`);
+    process.stdout.write(t`The daemon is not answering (pid ${info.pid}) — it has probably already stopped.\n`);
     return 3;
   }
 
@@ -171,11 +171,11 @@ export async function stopDaemon(): Promise<number> {
   // that file the instant this returns — which failed with EBUSY until we
   // waited for the pid instead of for the acknowledgement.
   if (!(await waitForExit(info.pid, 8000))) {
-    process.stderr.write(t`Daemon cevap verdi ama hâlâ kapanmadı (pid ${info.pid}).\n`);
+    process.stderr.write(t`The daemon answered but has still not exited (pid ${info.pid}).\n`);
     return 70;
   }
 
-  process.stdout.write(t`Daemon durduruldu (pid ${info.pid}).\n`);
+  process.stdout.write(t`Daemon stopped (pid ${info.pid}).\n`);
   return 0;
 }
 

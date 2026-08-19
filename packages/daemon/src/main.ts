@@ -165,7 +165,7 @@ export class Daemon {
       // killed, so the database closes cleanly and the runtime file is removed
       // instead of being left behind pointing at a pid that no longer exists.
       onShutdown: () => {
-        log(t`durdurma istendi`);
+        log(t`shutdown requested`);
         void this.stop().then(
           () => process.exit(0),
           () => process.exit(0),
@@ -262,7 +262,7 @@ export class Daemon {
     } catch (err) {
       // A chooser missing a few rows is a small loss; a daemon that will not
       // start is not. This is the one place that failure is genuinely optional.
-      log(`proje listesi tohumlanamadı: ${String(err)}`);
+      log(`could not seed the project list: ${String(err)}`);
     }
   }
 
@@ -314,7 +314,7 @@ export class Daemon {
     this.#maintenance.unref();
 
     log(
-      t`başladı · pid ${process.pid} · port ${this.#opts.port} · v${VERSION} · ` +
+      t`started · pid ${process.pid} · port ${this.#opts.port} · v${VERSION} · ` +
         t`node ${process.version} · db ${this.#store.path}`,
     );
   }
@@ -383,7 +383,7 @@ export class Daemon {
           displayName: found.displayName,
         },
       ]);
-      log(t`elle eklendi · ${found.displayName} · ${found.path}`);
+      log(t`added by hand · ${found.displayName} · ${found.path}`);
       return { ok: true, projectId: found.projectId, displayName: found.displayName };
     } catch {
       return { ok: false, reason: 'failed' };
@@ -439,7 +439,7 @@ export class Daemon {
       // Once per move, not once per scan: this runs every three seconds.
       if (to !== id && !this.#loggedMoves.has(id + '>' + to)) {
         this.#loggedMoves.add(id + '>' + to);
-        log(t`proje kimliği değişmiş · ${id} → ${to}`);
+        log(t`project identity changed · ${id} → ${to}`);
       }
     }
     return { mode: 'selected', selected };
@@ -497,7 +497,7 @@ export class Daemon {
     // anything leaves this machine. The address is included and the key never
     // is; this log is read by `vt doctor --bundle`.
     const where = choice.value.baseUrl ? ` · ${choice.value.baseUrl}` : '';
-    log(t`LLM sağlayıcısı değiştirildi · ${choice.value.provider}${where}`);
+    log(t`LLM provider changed · ${choice.value.provider}${where}`);
     return { ok: true, view: await this.#digest() };
   }
 
@@ -521,7 +521,7 @@ export class Daemon {
     } catch {
       this.#trackingStamp = 0;
     }
-    log(t`izlenen projeler güncellendi · ${mode} · ${selected.length}`);
+    log(t`tracked projects updated · ${mode} · ${selected.length}`);
   }
 
   /**
@@ -564,7 +564,7 @@ export class Daemon {
       // restart, and the file's mtime is already the trigger.
       this.#agents = cfg.agents.enabled;
       this.#agentRecencyMs = cfg.thresholds.agent_recency_sec * 1000;
-      log(t`izlenen projeler yeniden okundu · ${this.#tracking.mode}`);
+      log(t`tracked projects re-read · ${this.#tracking.mode}`);
     } catch {
       // A broken config must not stop the daemon; the previous selection
       // stands and `vt config check` is where the error belongs.
@@ -572,7 +572,7 @@ export class Daemon {
   }
 
   async stop(): Promise<void> {
-    if (!this.#stopped) log(t`durduruluyor · ${this.#scanCount} tarama yapıldı`);
+    if (!this.#stopped) log(t`stopping · ${this.#scanCount} scans done`);
     this.#stopped = true;
     if (this.#timer) clearInterval(this.#timer);
     if (this.#watchdog) clearInterval(this.#watchdog);
@@ -652,13 +652,13 @@ export class Daemon {
         ok: this.#ring.received > 0,
         detail:
           this.#ring.received > 0
-            ? t`${this.#ring.received} olay · ${hookedSessions} oturum hook'lu` +
-              (this.#ring.dropped > 0 ? t` · ${this.#ring.dropped} DÜŞTÜ` : '')
-            : tr('hiç hook olayı gelmedi (kurulu değil ya da devre dışı)'),
+            ? t`${this.#ring.received} events · ${hookedSessions} sessions hooked` +
+              (this.#ring.dropped > 0 ? t` · ${this.#ring.dropped} DROPPED` : '')
+            : tr('no hook event ever arrived (not installed, or disabled)'),
       };
       if (this.#ring.dropped > 0) {
         report.warnings.push(
-          t`${this.#ring.dropped} hook olayı düştü: tampon doldu. Durumlar eksik olabilir.`,
+          t`${this.#ring.dropped} hook events were dropped: the buffer filled. States may be incomplete.`,
         );
       }
 
@@ -756,19 +756,19 @@ export class Daemon {
       this.#lastMaintenance = { ...result, at: Date.now() };
       if (result.hardCapTriggered) {
         log(
-          t`veritabanı sert tavanı aştı; agresif saklama uygulandı ` +
-            t`(${result.transitionsDropped} geçiş, ${result.sessionsDropped} oturum silindi)`,
+          t`the database passed its hard cap; aggressive retention was applied ` +
+            t`(${result.transitionsDropped} transitions, ${result.sessionsDropped} sessions deleted)`,
         );
       } else if (result.transitionsDropped > 0 || result.sessionsDropped > 0) {
         log(
-          t`bakım: ${result.transitionsDropped} geçiş, ${result.sessionsDropped} oturum ` +
-            t`silindi · ${result.ms} ms`,
+          t`maintenance: ${result.transitionsDropped} transitions, ${result.sessionsDropped} sessions ` +
+            t`deleted · ${result.ms} ms`,
         );
       }
     } catch (err) {
       // Maintenance failing must never take the daemon down with it: the
       // dashboard is still correct, it just keeps more history than intended.
-      this.#lastError = t`bakım: ${(err as Error).message}`;
+      this.#lastError = t`maintenance: ${(err as Error).message}`;
     } finally {
       this.#phase = 'idle';
     }
@@ -801,10 +801,10 @@ export class Daemon {
       if (lag > 2000) {
         const stuckFor = now - this.#phaseSince;
         log(
-          t`event-loop ${lag}ms bloklandı, faz="${this.#phase}" ` +
-            t`(${stuckFor}ms'dir bu fazda) · tarama #${this.#scanCount} · ` +
+          t`the event loop blocked for ${lag}ms, phase="${this.#phase}" ` +
+            t`(in this phase for ${stuckFor}ms) · scan #${this.#scanCount} · ` +
             t`${Math.round(process.memoryUsage().rss / 1048576)} MB RSS. ` +
-            t`Asılı kalmaktansa çıkılıyor.`,
+            t`Exiting rather than hanging.`,
         );
         process.exit(1);
       }
@@ -820,7 +820,7 @@ export class AlreadyRunningError extends Error {
   daemonId: string;
   port: number;
   constructor(daemonId: string, port: number) {
-    super(t`VibeTracker zaten çalışıyor (port ${port}, id ${daemonId})`);
+    super(t`VibeTracker is already running (port ${port}, id ${daemonId})`);
     this.daemonId = daemonId;
     this.port = port;
   }
@@ -830,8 +830,8 @@ export class PortTakenError extends Error {
   port: number;
   constructor(port: number) {
     super(
-      t`Port ${port} başka bir program tarafından kullanılıyor. ` +
-        t`Hook URL'leri sabit olduğu için VibeTracker sessizce başka bir porta geçmez.`,
+      t`Port ${port} is held by another program. ` +
+        t`Hook URLs are fixed, so VibeTracker never moves to another port quietly.`,
     );
     this.port = port;
   }

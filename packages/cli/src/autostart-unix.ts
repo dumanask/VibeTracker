@@ -154,7 +154,7 @@ export function unit(node: string, entry: string): string {
   const data = dataDir();
   const config = configDir();
   return `[Unit]
-Description=VibeTracker izleme daemon'ı
+Description=The VibeTracker watch daemon
 Documentation=https://github.com/vibetracker/vibetracker
 After=default.target
 
@@ -188,7 +188,7 @@ function agentWhere(): string {
 async function darwinStatus(entry: string): Promise<UnixAutostart> {
   const path = launchAgentPath();
   if (!existsSync(path)) {
-    return { supported: true, installed: false, detail: tr('kurulu değil'), where: agentWhere() };
+    return { supported: true, installed: false, detail: tr('not installed'), where: agentWhere() };
   }
   let body = '';
   try {
@@ -205,8 +205,8 @@ async function darwinStatus(entry: string): Promise<UnixAutostart> {
     stale,
     where: agentWhere(),
     detail: stale
-      ? t`LaunchAgent "${LAUNCH_LABEL}" var ama başka bir kuruluma işaret ediyor`
-      : t`LaunchAgent "${LAUNCH_LABEL}" kurulu · girişte başlar, çökerse ${THROTTLE_SEC} sn sonra döner`,
+      ? t`LaunchAgent "${LAUNCH_LABEL}" exists but points at a different install`
+      : t`LaunchAgent "${LAUNCH_LABEL}" installed · starts at login, returns ${THROTTLE_SEC}s after a crash`,
   };
 }
 
@@ -230,23 +230,23 @@ async function darwinInstall(node: string, entry: string): Promise<number> {
       await exec('launchctl', ['load', '-w', path], { timeout: 15_000 });
     } catch {
       const e = err as { stderr?: string; stdout?: string; message: string };
-      process.stderr.write(t`LaunchAgent yüklenemedi.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
-      process.stderr.write(t`Dosya yazıldı: ${path}\nElle: launchctl bootstrap ${gui()} ${path}\n`);
+      process.stderr.write(t`Could not load the LaunchAgent.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
+      process.stderr.write(t`File written: ${path}\nBy hand: launchctl bootstrap ${gui()} ${path}\n`);
       return 4;
     }
   }
-  process.stdout.write(t`Otomatik başlatma kuruldu: ${path}\n`);
-  process.stdout.write(t`  girişte başlar · yalnızca hata ile çıkarsa yeniden başlatılır\n`);
-  process.stdout.write(t`  yönetici hakkı istemez (LaunchDaemon değil, LaunchAgent)\n`);
-  process.stdout.write(t`  günlük: ${join(dataDir(), 'daemon.log')}\n`);
-  process.stdout.write(tr('Kaldırmak için: vt autostart uninstall\n'));
+  process.stdout.write(t`Autostart installed: ${path}\n`);
+  process.stdout.write(t`  starts at login · restarted only when it exits with a failure\n`);
+  process.stdout.write(t`  asks for no administrator rights (a LaunchAgent, not a LaunchDaemon)\n`);
+  process.stdout.write(t`  log: ${join(dataDir(), 'daemon.log')}\n`);
+  process.stdout.write(tr('To remove: vt autostart uninstall\n'));
   return 0;
 }
 
 async function darwinUninstall(): Promise<number> {
   const path = launchAgentPath();
   if (!existsSync(path)) {
-    process.stderr.write(t`LaunchAgent "${LAUNCH_LABEL}" bulunamadı.\n`);
+    process.stderr.write(t`LaunchAgent "${LAUNCH_LABEL}" not found.\n`);
     return 3;
   }
   await exec('launchctl', ['bootout', `${gui()}/${LAUNCH_LABEL}`], { timeout: 15_000 }).catch(
@@ -255,7 +255,7 @@ async function darwinUninstall(): Promise<number> {
     },
   );
   await unlink(path).catch(() => {});
-  process.stdout.write(t`Otomatik başlatma kaldırıldı: ${path}\n`);
+  process.stdout.write(t`Autostart removed: ${path}\n`);
   return 0;
 }
 
@@ -275,7 +275,7 @@ export function desktopEntry(node: string, entry: string): string {
   return `[Desktop Entry]
 Type=Application
 Name=VibeTracker
-Comment=VibeTracker izleme daemon'ı
+Comment=The VibeTracker watch daemon
 Exec=${quotePath(node)} ${quotePath(entry)} daemon
 Terminal=false
 X-GNOME-Autostart-enabled=true
@@ -317,10 +317,10 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
       active: enabled,
       where: t`systemd --user: ${SYSTEMD_UNIT}.service`,
       detail: stale
-        ? t`birim "${SYSTEMD_UNIT}" var ama başka bir kuruluma işaret ediyor`
+        ? t`unit "${SYSTEMD_UNIT}" exists but points at a different install`
         : enabled
-          ? t`birim "${SYSTEMD_UNIT}" etkin · girişte başlar, çökerse ${THROTTLE_SEC} sn sonra döner`
-          : t`birim "${SYSTEMD_UNIT}" yazılmış ama etkin değil — vt autostart install`,
+          ? t`unit "${SYSTEMD_UNIT}" enabled · starts at login, returns ${THROTTLE_SEC}s after a crash`
+          : t`unit "${SYSTEMD_UNIT}" written but not enabled — vt autostart install`,
     };
   }
   if (existsSync(desktopEntryPath())) {
@@ -328,7 +328,7 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
       supported: true,
       installed: true,
       where: desktopEntryPath(),
-      detail: t`XDG autostart girdisi kurulu (systemd yok) · ${desktopEntryPath()}`,
+      detail: t`XDG autostart entry installed (no systemd) · ${desktopEntryPath()}`,
     };
   }
   const systemd = await hasSystemd();
@@ -337,8 +337,8 @@ async function linuxStatus(entry: string): Promise<UnixAutostart> {
     installed: false,
     where: systemd ? t`systemd --user: ${SYSTEMD_UNIT}.service` : desktopEntryPath(),
     detail: systemd
-      ? tr('kurulu değil')
-      : tr('kurulu değil · systemd yok, XDG autostart kullanılacak'),
+      ? tr('not installed')
+      : tr('not installed · no systemd, XDG autostart will be used'),
   };
 }
 
@@ -371,9 +371,9 @@ async function linuxInstall(node: string, entry: string): Promise<number> {
     const path = desktopEntryPath();
     await mkdir(join(path, '..'), { recursive: true });
     await writeFile(path, desktopEntry(node, entry), 'utf8');
-    process.stdout.write(t`systemd bulunamadı; XDG autostart girdisi yazıldı: ${path}\n`);
+    process.stdout.write(t`No systemd found; wrote an XDG autostart entry: ${path}\n`);
     process.stdout.write(
-      tr('  Bu girdi oturum açılışında başlatır ama çöken bir daemon\'ı geri getirmez.\n'),
+      tr('  This starts it at login but will not revive a daemon that crashed.\n'),
     );
     return 0;
   }
@@ -386,27 +386,27 @@ async function linuxInstall(node: string, entry: string): Promise<number> {
     await exec('systemctl', ['--user', 'enable', '--now', SYSTEMD_UNIT], { timeout: 20_000 });
   } catch (err) {
     const e = err as { stderr?: string; stdout?: string; message: string };
-    process.stderr.write(t`Birim etkinleştirilemedi.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
-    process.stderr.write(t`Dosya yazıldı: ${path}\nElle: systemctl --user enable --now ${SYSTEMD_UNIT}\n`);
+    process.stderr.write(t`Could not enable the unit.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
+    process.stderr.write(t`File written: ${path}\nBy hand: systemctl --user enable --now ${SYSTEMD_UNIT}\n`);
     return 4;
   }
 
-  process.stdout.write(t`Otomatik başlatma kuruldu: ${path}\n`);
-  process.stdout.write(t`  girişte başlar · yalnızca hata ile çıkarsa ${THROTTLE_SEC} sn sonra döner\n`);
+  process.stdout.write(t`Autostart installed: ${path}\n`);
+  process.stdout.write(t`  starts at login · returns ${THROTTLE_SEC}s later, and only after a failure\n`);
   process.stdout.write(
-    t`  ProtectHome=read-only · yazma izni yalnızca ${dataDir()} ve ${configDir()}\n`,
+    t`  ProtectHome=read-only · write access only to ${dataDir()} and ${configDir()}\n`,
   );
-  process.stdout.write(tr('  günlük: journalctl --user -u vibetracker -f\n'));
+  process.stdout.write(tr('  log: journalctl --user -u vibetracker -f\n'));
 
   if (!(await lingerEnabled())) {
     // Reported, not done: enabling it usually needs a polkit prompt.
     process.stdout.write(
-      tr('\nNot: oturum "linger" kapalı. Böyle bir kurulumda daemon oturumu kapatınca durur\n') +
-        tr('ve bir sonraki girişte döner. Sürekli çalışmasını istiyorsan:\n') +
+      tr('\nNote: session lingering is off. The daemon will stop when you log out\n') +
+        tr('and come back at the next login. To keep it running:\n') +
         t`  loginctl enable-linger ${userInfo().username}\n`,
     );
   }
-  process.stdout.write(tr('Kaldırmak için: vt autostart uninstall\n'));
+  process.stdout.write(tr('To remove: vt autostart uninstall\n'));
   return 0;
 }
 
@@ -419,17 +419,17 @@ async function linuxUninstall(): Promise<number> {
     }).catch(() => {});
     await unlink(path).catch(() => {});
     await exec('systemctl', ['--user', 'daemon-reload'], { timeout: 15_000 }).catch(() => {});
-    process.stdout.write(t`Otomatik başlatma kaldırıldı: ${path}\n`);
+    process.stdout.write(t`Autostart removed: ${path}\n`);
     removed = true;
   }
   const desktop = desktopEntryPath();
   if (existsSync(desktop)) {
     await unlink(desktop).catch(() => {});
-    process.stdout.write(t`XDG autostart girdisi kaldırıldı: ${desktop}\n`);
+    process.stdout.write(t`XDG autostart entry removed: ${desktop}\n`);
     removed = true;
   }
   if (!removed) {
-    process.stderr.write(tr('Kurulu bir otomatik başlatma bulunamadı.\n'));
+    process.stderr.write(tr('No autostart entry found.\n'));
     return 3;
   }
   return 0;
@@ -444,14 +444,14 @@ export async function unixAutostartStatus(entry: string): Promise<UnixAutostart>
     supported: false,
     installed: false,
     where: '—',
-    detail: tr('bu platformda desteklenmiyor'),
+    detail: tr('not supported on this platform'),
   };
 }
 
 export async function unixAutostartInstall(node: string, entry: string): Promise<number> {
   if (process.platform === 'darwin') return darwinInstall(node, entry);
   if (process.platform === 'linux') return linuxInstall(node, entry);
-  process.stderr.write(tr('Bu platformda otomatik başlatma yok. `vt daemon` komutunu elle çalıştır.\n'));
+  process.stderr.write(tr('No autostart on this platform. Run `vt daemon` by hand.\n'));
   return 2;
 }
 

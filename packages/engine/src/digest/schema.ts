@@ -125,15 +125,15 @@ const EVIDENCE_KINDS: EvidenceKind[] = ['commit', 'file', 'branch', 'session', '
 
 export function parseDigest(raw: string): ParseResult {
   const json = extractJson(raw);
-  if (!json) return { ok: false, reason: 'yanıtta JSON yok' };
+  if (!json) return { ok: false, reason: 'no JSON in the answer' };
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch {
-    return { ok: false, reason: 'JSON ayrıştırılamadı' };
+    return { ok: false, reason: 'the JSON could not be parsed' };
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return { ok: false, reason: 'JSON bir nesne değil' };
+    return { ok: false, reason: 'the JSON is not an object' };
   }
   const o = parsed as Record<string, unknown>;
 
@@ -151,7 +151,7 @@ export function parseDigest(raw: string): ParseResult {
   // The one hard requirement. A summary that cites nothing is a summary that
   // could have been written without reading anything, and there is no way to
   // tell the two apart once it is on screen.
-  if (evidence.length === 0) return { ok: false, reason: 'kanıt gösterilmemiş' };
+  if (evidence.length === 0) return { ok: false, reason: 'no evidence was cited' };
 
   const summary = cap(o['summary'], 400);
   if (!summary) return { ok: false, reason: 'özet yok' };

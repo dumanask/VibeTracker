@@ -35,30 +35,30 @@ export function labelWorkspaces(list: WorkspaceInfo[]): void {
 
 /**
  * Flags are identifiers, not prose. `attentionScore` and the dashboard both
- * match on them (`f.startsWith('kirli-sel')`), so translating them here would
- * silently break risk scoring in every language but Turkish. They are
+ * match on them (`f.startsWith('dirty-flood')`), so translating them here would
+ * silently break risk scoring in every language but English. They are
  * translated where they are *displayed*, and nowhere else.
  */
 export function projectFlags(p: ProjectView): string[] {
   const flags: string[] = [];
-  if (p.identityKind !== 'git_root') flags.push('git-yok');
+  if (p.identityKind !== 'git_root') flags.push('no-git');
 
   for (const w of p.workspaces) {
     if ((w.dirtyCount ?? 0) > 200) {
       // A repo with 500 dirty paths under `target/` is not busy, it is missing a
       // gitignore. Treating that as heat would pin it to the top of the
       // attention list forever.
-      flags.push(w.dirtyIsBuildNoise ? 'build-gürültüsü' : `kirli-sel(${w.dirtyCount})`);
+      flags.push(w.dirtyIsBuildNoise ? 'build-noise' : `dirty-flood(${w.dirtyCount})`);
     }
     if (w.isWorktree) flags.push('worktree');
-    if (w.storageKind === 'cloud') flags.push('bulut-senkron');
+    if (w.storageKind === 'cloud') flags.push('cloud-sync');
     if (w.storageKind === 'wsl') flags.push('wsl');
   }
 
   if (p.workspaces.length > 1) {
-    flags.push(`çift-konum(${p.workspaces.length})`);
+    flags.push(`duplicate-path(${p.workspaces.length})`);
     const branches = new Set(p.workspaces.map((w) => w.branch ?? '?'));
-    if (branches.size > 1) flags.push('ıraksamış');
+    if (branches.size > 1) flags.push('diverged');
   }
   return [...new Set(flags)];
 }
@@ -81,7 +81,7 @@ export function attentionScore(p: ProjectView): number {
   const anyLive = p.sessions.some((s) => s.liveness === 'live');
   const maxUrgency = Math.max(0, ...p.sessions.map((s) => urgencyOf(s.state)));
   const risk = p.flags.filter(
-    (f) => f.startsWith('kirli-sel') || f === 'git-yok' || f === 'ıraksamış',
+    (f) => f.startsWith('dirty-flood') || f === 'no-git' || f === 'diverged',
   ).length;
   const oldestWait = Math.max(
     0,

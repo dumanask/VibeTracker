@@ -28,10 +28,10 @@ const CASES: Array<[string, string, string]> = [
 
 for (const [name, secret, detector] of CASES) {
   test(`${name} is removed and labelled`, () => {
-    const { text, hits } = redactDetailed(`önce ${secret} sonra`);
-    assert.ok(!text.includes(secret), `sızdı: ${text}`);
-    assert.ok(hits.includes(detector), `beklenen dedektör ${detector}, gelen ${hits.join(',')}`);
-    assert.ok(text.startsWith('önce ') && text.endsWith(' sonra'), 'çevresi korunmalı');
+    const { text, hits } = redactDetailed(`before ${secret} after`);
+    assert.ok(!text.includes(secret), `leaked: ${text}`);
+    assert.ok(hits.includes(detector), `expected detector ${detector}, got ${hits.join(',')}`);
+    assert.ok(text.startsWith('before ') && text.endsWith(' after'), 'the surroundings must survive');
   });
 }
 

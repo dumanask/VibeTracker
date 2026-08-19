@@ -6,7 +6,7 @@
  *
  * 1. **A missing key must not produce garbage.** With opaque ids, an
  *    untranslated string renders as `doctor.node.label` and the line becomes
- *    unreadable. Here the Turkish text *is* the key, so a missing translation
+ *    unreadable. Here the English text *is* the key, so a missing translation
  *    falls back to a real sentence. Partial coverage stays usable, which
  *    matters because coverage will always be partial for a while.
  *
@@ -16,14 +16,14 @@
  *    construction and `missingKeys()` reports it.
  *
  * Interpolations are stripped out of the key, so
- * `t\`${n} kayıt bulundu\`` keys on `"{0} kayıt bulundu"` and the same
+ * `t\`${n} records found\`` keys on `"{0} records found"` and the same
  * translation serves every value.
  */
 
 export type Lang = 'tr' | 'en';
 
 /** Source language. Strings in the code are written in this language. */
-export const SOURCE_LANG: Lang = 'tr';
+export const SOURCE_LANG: Lang = 'en';
 
 type Catalog = Record<string, string>;
 

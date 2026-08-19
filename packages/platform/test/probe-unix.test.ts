@@ -52,7 +52,7 @@ test('a process name with spaces and brackets in it does not shift the fields', 
   const nasty = STAT.replace('(node)', '(my app (helper) 2)');
   const s = parseStat(4242, nasty);
   assert.ok(s);
-  assert.equal(s.startTime, '9876543', 'isim boşluk içerince alanlar kaydı');
+  assert.equal(s.startTime, '9876543', 'the fields shifted because the name contains a space');
   assert.equal(s.cpuNs, 3_650_000_000);
 
   // And the same line read for the tree: field 4 is the parent.

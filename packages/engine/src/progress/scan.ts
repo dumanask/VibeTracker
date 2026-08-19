@@ -288,8 +288,8 @@ export async function readProjectProgress(
     drift.push({
       code: 'D1_plan_vs_branch',
       severity: 'high',
-      claim: ph('plan "{0}" diyor, dal "{1}" diyor', phase.labelRaw, gitPhase.labelRaw),
-      evidence: ph('dal: {0}', opts.git?.branch ?? '?'),
+      claim: ph('the plan says "{0}", the branch says "{1}"', phase.labelRaw, gitPhase.labelRaw),
+      evidence: ph('branch: {0}', opts.git?.branch ?? '?'),
     });
     // Evidence beats claim: git records what was actually done.
     phase = { ...gitPhase, total: Math.max(phase.total, gitPhase.ordinal), basis: 'git', confidence: 0.7 };
@@ -330,9 +330,9 @@ export async function readProjectProgress(
     drift.push({
       code: 'D2_plan_stale',
       severity: 'medium',
-      claim: ph('plan, son commit\'ten çok daha eski'),
+      claim: ph('the plan is far older than the last commit'),
       evidence: ph(
-        'plan {0} gün önce, commit {1} gün önce',
+        'plan {0} days ago, commit {1} days ago',
         days(now - newestPlanMtime),
         days(now - headAt),
       ),
@@ -349,8 +349,8 @@ export async function readProjectProgress(
     drift.push({
       code: 'D3_status_stale',
       severity: 'medium',
-      claim: ph('belgedeki "Durum" tarihi eskimiş'),
-      evidence: ph('{0} gün önce yazılmış', days(now - newestDeclared)),
+      claim: ph('the document\'s "Durum" date is stale'),
+      evidence: ph('written {0} days ago', days(now - newestDeclared)),
     });
   }
 
@@ -366,8 +366,8 @@ export async function readProjectProgress(
     drift.push({
       code: 'D4_done_but_dirty',
       severity: 'medium',
-      claim: ph('plan "{0}" tamamlandı diyor ama iş ağacı temiz değil', donePhases.at(-1)!),
-      evidence: ph('{0} commitlenmemiş dosya (build çıktısı sayılmadı)', dirty.length),
+      claim: ph('the plan says "{0}" is finished, but the working tree is not clean', donePhases.at(-1)!),
+      evidence: ph('{0} uncommitted files (build output excluded)', dirty.length),
     });
   }
 
@@ -387,9 +387,9 @@ export async function readProjectProgress(
     drift.push({
       code: 'D5_frozen_ratio',
       severity: 'medium',
-      claim: ph('plandaki sayı {0} gündür değişmedi ama çalışma sürüyor', days(now - prior.at)),
+      claim: ph('the plan\'s numbers have not moved for {0} days while work continued', days(now - prior.at)),
       evidence: ph(
-        '{0}/{1} madde sabit · o tarihten beri {2} oturum',
+        '{0}/{1} items unchanged · {2} sessions since then',
         countedDone,
         countedTotal ?? 0,
         opts.activitySince ?? 0,
@@ -408,8 +408,8 @@ export async function readProjectProgress(
       drift.push({
         code: 'D6_branch_phase_unknown',
         severity: 'medium',
-        claim: ph('dal "{0}" diyor, hiçbir planda böyle bir basamak yok', gitPhase.labelRaw),
-        evidence: ph('dal: {0}', opts.git?.branch ?? '?'),
+        claim: ph('the branch says "{0}", and no plan has such a rung', gitPhase.labelRaw),
+        evidence: ph('branch: {0}', opts.git?.branch ?? '?'),
       });
     }
   }
@@ -424,7 +424,7 @@ export async function readProjectProgress(
   const driftSuppresses = drift.some((d) => d.severity === 'high');
 
   if (driftSuppresses) {
-    percentSuppressed = ph('plan ile git çelişiyor — yüzde bastırıldı');
+    percentSuppressed = ph('the plan and git disagree — percentage suppressed');
   } else if (spine) {
     // Ladder position first, as the plan's own priority list says. A project
     // that marks "three of seven phases done" has measured itself at the
@@ -435,7 +435,7 @@ export async function readProjectProgress(
     basis = 'milestones';
     approximate = true;
     provenance = ph(
-      'sıra konumu · {0}/{1} basamak · {2}',
+      'ladder position · {0}/{1} rungs · {2}',
       spine.doneRungs,
       spine.rungs.length,
       spine.file.rel,
@@ -451,25 +451,25 @@ export async function readProjectProgress(
     provenance =
       counted.length === 1
         ? ph(
-            '{0}/{1} madde · {2} · {3}',
+            '{0}/{1} items · {2} · {3}',
             weight(aggDone),
             weight(aggTotal),
             counted[0]!.file.rel,
             agoPhrase(now - counted[0]!.file.mtimeMs),
           )
-        : ph('{0}/{1} madde · {2} plan belgesi', weight(aggDone), weight(aggTotal), counted.length);
+        : ph('{0}/{1} items · {2} plan documents', weight(aggDone), weight(aggTotal), counted.length);
   } else if (counted.length === 0) {
     percentSuppressed =
       sources.length === 0
-        ? ph('plan belgesi bulunamadı')
-        : (sources.find((s) => s.suppressedReason)?.suppressedReason ?? ph('sayılabilir plan yok'));
+        ? ph('no plan document found')
+        : (sources.find((s) => s.suppressedReason)?.suppressedReason ?? ph('no countable plan'));
   } else if (aggOpen === 0) {
     percentSuppressed = ph(
-      '{0} maddenin tamamı işaretli, bitmemiş madde yok — bu bir kayıt belgesi',
+      'all {0} items are ticked and nothing is unfinished — this is a record, not a plan',
       weight(aggTotal),
     );
   } else {
-    percentSuppressed = ph('sayılabilir madde {0} < {1}', weight(aggTotal), MIN_DENOMINATOR);
+    percentSuppressed = ph('countable items {0} < {1}', weight(aggTotal), MIN_DENOMINATOR);
   }
 
   const nextAction = readings
@@ -594,7 +594,7 @@ function pickSpine(cands: SpineCandidate[]): { spine: SpineCandidate | null; riv
     return {
       spine: null,
       rivalry: ph(
-        '{0} belge ayrı birer basamak dizisi tanımlıyor — proje fazı belirsiz',
+        '{0} documents define separate ladders — the project phase is undecided',
         new Set([best.file.rel, ...rivals.map((r) => r.file.rel)]).size,
       ),
     };

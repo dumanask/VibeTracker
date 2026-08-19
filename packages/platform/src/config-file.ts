@@ -65,120 +65,131 @@ interface TemplateChoices {
  */
 export function configTemplate(c: TemplateChoices): string {
   const d = defaultConfig();
-  return `# VibeTracker yapılandırması
-# Bu dosya elle düzenlenebilir. Değişiklik sonrası: vt daemon --restart
-# Geçersiz bir ayar daemon'ı durdurmaz — varsayılana düşer ve panelde uyarı çıkar.
+  return `# VibeTracker configuration
+# This file is meant to be edited by hand. After a change: vt daemon --restart
+# An invalid setting does not stop the daemon -- it falls back to the default
+# and says so on the dashboard.
 
 config_version = ${CONFIG_VERSION}
 
 [server]
-# Port sabittir: hook URL'leri settings.json içinde düz metin durur ve
-# çalışma anında değiştirilemez. Değiştirirsen "vt hooks install" ile
-# hook'ları da yeniden yaz.
+# The port is fixed: hook URLs sit in settings.json as plain text and cannot
+# be changed at runtime. If you change it here, rewrite the hooks too with
+# "vt hooks install".
 port = ${c.port}
 
-# "127.0.0.1" = yalnızca bu bilgisayar. Başka bir değer paneli ağa açar.
+# "127.0.0.1" = this computer only. Any other value opens the dashboard to
+# the network.
 bind = ${tomlValue(c.bind)}
 
-lang = ${tomlValue(c.lang)}          # tr | en
-interval_ms = ${d.server.interval_ms}   # tarama aralığı
+lang = ${tomlValue(c.lang)}          # en | tr
+interval_ms = ${d.server.interval_ms}   # scan interval
 
 [agents]
 enabled = ${tomlValue(c.agents)}
-# Boş = $CLAUDE_CONFIG_DIR, o da yoksa ~/.claude
+# Empty = $CLAUDE_CONFIG_DIR, and ~/.claude when that is unset too.
 claude_dir = ''
 
 [hooks]
-# http    : izin istemlerini kesin olarak görür (önerilen)
-# command : ajan başına ~100 ms süreç açar, karşılığında hiç bloklamaz
-# off     : yalnızca pasif tespit; "izin bekliyor" görünmez
+# http    : sees permission prompts for certain (recommended)
+# command : ~100 ms of process startup per agent, and never blocks
+# off     : passive detection only; "waiting for permission" stays invisible
 mode = ${tomlValue(c.hooksMode)}
-# PreToolUse/PostToolUse de bağlansın mı. Çok yüksek hacim, araç detayı
-# zaten transcript'ten geliyor.
+# Whether to wire up PreToolUse/PostToolUse as well. Very high volume, and
+# the tool detail already arrives from the transcript.
 high_fidelity = false
 
 [digest]
-# LLM özeti varsayılan KAPALI. Açarsan plan belgelerinin *özeti* modele gider
-# -- plan dosyalarının kendisi, transcript, kod ve dosya içeriği asla.
-# Kapalıyken paneldeki her sayıyı yerel motor hesaplar; hiçbir şey makineden
-# çıkmaz.
+# The LLM summary is OFF by default. Turn it on and a *summary* of your plan
+# documents goes to the model -- never the plan files themselves, never the
+# transcript, never code or file contents.
+# While it is off, every number on the dashboard is computed by the local
+# engine and nothing leaves the machine.
 #
-#   off        : kapalı
-#   ollama     : makinendeki Ollama. Anahtar istemez, veri makineden çıkmaz.
+#   off        : off
+#   ollama     : the Ollama on your machine. No key, no data leaves.
 #
-#   Zaten giriş yapmış olduğun ajan CLI'ı -- anahtar istemez, o programın
-#   kendi hesabından yer. Hangileri kurulu: "vt digest providers"
+#   An agent CLI you are already signed in to -- it needs no key and bills
+#   that program's own account. To see which are installed:
+#   "vt digest providers"
 #
 #     claude-cli   codex-cli   opencode-cli   gemini-cli   qwen-cli
 #     crush-cli    droid-cli   goose-cli      copilot-cli  continue-cli
 #     amp-cli      aider-cli   llm-cli
 #
-#   İstem her zaman stdin'den (aider'da 0600 bir dosyadan) verilir; komut
-#   satırına asla yazılmaz, çünkü komut satırını makinedeki herkes okuyabilir.
+#   The prompt is always handed over on stdin (for aider, in a 0600 file);
+#   it is never written on a command line, because anyone on the machine can
+#   read a command line.
 #
-#   cli        : listede olmayan herhangi bir komut -- aşağıdaki "command" ve
-#                "args". Panodan seçilemez, yalnızca buradan yazılır.
-#   anthropic  : Anthropic API'si
-#   openai     : OpenAI *biçimi*. base_url ile OpenRouter, Groq, DeepSeek,
-#                Mistral, xAI, Together, LM Studio, vLLM, llama.cpp ve
-#                Gemini'nin uyumluluk ucu -- hepsi bu.
+#   cli        : any command not in that list -- see "command" and "args"
+#                below. It cannot be picked from the dashboard; this file is
+#                the only way to set it.
+#   anthropic  : the Anthropic API
+#   openai     : the OpenAI *shape*. With base_url that covers OpenRouter,
+#                Groq, DeepSeek, Mistral, xAI, Together, LM Studio, vLLM,
+#                llama.cpp and Gemini's compatibility endpoint.
 provider = ${tomlValue(c.digestProvider)}
-model = ${tomlValue(c.digestModel ?? '')}                    # boş = sağlayıcının varsayılanı
-base_url = ${tomlValue(c.digestBaseUrl ?? '')}                 # boş = sağlayıcının kendi adresi
-# Anahtarın KENDİSİ değil, anahtarı tutan ortam değişkeninin ADI. Bu dosya
-# yedeklenir, ekran görüntüsü alınır ve "vt doctor --bundle" tarafından
-# okunur; sır buraya yazılmaz. Boş bırakırsan sağlayıcının olağan değişkeni
-# denenir, sonra "vt digest key" ile yazdığın 0600 dosya.
+model = ${tomlValue(c.digestModel ?? '')}                    # empty = the provider's default
+base_url = ${tomlValue(c.digestBaseUrl ?? '')}                 # empty = the provider's own address
+# The NAME of the environment variable that holds the key, never the key
+# itself. This file gets backed up, screenshotted and read by
+# "vt doctor --bundle"; a secret does not belong in it. Leave it empty and
+# the provider's usual variable is tried, then the 0600 file written by
+# "vt digest key".
 api_key_env = ${tomlValue(c.digestKeyEnv ?? '')}
 
-# provider = "cli" iken çalıştırılacak komut. Metin stdin'den verilir --
-# komut satırına ASLA yazılmaz, çünkü komut satırı süreç tablosunda herkese
-# görünür ve bu metin senin plan belgelerinin özeti.
-# Yer tutucular: {prompt_file} (0600, sonra silinir), {output_file}, {model}
+# The command to run when provider = "cli". The text arrives on stdin -- it
+# is NEVER written on a command line, because a command line is visible to
+# everyone in the process table and this text is a summary of your plan
+# documents.
+# Placeholders: {prompt_file} (0600, deleted afterwards), {output_file}, {model}
 #
-# Yukarıdaki listede olan bir program için buna gerek yok; bu satır listede
-# OLMAYAN şeyler için. Örneğin istemi argüman olarak isteyen bir CLI:
+# A program from the list above needs none of this; these two lines are for
+# what is NOT on the list. For example a CLI that wants the prompt as an
+# argument:
 #
 #   command = 'cursor-agent' / args = ['-p', '--output-format', 'text']
-#   command = 'kendi-betigim' / args = ['{prompt_file}', '{output_file}']
+#   command = 'my-own-script' / args = ['{prompt_file}', '{output_file}']
 command = ${tomlValue(c.digestCommand ?? '')}
 args = ${tomlValue(c.digestArgs ?? [])}
 daily_usd_cap = ${d.digest.daily_usd_cap}
 per_project_min_interval_min = ${d.digest.per_project_min_interval_min}
 max_per_project_per_day = ${d.digest.max_per_project_per_day}
-preview_before_send = true   # gönderilecek yükü önce göster
+preview_before_send = true   # show the payload before sending it
 
 [privacy]
-# DİKKAT: bu bölümde bilinmeyen bir anahtar hata sayılır. Yazım hatası
-# yüzünden kapalı sandığın bir korumanın açık kalmasını istemiyoruz.
+# CAREFUL: an unknown key in this section is an error. We would rather not
+# leave a protection on that a typo made you believe was off.
 redact = true
-custom_patterns = []          # kendi sır desenlerin (düzenli ifade)
-telemetry = false             # kapalı; açman gerekmez
+custom_patterns = []          # your own secret shapes (regular expressions)
+telemetry = false             # off; you do not need to turn it on
 diagnostics_allowlist_only = true
 
 [progress]
-# Faz/ilerleme kaynakları. Sıra önceliktir.
+# Where phase and progress are read from. The order is the priority.
 default_providers = ${tomlValue(d.progress.default_providers)}
-# Plan belgelerinin arandığı ek klasör adları (docs, plans, plan zaten dahil)
+# Extra folder names to look for plan documents in (docs, plans and plan are
+# already included).
 extra_doc_dirs = []
 
 [thresholds]
-# Bir aracın "takıldı" sayılması için geçmesi gereken süre (saniye).
-stall_bash_sec = ${d.thresholds.stall_bash_sec}       # test/build gerçekten dakikalar sürer
-stall_fs_sec = ${d.thresholds.stall_fs_sec}          # yerel dosya işlemleri sürmez
+# How long a tool has to be open before it counts as stalled (seconds).
+stall_bash_sec = ${d.thresholds.stall_bash_sec}       # a test or build really does take minutes
+stall_fs_sec = ${d.thresholds.stall_fs_sec}          # local file work does not
 stall_thinking_sec = ${d.thresholds.stall_thinking_sec}
 
 [tracking]
-# Hangi projeleri izliyorsun.
-#   all      — hepsi (varsayılan)
-#   selected — yalnızca aşağıdaki liste
-# Bu dosyayı elle düzenlemene gerek yok: "vt projects add/rm <proje>" ya da
-# paneldeki "izlenecekleri seç" aynı yeri yazar ve yorumlarını korur.
+# Which projects you are following.
+#   all      -- all of them (the default)
+#   selected -- only the list below
+# You do not have to edit this by hand: "vt projects add/rm <project>" and
+# "choose what to track" on the dashboard write the same place, and keep
+# your comments.
 mode = "all"
 selected = []
 
-# Proje bazlı ayarlar — proje kimliğiyle. Kimlikleri "vt status --json"
-# çıktısında bulabilirsin. Hiçbir şey projenin kendi klasörüne yazılmaz.
+# Per-project settings, keyed by project id. You can find the ids in
+# "vt status --json". Nothing is ever written into the project's own folder.
 #
 # [projects."git:c02462b9c30c8d9f"]
 # display_name = 'AITool'

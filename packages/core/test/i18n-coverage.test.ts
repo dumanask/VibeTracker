@@ -8,7 +8,7 @@ import { availableLanguages } from '../src/progress/lexicon.ts';
 /**
  * Translation coverage as a test rather than as a claim.
  *
- * "The English translation is mostly done" is the kind of statement that is
+ * "The Turkish translation is mostly done" is the kind of statement that is
  * true when written and false a week later. Here the source is scanned for
  * every key it asks for and the catalog must contain all of them, so a new
  * untranslated string fails the build with the exact text to translate.
@@ -76,26 +76,26 @@ function catalog(lang: string): Record<string, string> {
 
 test('the scanner reads keys the way the runtime builds them', () => {
   const src = [
-    'const a = t`${n} kayıt bulundu`;',
-    "const b = tr('Ajan durumu');",
+    'const a = t`${n} records found`;',
+    "const b = tr('Agent state');",
     'const c = `no tag here`;',
     "const d = /t`not a template`/;",
     '// t`in a comment`',
-    "const e = `outer ${cond ? tr('iç metin') : ''} tail`;",
+    "const e = `outer ${cond ? tr('inner text') : ''} tail`;",
   ].join('\n');
   const keys = keysInSource(src).map((k) => k.key);
-  assert.deepEqual(keys.sort(), ['Ajan durumu', 'iç metin', '{0} kayıt bulundu']);
+  assert.deepEqual(keys.sort(), ['Agent state', 'inner text', '{0} records found']);
 });
 
 test('escapes and newlines decode to the runtime value', () => {
-  const keys = keysInSource("const x = tr('satır\\nsonu\\tsekme');").map((k) => k.key);
-  assert.deepEqual(keys, ['satır\nsonu\tsekme']);
+  const keys = keysInSource("const x = tr('line\\nbreak\\ttab');").map((k) => k.key);
+  assert.deepEqual(keys, ['line\nbreak\ttab']);
 });
 
-test('every key the source asks for exists in the English catalog', () => {
+test('every key the source asks for exists in the Turkish catalog', () => {
   const keys = allKeys();
-  const en = catalog('en');
-  const missing = [...keys].filter(([k]) => !(k in en));
+  const trCat = catalog('tr');
+  const missing = [...keys].filter(([k]) => !(k in trCat));
   const sample = missing
     .slice(0, 12)
     .map(([k, file]) => `  ${file}\n    ${JSON.stringify(k)}`)
@@ -103,8 +103,8 @@ test('every key the source asks for exists in the English catalog', () => {
   assert.equal(
     missing.length,
     0,
-    `${missing.length} çevrilmemiş metin (toplam ${keys.size}):\n${sample}\n` +
-      'Eklemek için: VT_I18N_REPORT=eksik.json vt --lang en <komut>',
+    `${missing.length} untranslated strings (of ${keys.size}):\n${sample}\n` +
+      'To collect them: VT_I18N_REPORT=missing.json vt --lang tr <command>',
   );
 });
 
@@ -112,14 +112,14 @@ test('translations keep every placeholder the source has', () => {
   // A dropped `{0}` prints nothing; an invented `{3}` prints the literal
   // braces. Both are silent in the source language and visible only to the
   // people who read the translated build.
-  for (const lang of ['en']) {
+  for (const lang of ['tr']) {
     for (const [key, value] of Object.entries(catalog(lang))) {
       const inKey = new Set(key.match(/\{\d+\}/g) ?? []);
       const inValue = new Set(value.match(/\{\d+\}/g) ?? []);
       assert.deepEqual(
         [...inValue].sort(),
         [...inKey].sort(),
-        `${lang}: yer tutucular uyuşmuyor — ${JSON.stringify(key)}`,
+        `${lang}: placeholders do not match — ${JSON.stringify(key)}`,
       );
     }
   }
@@ -133,11 +133,11 @@ test('translations preserve leading and trailing layout', () => {
     /^\s*/.exec(s)![0],
     /\s*$/.exec(s)![0],
   ];
-  for (const [key, value] of Object.entries(catalog('en'))) {
+  for (const [key, value] of Object.entries(catalog('tr'))) {
     const [kl, kt] = ws(key);
     const [vl, vt] = ws(value);
-    assert.equal(vl, kl, `baştaki boşluk değişmiş: ${JSON.stringify(key)}`);
-    assert.equal(vt, kt, `sondaki boşluk değişmiş: ${JSON.stringify(key)}`);
+    assert.equal(vl, kl, `leading whitespace changed: ${JSON.stringify(key)}`);
+    assert.equal(vt, kt, `trailing whitespace changed: ${JSON.stringify(key)}`);
   }
 });
 

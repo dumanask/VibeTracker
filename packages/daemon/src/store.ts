@@ -130,8 +130,8 @@ export class Store {
       // Forward-only. An older binary must refuse rather than corrupt a newer
       // database written by a version it does not understand.
       throw new Error(
-        t`Veritabanı şeması bu sürümden yeni (${current} > ${SCHEMA_VERSION}). ` +
-          t`VibeTracker'ı güncelle veya ${this.path} dosyasını taşı.`,
+        t`The database schema is newer than this build (${current} > ${SCHEMA_VERSION}). ` +
+          t`Update VibeTracker, or move ${this.path} aside.`,
       );
     }
     // Every statement below is `IF NOT EXISTS`, so running it against an older

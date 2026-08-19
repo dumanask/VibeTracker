@@ -374,20 +374,26 @@ test('a model estimate is drawn as one, and only when nothing was counted', () =
  * assertion would have passed on the broken version too -- what needed proving
  * is that it answers correctly for a real screen layout.
  */
-test('a position on a monitor that is gone is not restored', { skip: process.platform !== 'win32' ? 'PowerShell yok' : false }, () => {
+test('a position on a monitor that is gone is not restored', { skip: process.platform !== 'win32' ? 'no PowerShell' : false }, () => {
   const fn = /function Test-OnScreen[\s\S]*?\n\}/.exec(source);
-  assert.ok(fn, 'Test-OnScreen kayboldu');
+  assert.ok(fn, 'Test-OnScreen is gone');
 
   const probe = [
     fn[0],
     'Add-Type -AssemblyName System.Windows.Forms',
     '$wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea',
-    // Far to the right of every screen: the exact shape of the real failure.
-    '$far = Test-OnScreen ($wa.Right + 200) 514 470 220',
+    // The right-hand edge of the whole desktop, not of one screen. Measuring
+    // from the primary screen made "far to the right of every screen" false on
+    // any machine with a second monitor beside it -- the test failed and the
+    // code was correct.
+    '$last = [System.Windows.Forms.Screen]::AllScreens | Sort-Object { $_.WorkingArea.Right } | Select-Object -Last 1',
+    '$edge = $last.WorkingArea',
+    // Past every screen: the exact shape of the real failure.
+    '$far = Test-OnScreen ($edge.Right + 200) 514 470 220',
     // The primary screen's own corner, which must always be acceptable.
     '$home_ = Test-OnScreen ($wa.Left + 40) ($wa.Top + 40) 470 220',
-    // Mostly off the right edge, with a sliver showing: not enough to grab.
-    '$sliver = Test-OnScreen ($wa.Right - 20) ($wa.Top + 40) 470 220',
+    // Mostly past the last edge, with a sliver showing: not enough to grab.
+    '$sliver = Test-OnScreen ($edge.Right - 20) ($edge.Top + 40) 470 220',
     'Write-Output ("$far $home_ $sliver")',
   ].join('\n');
 
@@ -397,7 +403,7 @@ test('a position on a monitor that is gone is not restored', { skip: process.pla
     { encoding: 'utf8', timeout: 30_000 },
   ).trim();
 
-  assert.equal(out, 'False True False', `Test-OnScreen yanlış cevap verdi: ${out}`);
+  assert.equal(out, 'False True False', `Test-OnScreen answered wrongly: ${out}`);
 });
 
 test('the note comes home when a display disappears under it', () => {

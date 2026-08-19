@@ -72,7 +72,7 @@ export interface AutostartStatus {
 }
 
 /** The Windows answer, in one place because two call sites print it. */
-const TASK_WHERE = (): string => t`Zamanlanmış Görev: ${TASK_NAME}`;
+const TASK_WHERE = (): string => t`Scheduled Task: ${TASK_NAME}`;
 
 /** Absolute path of the CLI entry point, whatever the install layout is. */
 function cliEntry(): string {
@@ -90,7 +90,7 @@ export async function autostartStatus(): Promise<AutostartStatus> {
     });
     xml = stdout;
   } catch {
-    return { supported: true, installed: false, where: TASK_WHERE(), detail: tr('kurulu değil') };
+    return { supported: true, installed: false, where: TASK_WHERE(), detail: tr('not installed') };
   }
 
   // A moved or reinstalled checkout leaves a task pointing at a path that no
@@ -105,8 +105,8 @@ export async function autostartStatus(): Promise<AutostartStatus> {
     stale,
     where: TASK_WHERE(),
     detail: stale
-      ? t`görev "${TASK_NAME}" var ama başka bir kuruluma işaret ediyor`
-      : t`görev "${TASK_NAME}" kurulu · oturum açılışında (30 sn gecikmeli) + ${REVIVE_MINUTES} dk'da bir canlılık kontrolü`,
+      ? t`task "${TASK_NAME}" exists but points at a different installation`
+      : t`task "${TASK_NAME}" installed · at log on (30 s delay) + a liveness check every ${REVIVE_MINUTES} min`,
   };
 }
 
@@ -128,23 +128,23 @@ export async function installAutostart(): Promise<number> {
     await exec('schtasks', ['/Create', '/TN', TASK_NAME, '/XML', tmp, '/F'], { timeout: 15_000 });
   } catch (err) {
     const e = err as { stdout?: string; stderr?: string; message: string };
-    process.stderr.write(t`Görev oluşturulamadı.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
+    process.stderr.write(t`Could not create the task.\n${(e.stderr || e.stdout || e.message).trim()}\n`);
     process.stderr.write(
-      tr('\nGörev, yönetici hakkı gerektirmeyen InteractiveToken tipiyle kaydediliyor. ') +
-        tr('Reddedildiyse büyük olasılıkla bir grup ilkesi görev oluşturmayı kısıtlıyor; ') +
-        tr('Görev Zamanlayıcı üzerinden elle oluşturabilirsin.\n'),
+      tr('\nThe task registers with the InteractiveToken type, which needs no administrator rights. ') +
+        tr('If it was refused, a group policy most likely restricts task creation; ') +
+        tr('you can create it by hand through Task Scheduler.\n'),
     );
     return 4;
   } finally {
     await unlink(tmp).catch(() => {});
   }
 
-  process.stdout.write(t`Otomatik başlatma kuruldu: görev "${TASK_NAME}"\n`);
-  process.stdout.write(t`  oturum açılışından 30 sn sonra başlar, pencere açmaz\n`);
-  process.stdout.write(t`  ${REVIVE_MINUTES} dk'da bir canlılık kontrolü — ölmüşse yeniden başlatır\n`);
-  process.stdout.write(t`  yönetici hakkı istemez · ${node} ${entry} daemon\n`);
-  process.stdout.write(t`  günlük: ${join(logDir, 'daemon.log')}\n`);
-  process.stdout.write(t`Kaldırmak için: vt autostart uninstall\n`);
+  process.stdout.write(t`Autostart installed: task "${TASK_NAME}"\n`);
+  process.stdout.write(t`  starts 30 s after log on, opens no window\n`);
+  process.stdout.write(t`  a liveness check every ${REVIVE_MINUTES} min — restarts it if it died\n`);
+  process.stdout.write(t`  needs no administrator rights · ${node} ${entry} daemon\n`);
+  process.stdout.write(t`  log: ${join(logDir, 'daemon.log')}\n`);
+  process.stdout.write(t`To remove: vt autostart uninstall\n`);
   return 0;
 }
 
@@ -152,10 +152,10 @@ export async function uninstallAutostart(): Promise<number> {
   if (process.platform !== 'win32') return unixAutostartUninstall();
   try {
     await exec('schtasks', ['/Delete', '/TN', TASK_NAME, '/F'], { timeout: 10_000 });
-    process.stdout.write(t`Otomatik başlatma kaldırıldı: görev "${TASK_NAME}"\n`);
+    process.stdout.write(t`Autostart removed: task "${TASK_NAME}"\n`);
     return 0;
   } catch {
-    process.stderr.write(t`Görev "${TASK_NAME}" bulunamadı.\n`);
+    process.stderr.write(t`Task "${TASK_NAME}" not found.\n`);
     return 3;
   }
 }
@@ -163,7 +163,7 @@ export async function uninstallAutostart(): Promise<number> {
 export async function showAutostart(): Promise<number> {
   const st = await autostartStatus();
   process.stdout.write(`${st.detail}\n`);
-  if (st.stale) process.stdout.write(tr('`vt autostart install` ile tazele.\n'));
+  if (st.stale) process.stdout.write(tr('Refresh it with `vt autostart install`.\n'));
   return 0;
 }
 
@@ -196,7 +196,7 @@ export function taskXml(node: string, entry: string): string {
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Author>VibeTracker</Author>
-    <Description>VibeTracker izleme daemon'ı. Yalnızca yerel dosyaları okur, ağa çıkmaz. Yönetici hakkı istemez.</Description>
+    <Description>The VibeTracker watch daemon. Reads local files only, never goes to the network, needs no administrator rights.</Description>
     <URI>\\${TASK_NAME}</URI>
   </RegistrationInfo>
   <Triggers>

@@ -61,5 +61,5 @@ export async function runDigest(
     }
     lastReason = parsed.reason;
   }
-  throw new ProviderError(`yanıt şemaya uymadı: ${lastReason}`, 'shape');
+  throw new ProviderError(`the answer did not fit the schema: ${lastReason}`, 'shape');
 }

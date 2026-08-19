@@ -228,14 +228,14 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   capabilities.claudeDir = { ok: true, detail: dir };
   capabilities.sessionRegistry = registry.error
     ? { ok: false, detail: registry.error }
-    : { ok: true, detail: t`${registry.entries.length} kayıt` };
-  capabilities.ideLocks = { ok: ideWindows.length > 0, detail: t`${ideWindows.length} kilit dosyası` };
+    : { ok: true, detail: t`${registry.entries.length} records` };
+  capabilities.ideLocks = { ok: ideWindows.length > 0, detail: t`${ideWindows.length} lock files` };
   capabilities.transcriptIndex = {
     ok: transcripts.size > 0,
-    detail: t`${transcripts.size} transcript indekslendi`,
+    detail: t`${transcripts.size} transcripts indexed`,
   };
   if (registry.error) {
-    warnings.push(tr('Oturum kaydı okunamadı. Canlılık tespiti yapılamıyor.'));
+    warnings.push(tr('The session registry could not be read. Liveness detection is unavailable.'));
   }
 
   // ── liveness ────────────────────────────────────────────────────────────
@@ -262,9 +262,9 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
 
   capabilities.processProbe = probeError
     ? { ok: false, detail: `${probe.kind}: ${probeError}` }
-    : { ok: true, detail: t`${probe.kind} (hassasiyet: ${probe.precision})` };
+    : { ok: true, detail: t`${probe.kind} (precision: ${probe.precision})` };
   if (probeError) {
-    warnings.push(t`Süreç sondası başarısız. Canlılık "PID var mı" seviyesine düştü.`);
+    warnings.push(t`The process probe failed. Liveness fell back to "does the PID exist".`);
   }
 
   const batch = classifyLiveness(
@@ -277,24 +277,24 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
     ? {
         ok: !batch.formatDriftSuspected,
         detail: batch.formatDriftSuspected
-          ? tr('başlangıç-zamanı formatı uyuşmuyor — koruma kapalı')
+          ? tr('start-time format does not match — the guard is off')
           : batch.opaque > 0
-            ? t`${batch.matched} eşleşti / ${batch.mismatched} eşleşmedi / ${batch.opaque} PID başkasının`
-            : t`${batch.matched} eşleşti / ${batch.mismatched} eşleşmedi`,
+            ? t`${batch.matched} matched / ${batch.mismatched} mismatched / ${batch.opaque} PIDs belong to someone else`
+            : t`${batch.matched} matched / ${batch.mismatched} did not`,
       }
-    : { ok: false, detail: tr('ajan karşılaştırılabilir başlangıç zamanı yazmıyor') };
+    : { ok: false, detail: tr('the agent writes no comparable start time') };
 
   if (batch.formatDriftSuspected) {
     warnings.push(
-      t`PID-reuse koruması devre dışı: karşılaştırılabilir ${batch.mismatched} kaydın HİÇBİRİ ` +
-        t`eşleşmedi. Bu, tüm süreçlerin yeniden kullanıldığı değil, ajanın başlangıç-zamanı ` +
-        t`formatının değiştiği anlamına gelir. Oturumlar "canlı" sayıldı.`,
+      t`PID-reuse guard disabled: NONE of the ${batch.mismatched} comparable records ` +
+        t`matched. That means the agent's start-time format changed, not that every ` +
+        t`process was recycled. Sessions were counted as "live".`,
     );
   }
   if (!probeError && probe.precision === 'second') {
     warnings.push(
-      tr('Bu platformda başlangıç zamanı saniye çözünürlüklü; aynı saniye içinde geri dönüşen ') +
-        tr('bir PID korumadan kaçabilir.'),
+      tr('Start time has one-second resolution on this platform; a PID recycled within ') +
+        tr('the same second can slip past the guard.'),
     );
   }
 
@@ -373,9 +373,9 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   capabilities.transcriptRead = {
     ok: true,
     detail:
-      t`${tailStats.openHandles} açık tanıtıcı · ${tailStats.reads} okuma / ` +
-      t`${tailStats.skipped} atlandı` +
-      (tailStats.gaps > 0 ? t` · ${tailStats.gaps} boşluk` : ''),
+      t`${tailStats.openHandles} open handles · ${tailStats.reads} reads / ` +
+      t`${tailStats.skipped} skipped` +
+      (tailStats.gaps > 0 ? t` · ${tailStats.gaps} gaps` : ''),
   };
 
   // ── phase 1b: CPU, only when a turn is actually in flight ───────────────
@@ -407,9 +407,9 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   capabilities.cpuSample = opts.cpuSample
     ? {
         ok: true,
-        detail: needsCpu ? t`${opts.cpuSampleMs} ms örneklendi` : tr('gerekmedi (uçuşta tur yok)'),
+        detail: needsCpu ? t`sampled over ${opts.cpuSampleMs} ms` : tr('not needed (no turn in flight)'),
       }
-    : { ok: true, detail: tr('kapalı (--quick)') };
+    : { ok: true, detail: tr('off (--quick)') };
 
   // ── phase 2: process tree, only if something has a tool open ────────────
   const needsTree = scanned.some((s) => (s.facts?.openTools.length ?? 0) > 0);
@@ -419,12 +419,12 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   }
 
   capabilities.processTree = needsTree
-    ? { ok: tree !== null, detail: tree ? t`${tree.size} süreç` : tr('bu platformda yok') }
+    ? { ok: tree !== null, detail: tree ? t`${tree.size} processes` : tr('not applicable on this platform') }
     : { ok: true, detail: 'gerekmedi' };
   if (needsTree && tree === null) {
     warnings.push(
-      tr('Süreç ağacı okunamadı: açık bir araç için "komut çalışıyor" ile "izin bekliyor" ') +
-        tr('ayrımı yapılamıyor.'),
+      tr('The process tree could not be read: for an open tool, "the command is running" ') +
+        tr('cannot be told from "waiting for permission".'),
     );
   }
 
@@ -512,9 +512,9 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       const extra: string[] = [];
       if (s.pid !== undefined) {
         liveness = snap1.has(s.pid) ? 'live' : 'dead';
-        if (!s.procStart) extra.push(tr('canlılık:pid var, başlangıç zamanı yok'));
+        if (!s.procStart) extra.push(tr('liveness:pid present, no start time'));
       } else if (s.livenessBasis === 'recency') {
-        extra.push(t`canlılık:son yazmaya dayanıyor (pid yok, pencere ${fmtAge(observed.recencyMs)})`);
+        extra.push(t`liveness:rests on the last write (no pid, window ${fmtAge(observed.recencyMs)})`);
       }
 
       if (liveness !== 'live' && !opts.includeDead) continue;
@@ -597,11 +597,11 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       // lists folders, and an installed agent nobody has used is not broken.
       ok: tally.installed,
       detail: !tally.installed
-        ? tr('kurulu değil')
+        ? tr('not installed')
         : !tally.readsSessions
-          ? tr('klasör listesi') + note
-          : t`${tally.live} oturum · canlılık: ${
-              tally.livenessBasis === 'pid' ? tr('pid') : tr('son yazma')
+          ? tr('folder list') + note
+          : t`${tally.live} sessions · liveness: ${
+              tally.livenessBasis === 'pid' ? tr('pid') : tr('last write')
             }` + note,
     };
   }
@@ -624,7 +624,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   const gitCount = [...identityCache.values()].filter((i) => i.identityKind === 'git_root').length;
   capabilities.git = {
     ok: gitCount > 0,
-    detail: t`${gitCount}/${identityCache.size} kök commit ile`,
+    detail: t`${gitCount}/${identityCache.size} by root commit`,
   };
 
   const projects = new Map<string, ProjectView>();
@@ -829,7 +829,7 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
     const withPhase = [...projects.values()].filter((p) => p.progress?.phase).length;
     capabilities.progress = {
       ok: withPhase > 0,
-      detail: t`${withPhase}/${projects.size} projede faz merdiveni bulundu`,
+      detail: t`phase ladder found in ${withPhase}/${projects.size} projects`,
     };
   }
 
@@ -870,15 +870,15 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
   capabilities.dialect = {
     ok: !drift.drifted,
     detail: drift.drifted
-      ? t`${byFrequency.length} tanınmayan satır tipi · %${Math.round(drift.ratio * 100)} — ` +
-        t`ajan sürümün bu VibeTracker sürümünden yeni olabilir`
+      ? t`${byFrequency.length} unrecognised line types · ${Math.round(drift.ratio * 100)}% — ` +
+        t`your agent version may be newer than this VibeTracker build`
       : byFrequency.length > 0
-        ? t`${dialectLines} satır · ${byFrequency.length} tanınmayan tip (yok sayıldı)`
-        : t`${dialectLines} satır · hepsi tanındı`,
+        ? t`${dialectLines} lines · ${byFrequency.length} unrecognised types (ignored)`
+        : t`${dialectLines} lines · all recognised`,
   };
   if (drift.drifted) {
     warnings.push(
-      t`Transcript biçimi değişmiş olabilir: ${byFrequency.slice(0, 4).join(', ')}. İzleme kısıtlı.`,
+      t`The transcript format may have changed: ${byFrequency.slice(0, 4).join(', ')}. Monitoring is limited.`,
     );
   }
 

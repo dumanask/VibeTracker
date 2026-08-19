@@ -100,11 +100,11 @@ function baseFor(d: { provider: ProviderId; base_url: string }): string {
 function egressLine(p: ProviderConfig): string {
   switch (egress(p)) {
     case 'no':
-      return green(tr('veri bu makineden çıkmaz'));
+      return green(tr('data does not leave this machine'));
     case 'yes':
-      return yellow(tr('veri bu makineden ÇIKAR'));
+      return yellow(tr('data DOES leave this machine'));
     default:
-      return yellow(tr('veri çıkar mı — bilinmiyor: bu komutu sen seçtin'));
+      return yellow(tr('does data leave? — unknown: you chose this command'));
   }
 }
 
@@ -159,32 +159,32 @@ async function showProviders(json: boolean): Promise<number> {
   }
 
   const out: string[] = [''];
-  out.push(bold(tr('  Şu an yapılandırılmış')));
-  out.push(`    ${tr('sağlayıcı')}   ${d.provider}`);
+  out.push(bold(tr('  Configured right now')));
+  out.push(`    ${tr('provider')}   ${d.provider}`);
   if (d.provider !== 'off') {
     if (model) out.push(`    ${tr('model')}       ${model}`);
-    if (base) out.push(`    ${tr('adres')}       ${base}`);
+    if (base) out.push(`    ${tr('address')}       ${base}`);
     if (isCliProvider(d.provider)) {
-      out.push(`    ${tr('komut')}       ${cliCommandLine(p) || red(tr('yazılmamış'))}`);
+      out.push(`    ${tr('command')}       ${cliCommandLine(p) || red(tr('not set'))}`);
       out.push(
         exePath === null
-          ? `    ${red(tr('bulunamadı'))}  ${exe ? t`"${exe}" PATH'te yok` : tr('[digest] command boş')}`
-          : dim(`    ${tr('yeri')}        ${exePath}`),
+          ? `    ${red(tr('not found'))}  ${exe ? t`"${exe}" is not on PATH` : tr('[digest] command is empty')}`
+          : dim(`    ${tr('at')}        ${exePath}`),
       );
     }
     if (wantsKey) {
       out.push(
         key.key === null
-          ? `    ${red(tr('anahtar'))}    ${red(tr('yok'))}`
-          : `    ${tr('anahtar')}     ${maskKey(key.key)} · ${key.from === 'env' ? (key.envName ?? '') : keyFilePath()}`,
+          ? `    ${red(tr('key'))}    ${red(tr('none'))}`
+          : `    ${tr('key')}     ${maskKey(key.key)} · ${key.from === 'env' ? (key.envName ?? '') : keyFilePath()}`,
       );
     } else {
-      out.push(dim(`    ${tr('anahtar')}     ${tr('gerekmiyor')}`));
+      out.push(dim(`    ${tr('key')}     ${tr('not needed')}`));
     }
     out.push(`    ${egressLine(p)}`);
-    out.push(ready ? `    ${green(tr('hazır'))}` : `    ${red(tr('eksik yapılandırma'))}`);
+    out.push(ready ? `    ${green(tr('ready'))}` : `    ${red(tr('incomplete configuration'))}`);
   } else {
-    out.push(dim(tr('    Panodaki her sayı yerel motorla hesaplanıyor. Hiçbir şey gönderilmiyor.')));
+    out.push(dim(tr('    Every number on the board is computed locally. Nothing is sent anywhere.')));
   }
 
   // The last column is the point of this command. "Not everyone has Claude" is
@@ -192,23 +192,23 @@ async function showProviders(json: boolean): Promise<number> {
   // installed ones are marked, because the cheapest answer for most people is
   // a program they are already paying for and already have.
   const mark = (name: string): string =>
-    whichCommand(name) ? green(` ← ${tr('kurulu')}`) : dim(` ${tr('(kurulu değil)')}`);
+    whichCommand(name) ? green(` ← ${tr('installed')}`) : dim(` ${tr('(not installed)')}`);
   out.push('');
-  out.push(bold(tr('  Seçebileceklerin')));
+  out.push(bold(tr('  What you can choose')));
   const row = (name: string, desc: string, program = ''): void => {
     out.push(`    ${name.padEnd(11)} ${desc}${program ? mark(program) : ''}`);
   };
-  row('off', tr('kapalı — yapısal motor tek başına çalışır'));
-  row('ollama', tr('makinendeki model; anahtar yok, veri çıkmaz'), 'ollama');
-  row('openai', tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…'));
-  row('anthropic', tr('Anthropic API'));
-  row('cli', tr('listede olmayan bir komut — yalnızca config dosyasından'));
+  row('off', tr('off — the structural engine works on its own'));
+  row('ollama', tr('a model on your own machine; no key, nothing leaves'), 'ollama');
+  row('openai', tr('the OpenAI format: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…'));
+  row('anthropic', tr('the Anthropic API'));
+  row('cli', tr('a command not on the list — config file only'));
 
   // The agent CLIs as a grid rather than as thirteen copies of one sentence.
   // What differs between them is only whether it is on this machine, so that
   // is what the list shows; the sentence is said once above it.
   out.push('');
-  out.push(bold(tr('  Zaten giriş yapmış olduğun ajan CLI\'ı — anahtar istemez, kendi hesabından yer')));
+  out.push(bold(tr('  An agent CLI you are already signed in to — needs no key, eats your own account quota')));
   const width = Math.max(...CLI_PRESETS.map((preset) => preset.id.length)) + 3;
   for (let i = 0; i < CLI_PRESETS.length; i += 3) {
     const cells = CLI_PRESETS.slice(i, i + 3).map((preset) => {
@@ -219,7 +219,7 @@ async function showProviders(json: boolean): Promise<number> {
     out.push(`    ${cells.join('')}`.trimEnd());
   }
   out.push('');
-  out.push(dim(tr('  Değiştirmek için: panodaki "LLM özeti" bölümü — ya da config dosyası: vt config path')));
+  out.push(dim(tr('  To change it: the "LLM summary" section on the dashboard — or the config file: vt config path')));
   process.stdout.write(`${out.join('\n')}\n`);
   return 0;
 }
@@ -230,7 +230,7 @@ async function manageKey(operands: string[]): Promise<number> {
   if (action === 'clear') {
     const had = clearKeyFile();
     process.stdout.write(
-      had ? t`Anahtar dosyası silindi: ${keyFilePath()}\n` : tr('Anahtar dosyası yoktu.\n'),
+      had ? t`Key file deleted: ${keyFilePath()}\n` : tr('There was no key file.\n'),
     );
     return 0;
   }
@@ -240,15 +240,15 @@ async function manageKey(operands: string[]): Promise<number> {
     const key = resolveKey(config.digest.provider, config.digest.api_key_env);
     process.stdout.write(
       key.key === null
-        ? t`Anahtar yok. Kullanım: vt digest key <anahtar>  ·  ya da ${key.envName ?? 'ortam değişkeni'} ayarla\n`
-        : t`Anahtar var: ${maskKey(key.key)} · ${key.from === 'env' ? (key.envName ?? 'ortam') : keyFilePath()}\n`,
+        ? t`No key. Usage: vt digest key <key>  ·  or set ${key.envName ?? 'an environment variable'}\n`
+        : t`Key found: ${maskKey(key.key)} · ${key.from === 'env' ? (key.envName ?? 'ortam') : keyFilePath()}\n`,
     );
     return key.key === null ? 3 : 0;
   }
   const path = writeKeyFile(value);
-  process.stdout.write(t`Yazıldı (0600): ${path}\n`);
+  process.stdout.write(t`Written (0600): ${path}\n`);
   process.stdout.write(
-    tr('  Ortam değişkeni her zaman bu dosyadan önce gelir. Config dosyasına asla yazılmaz.\n'),
+    tr('  An environment variable always wins over this file. It is never written to the config.\n'),
   );
   return 0;
 }
@@ -284,9 +284,9 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   // even with the provider off. That is deliberate: the way to decide whether
   // to turn this on is to see exactly what turning it on would send.
   if (provider.provider === 'off' && !args.dryRun) {
-    process.stderr.write(tr('LLM özeti kapalı.\n'));
-    process.stderr.write(tr('  Ne göndereceğini görmek için: vt digest --dry-run\n'));
-    process.stderr.write(tr('  Seçenekler için: vt digest providers\n'));
+    process.stderr.write(tr('The LLM summary is off.\n'));
+    process.stderr.write(tr('  To see what would be sent: vt digest --dry-run\n'));
+    process.stderr.write(tr('  For the options: vt digest providers\n'));
     return 3;
   }
 
@@ -305,12 +305,12 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
 
   const project = pickProject(report.projects, filter);
   if (!project) {
-    process.stderr.write(tr('Eşleşen proje yok.\n'));
+    process.stderr.write(tr('No matching project.\n'));
     return 3;
   }
   const root = project.workspaces[0]?.normPath;
   if (!root) {
-    process.stderr.write(tr('Projenin bir dizini bilinmiyor.\n'));
+    process.stderr.write(tr('No directory is known for this project.\n'));
     return 3;
   }
 
@@ -389,28 +389,28 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   // Shown before anything is sent, always, and shown in full. A preview that
   // summarised the payload would be a second thing to trust.
   const head: string[] = [''];
-  head.push(bold(`  ${project.displayName} · ${progress.phase?.labelRaw ?? tr('faz bilinmiyor')}`));
-  head.push(`  ${tr('sağlayıcı')}  ${provider.provider}${provider.model ? ' · ' + provider.model : ''}`);
+  head.push(bold(`  ${project.displayName} · ${progress.phase?.labelRaw ?? tr('phase unknown')}`));
+  head.push(`  ${tr('provider')}  ${provider.provider}${provider.model ? ' · ' + provider.model : ''}`);
   if (provider.provider !== 'off') {
     const base = baseFor(config.digest);
-    if (base) head.push(`  ${tr('adres')}      ${base}${isLocal(base) ? ' ' + tr('(bu makine)') : ''}`);
+    if (base) head.push(`  ${tr('address')}      ${base}${isLocal(base) ? ' ' + tr('(this machine)') : ''}`);
     // Named before it runs, always. This is the one provider family where what
     // happens next is a program of the user's choosing, and approving a send
     // without seeing the command would be approving half the decision.
     if (isCliProvider(provider.provider)) {
-      head.push(`  ${tr('komut')}      ${cliCommandLine(provider)}`);
+      head.push(`  ${tr('command')}      ${cliCommandLine(provider)}`);
     }
   }
-  head.push(t`  yük        ${payload.tokens} token · ${payload.system.length + payload.user.length} karakter`);
+  head.push(t`  payload    ${payload.tokens} tokens · ${payload.system.length + payload.user.length} characters`);
   if (payload.dropped.length) {
-    head.push(yellow(`  ${tr('sığmadı')}    ${payload.dropped.join(', ')}`));
+    head.push(yellow(`  ${tr('dropped')}    ${payload.dropped.join(', ')}`));
   }
   head.push(
     egress(provider) === 'no'
-      ? green(tr('  Bu metin bu makineden çıkmayacak.'))
+      ? green(tr('  This text will not leave this machine.'))
       : egress(provider) === 'yes'
-        ? yellow(tr('  Bu metin bu makineden çıkacak.'))
-        : yellow(tr('  Bu metin yukarıdaki komuta verilecek. Nereye gittiğini o komut bilir.')),
+        ? yellow(tr('  This text will leave this machine.'))
+        : yellow(tr('  This text will be handed to the command above. Where it goes from there is that command\'s business.')),
   );
   process.stdout.write(`${head.join('\n')}\n\n`);
   process.stdout.write(dim('─'.repeat(60)) + '\n');
@@ -418,13 +418,13 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   process.stdout.write(dim('─'.repeat(60)) + '\n');
 
   if (args.dryRun || provider.provider === 'off') {
-    process.stdout.write(tr('\nGönderilmedi (--dry-run).\n'));
+    process.stdout.write(tr('\nNot sent (--dry-run).\n'));
     return 0;
   }
 
   if (needsKey(provider.provider, provider.baseUrl) && !provider.apiKey) {
     const env = config.digest.api_key_env || DEFAULT_KEY_ENV[provider.provider] || '';
-    process.stderr.write(t`\nAnahtar yok. ${env} ayarla ya da: vt digest key <anahtar>\n`);
+    process.stderr.write(t`\nNo key. Set ${env}, or: vt digest key <key>\n`);
     return 3;
   }
 
@@ -437,12 +437,12 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
     // its program, which is a coincidence rather than a rule.
     const exe = cliProgram(provider);
     if (!exe) {
-      process.stderr.write(tr('\nÇalıştırılacak komut yazılmamış: [digest] command\n'));
+      process.stderr.write(tr('\nNo command to run: [digest] command\n'));
       return 3;
     }
     if (!whichCommand(exe)) {
-      process.stderr.write(t`\n"${exe}" bulunamadı — kurulu mu, PATH'te mi?\n`);
-      process.stderr.write(tr('  Seçenekler için: vt digest providers\n'));
+      process.stderr.write(t`\n"${exe}" not found — is it installed, is it on PATH?\n`);
+      process.stderr.write(tr('  For the options: vt digest providers\n'));
       return 3;
     }
   }
@@ -453,12 +453,12 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   // exactly the accident this whole design is arranged around.
   if (config.digest.preview_before_send && !args.yes) {
     if (!isInteractive()) {
-      process.stderr.write(tr('\nOnay gerekiyor ve terminal yok. --yes ile çalıştır.\n'));
+      process.stderr.write(tr('\nConfirmation is required and there is no terminal. Run it with --yes.\n'));
       return 3;
     }
-    const ok = await confirm(tr('\nGönderilsin mi?'), false);
+    const ok = await confirm(tr('\nSend it?'), false);
     if (!ok) {
-      process.stdout.write(tr('Gönderilmedi.\n'));
+      process.stdout.write(tr('Not sent.\n'));
       return 0;
     }
   }
@@ -467,17 +467,17 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   try {
     result = await runDigest(provider, input, {
       onAttempt: (n) => {
-        if (n > 1) process.stdout.write(dim(tr('  yanıt şemaya uymadı, bir kez daha soruluyor…\n')));
+        if (n > 1) process.stdout.write(dim(tr('  the answer did not fit the schema, asking once more…\n')));
       },
     });
   } catch (e) {
     const err = e as ProviderError;
-    process.stderr.write(red(t`\nÖzet alınamadı (${err.kind ?? 'error'}): ${err.message}\n`));
+    process.stderr.write(red(t`\nCould not get a summary (${err.kind ?? 'error'}): ${err.message}\n`));
     if (err.kind === 'auth') {
-      process.stderr.write(tr('  Anahtar reddedildi. vt digest providers\n'));
+      process.stderr.write(tr('  The key was refused. vt digest providers\n'));
     }
     if (err.kind === 'network') {
-      process.stderr.write(tr('  Adrese ulaşılamadı. vt digest providers\n'));
+      process.stderr.write(tr('  The address could not be reached. vt digest providers\n'));
     }
     return 70;
   }
@@ -507,7 +507,7 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   } catch (e) {
     // The summary is in hand and printing it is the point; failing to file it
     // is worth a line, not a failure.
-    process.stderr.write(t`(veritabanına yazılamadı: ${(e as Error).message})\n`);
+    process.stderr.write(t`(could not be written to the database: ${(e as Error).message})\n`);
   }
 
   if (args.json) {
@@ -519,24 +519,24 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
 
   const o = result.output;
   const out: string[] = [''];
-  out.push(bold(`  ${o.phaseLabelRaw || tr('faz bilinmiyor')}`) + dim(`  ${o.phaseKind} · ${o.phaseStatus}`));
+  out.push(bold(`  ${o.phaseLabelRaw || tr('phase unknown')}`) + dim(`  ${o.phaseKind} · ${o.phaseStatus}`));
   if (o.percentEstimate !== null) {
-    out.push(`  ${tr('ilerleme')}   ~%${o.percentEstimate} · ${o.percentBasis} · ${o.confidence}`);
+    out.push(`  ${tr('progress')}   ~%${o.percentEstimate} · ${o.percentBasis} · ${o.confidence}`);
   }
   out.push('');
   out.push(`  ${o.summary}`);
-  if (o.nextAction) out.push('', `  ${bold(tr('sonraki'))}   ${o.nextAction}`);
-  if (o.blocker) out.push(`  ${bold(tr('engel'))}     ${red(o.blocker)}`);
-  if (o.stallReason) out.push(`  ${bold(tr('durgunluk'))} ${o.stallReason}`);
-  for (const c of o.conflicts) out.push(yellow(`  ${tr('çelişki')}   ${c}`));
+  if (o.nextAction) out.push('', `  ${bold(tr('next'))}   ${o.nextAction}`);
+  if (o.blocker) out.push(`  ${bold(tr('blocker'))}     ${red(o.blocker)}`);
+  if (o.stallReason) out.push(`  ${bold(tr('stalled'))} ${o.stallReason}`);
+  for (const c of o.conflicts) out.push(yellow(`  ${tr('conflict')}   ${c}`));
   for (const r of o.riskFlags) out.push(dim(`  ${tr('risk')}      ${r}`));
   out.push('');
-  out.push(dim(tr('  kanıt')));
+  out.push(dim(tr('  evidence')));
   for (const e of o.evidence) out.push(dim(`    ${e.kind}: ${e.ref}`));
   out.push('');
   out.push(
     dim(
-      t`  ${result.model ?? provider.provider} · ${result.reply.inputTokens ?? '?'}→${result.reply.outputTokens ?? '?'} token · ${result.attempts} istek`,
+      t`  ${result.model ?? provider.provider} · ${result.reply.inputTokens ?? '?'}→${result.reply.outputTokens ?? '?'} tokens · ${result.attempts} requests`,
     ),
   );
   process.stdout.write(`${out.join('\n')}\n`);

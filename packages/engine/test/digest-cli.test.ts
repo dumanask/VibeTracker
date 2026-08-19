@@ -127,7 +127,7 @@ test('codex is invoked with the flags the installed codex actually has', () => {
     '--cd',
     '/tmp/a/work',
   ]);
-  assert.ok(args.includes('--ephemeral'), 'yükün oturum kaydı diskte kalmasın');
+  assert.ok(args.includes('--ephemeral'), 'the payload must leave no session record on disk');
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), [
     '--model',
     'gpt-5',
@@ -201,8 +201,8 @@ test('a command that will not read stdin gets a file, and it does not survive', 
     assert.equal(parsed.value.phaseLabelRaw, 'Faz 2');
 
     const promptPath = readFileSync(trace, 'utf8');
-    assert.ok(promptPath.length > 0, 'komut yük dosyasını görmedi');
-    assert.equal(existsSync(promptPath), false, `yük dosyası kaldı: ${promptPath}`);
+    assert.ok(promptPath.length > 0, 'the command never saw the payload file');
+    assert.equal(existsSync(promptPath), false, `the payload file was left behind: ${promptPath}`);
   } finally {
     rmSync(spy, { recursive: true, force: true });
   }
@@ -250,6 +250,6 @@ test('a failing command reports what it said rather than a bare exit code', asyn
 test('a command that never answers is given up on rather than waited out', async () => {
   await assert.rejects(
     () => chat(nodeCli('setTimeout(()=>{},60000)'), { ...REQ, timeoutMs: 1500 }),
-    (e: ProviderError) => e.kind === 'network' && /zaman/.test(e.message),
+    (e: ProviderError) => e.kind === 'network' && /timed out/.test(e.message),
   );
 });

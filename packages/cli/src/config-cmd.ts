@@ -22,7 +22,7 @@ export async function runConfig(sub: string | undefined, json: boolean): Promise
       return check(json);
     default:
       process.stderr.write(
-        t`Bilinmeyen alt-komut: ${sub}\nKullanım: vt config show|check|path\n`,
+        t`Unknown subcommand: ${sub}\nUsage: vt config show|check|path\n`,
       );
       return 2;
   }
@@ -33,7 +33,7 @@ async function show(json: boolean): Promise<number> {
   const path = configPath();
   if (!existsSync(path)) {
     process.stdout.write(
-      t`Yapılandırma dosyası yok: ${path}\nVarsayılanlarla çalışılıyor. Oluşturmak için: vt init\n`,
+      t`No configuration file: ${path}\nRunning on defaults. To create one: vt init\n`,
     );
     return 0;
   }
@@ -64,8 +64,8 @@ async function check(json: boolean): Promise<number> {
   if (!fromFile) {
     process.stdout.write(
       existsSync(path)
-        ? tr('  dosya okunamadı — aşağıdaki hataya bak; varsayılanlar kullanılacak\n')
-        : tr('  dosya yok — varsayılanlar kullanılacak\n'),
+        ? tr('  file unreadable — see the error below; defaults will be used\n')
+        : tr('  no file — defaults will be used\n'),
     );
   }
   if (issues.length > 0) {
@@ -77,22 +77,22 @@ async function check(json: boolean): Promise<number> {
   // a setting that reverted to its default is exactly what the user came to
   // find out.
   process.stdout.write(
-    t`\n  Geçerli ayarlar\n` +
+    t`\n  Settings in force\n` +
       `    panel        http://${config.server.bind}:${config.server.port}\n` +
-      t`    dil          ${config.server.lang}\n` +
-      t`    tarama       ${config.server.interval_ms} ms\n` +
-      t`    hook         ${config.hooks.mode}${config.hooks.high_fidelity ? tr(' + high-fidelity') : ''}\n` +
-      t`    LLM özeti    ${config.digest.provider}\n` +
-      t`    redaksiyon   ${config.privacy.redact ? tr('açık') : 'KAPALI'}` +
-      `${config.privacy.custom_patterns.length > 0 ? t` (+${config.privacy.custom_patterns.length} özel desen)` : ''}\n` +
-      t`    telemetri    ${config.privacy.telemetry ? tr('açık') : tr('kapalı')}\n` +
-      t`    proje ayarı  ${Object.keys(config.projects).length} adet\n`,
+      t`    language     ${config.server.lang}\n` +
+      t`    scan         ${config.server.interval_ms} ms\n` +
+      t`    hooks        ${config.hooks.mode}${config.hooks.high_fidelity ? tr(' + high-fidelity') : ''}\n` +
+      t`    LLM digest   ${config.digest.provider}\n` +
+      t`    redaction    ${config.privacy.redact ? tr('on') : 'KAPALI'}` +
+      `${config.privacy.custom_patterns.length > 0 ? t` (+${config.privacy.custom_patterns.length} custom patterns)` : ''}\n` +
+      t`    telemetry    ${config.privacy.telemetry ? tr('on') : tr('off')}\n` +
+      t`    per-project  ${Object.keys(config.projects).length}\n`,
   );
 
   if (errors.length === 0 && warnings.length === 0) {
-    process.stdout.write(tr('\n  Sorun yok.\n'));
+    process.stdout.write(tr('\n  No problems.\n'));
   } else {
-    process.stdout.write(t`\n  ${errors.length} hata · ${warnings.length} uyarı\n`);
+    process.stdout.write(t`\n  ${errors.length} errors · ${warnings.length} warnings\n`);
   }
   return errors.length > 0 ? 1 : 0;
 }

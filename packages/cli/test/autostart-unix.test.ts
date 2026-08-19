@@ -112,7 +112,7 @@ test('a path with a space in it still starts the daemon', () => {
   // "Application Support". An unquoted ReadWritePaths there does not fail
   // loudly -- it silently grants write access to a path that is not ours.
   const rw = /^ReadWritePaths=(.*)$/m.exec(u)?.[1] ?? '';
-  assert.equal(rw.split('" "').length, 2, `tırnaklanmamış: ${rw}`);
+  assert.equal(rw.split('" "').length, 2, `not quoted: ${rw}`);
   assert.ok(rw.startsWith('"') && rw.endsWith('"'));
 
   const d = desktopEntry(node, entry);

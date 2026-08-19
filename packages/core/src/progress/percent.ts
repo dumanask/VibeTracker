@@ -74,7 +74,7 @@ export function computePercent(input: PercentInput): PercentResult {
       percent: null,
       suppressed: {
         code: 'not_a_plan',
-        detail: ph('kaynak bir plan değil ({0})', input.roleLabel),
+        detail: ph('source is not a plan ({0})', input.roleLabel),
       },
     };
   }
@@ -84,7 +84,7 @@ export function computePercent(input: PercentInput): PercentResult {
       percent: null,
       suppressed: {
         code: 'too_few_items',
-        detail: ph('sayılabilir madde {0} < {1}', totalWeight, MIN_DENOMINATOR),
+        detail: ph('countable items {0} < {1}', totalWeight, MIN_DENOMINATOR),
       },
     };
   }
@@ -96,7 +96,7 @@ export function computePercent(input: PercentInput): PercentResult {
       suppressed: {
         code: 'nothing_unfinished',
         detail: ph(
-          '{0} maddenin tamamı işaretli, bitmemiş madde yok — bu bir kayıt belgesi',
+          'all {0} items are ticked and nothing is unfinished — this is a record, not a plan',
           counts.done,
         ),
       },

@@ -32,13 +32,13 @@ export async function confirm(question: string, fallback = false): Promise<boole
   // The hint letters are translated, but every language's letters are always
   // accepted below: someone reading English output on a Turkish keyboard
   // habit should not have their `e` rejected.
-  const hint = fallback ? tr('[E/h]') : tr('[e/H]');
+  const hint = fallback ? tr('[Y/n]') : tr('[y/N]');
   for (;;) {
     const a = (await ask(`${question} ${hint} `)).toLowerCase();
     if (a === '') return fallback;
     if (a === 'e' || a === 'evet' || a === 'y' || a === 'yes') return true;
     if (a === 'h' || a === 'hayır' || a === 'hayir' || a === 'n' || a === 'no') return false;
-    process.stdout.write(tr('  e (evet) veya h (hayır) yaz.\n'));
+    process.stdout.write(tr('  Type y (yes) or n (no).\n'));
   }
 }
 
@@ -67,11 +67,11 @@ export async function choose<T>(
     if (c.detail) process.stdout.write(`        ${c.detail}\n`);
   }
   for (;;) {
-    const a = await ask(t`Seçim [${defaultIndex + 1}] `);
+    const a = await ask(t`Choice [${defaultIndex + 1}] `);
     if (a === '') return choices[defaultIndex]!.value;
     const n = Number.parseInt(a, 10);
     if (Number.isInteger(n) && n >= 1 && n <= choices.length) return choices[n - 1]!.value;
-    process.stdout.write(t`  1 ile ${choices.length} arasında bir sayı yaz.\n`);
+    process.stdout.write(t`  Type a number between 1 and ${choices.length}.\n`);
   }
 }
 

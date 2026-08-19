@@ -7,14 +7,14 @@
  * rendering paths, then read `missingKeys()`. What comes back is the precise,
  * copy-pasteable list of what a translator has left to do.
  *
- * `--missing` prints it as a JSON fragment ready to paste into `en.json`, so
+ * `--missing` prints it as a JSON fragment ready to paste into `tr.json`, so
  * finishing a language is a mechanical job rather than a hunt through source.
  */
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { t, getLang, keyOf, type Lang, localeDir, missingKeys, tr, SOURCE_LANG } from '@vibetracker/core';
 
-const LANGS: Lang[] = ['tr', 'en'];
+const LANGS: Lang[] = ['en', 'tr'];
 
 export async function runLang(sub: string | undefined): Promise<number> {
   if (sub === 'missing') return reportMissing();
@@ -38,27 +38,27 @@ function catalogOf(lang: Lang): Record<string, string> | null {
 }
 
 function status(): number {
-  process.stdout.write(t`\nEtkin dil: ${getLang()}   (kaynak dil: ${SOURCE_LANG})\n`);
-  process.stdout.write(t`Kataloglar: ${localeDir()}\n\n`);
+  process.stdout.write(t`\nActive language: ${getLang()}   (source language: ${SOURCE_LANG})\n`);
+  process.stdout.write(t`Catalogs: ${localeDir()}\n\n`);
   for (const lang of LANGS) {
     if (lang === SOURCE_LANG) {
-      process.stdout.write(t`  ${lang}   kaynak dil — katalog gerekmez\n`);
+      process.stdout.write(t`  ${lang}   source language — no catalog needed\n`);
       continue;
     }
     const cat = catalogOf(lang);
     process.stdout.write(
       cat === null
-        ? t`  ${lang}   katalog yok\n`
-        : t`  ${lang}   ${Object.keys(cat).length} çeviri\n`,
+        ? t`  ${lang}   no catalog\n`
+        : t`  ${lang}   ${Object.keys(cat).length} translations\n`,
     );
   }
   // Coverage is per-command, and a command can only observe its own process.
   // So the reporter is an environment variable wrapped around a real run,
   // not a subcommand that guesses which paths you care about.
   process.stdout.write(
-    tr('\nBir komutun çevrilmemiş metinlerini görmek için o komutu çalıştır:\n') +
-      tr('  VT_I18N_REPORT=eksik.json vt --lang en status\n') +
-      tr('Çıkan JSON doğrudan locales/en.json içine yapıştırılabilir.\n'),
+    tr('\nTo see a command\'s untranslated strings, run that command:\n') +
+      tr('  VT_I18N_REPORT=missing.json vt --lang tr status\n') +
+      tr('The JSON it prints can be pasted straight into locales/tr.json.\n'),
   );
   return 0;
 }
@@ -74,16 +74,16 @@ function reportMissing(): number {
   if (keys.length === 0) {
     process.stdout.write(
       getLang() === SOURCE_LANG
-        ? tr('\nKaynak dildesin; arama yapılmadı. Dene: vt --lang en lang missing\n')
-        : tr('\nBu çalıştırmada eksik çeviri istenmedi.\n'),
+        ? tr('\nYou are in the source language; nothing was looked up. Try: vt --lang tr lang missing\n')
+        : tr('\nNothing was left untranslated in this run.\n'),
     );
     return 0;
   }
-  process.stdout.write(t`\n${keys.length} çevrilmemiş metin:\n\n`);
+  process.stdout.write(t`\n${keys.length} untranslated strings:\n\n`);
   for (const k of keys) {
     process.stdout.write(`  ${JSON.stringify(k)}: ${JSON.stringify(k)},\n`);
   }
-  process.stdout.write(t`\nBunları ${join(localeDir(), `${getLang()}.json`)} içine yapıştır.\n`);
+  process.stdout.write(t`\nPaste these into ${join(localeDir(), `${getLang()}.json`)}.\n`);
   return 0;
 }
 

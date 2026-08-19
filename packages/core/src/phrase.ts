@@ -50,7 +50,7 @@ export function say(p: Phrase | string | undefined): string {
  */
 export function agoPhrase(ms: number): Phrase {
   const d = Math.round(ms / 86_400_000);
-  if (d < 1) return ph('bugün');
-  if (d === 1) return ph('dün');
-  return ph('{0} gün önce', d);
+  if (d < 1) return ph('today');
+  if (d === 1) return ph('yesterday');
+  return ph('{0} days ago', d);
 }

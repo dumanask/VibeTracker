@@ -150,7 +150,7 @@ test('the database is opened in a mode that can return free pages', () => {
     try {
       const av = db.prepare('PRAGMA auto_vacuum').get() as { auto_vacuum?: number };
       const jm = db.prepare('PRAGMA journal_mode').get() as { journal_mode?: string };
-      assert.equal(Number(av.auto_vacuum), 2, 'auto_vacuum INCREMENTAL değil — dosya asla küçülmez');
+      assert.equal(Number(av.auto_vacuum), 2, 'auto_vacuum is not INCREMENTAL -- the file will never shrink');
       assert.equal(String(jm.journal_mode).toLowerCase(), 'wal');
     } finally {
       db.close();

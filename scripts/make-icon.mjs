@@ -169,7 +169,7 @@ writeFileSync(
   ico([16, 32, 48, 64, 128, 256].map((size) => ({ size, data: png(size, draw) }))),
 );
 
-process.stdout.write(`Simgeler yazıldı: ${OUT}\n  ${Object.keys(sizes).length} png + icon.ico\n`);
+process.stdout.write(`Icons written: ${OUT}\n  ${Object.keys(sizes).length} png + icon.ico\n`);
 
 // ── .icns ─────────────────────────────────────────────────────────────────
 // macOS wants its own container. Modern icns holds PNG payloads directly, one

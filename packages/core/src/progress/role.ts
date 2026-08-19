@@ -117,7 +117,7 @@ export function classifyRole(input: RoleInput, lx: FoldedLexicon = lexicon()): R
     const opening = foldWords(declared[2] ?? '');
     for (const { role, term } of lx.selfDeclaredRoles) {
       if (hasStem(opening, term)) {
-        add(role, 6, `kendi beyanı: "${term}"`);
+        add(role, 6, `self-declared: "${term}"`);
         break;
       }
     }
@@ -130,20 +130,20 @@ export function classifyRole(input: RoleInput, lx: FoldedLexicon = lexicon()): R
   scoreNames(
     foldWords(input.fileName.replace(/\.[a-z]+$/i, '').replace(/[-_]+/g, ' ')),
     1.0,
-    'dosya adı',
+    'file name',
     lx,
     add,
   );
   const h1 = /^#\s+(.+)$/m.exec(input.text)?.[1] ?? '';
-  if (h1) scoreNames(foldWords(h1), 0.7, 'başlık', lx, add);
-  if (input.dirHint) scoreNames(foldWords(input.dirHint), 0.5, 'klasör', lx, add);
+  if (h1) scoreNames(foldWords(h1), 0.7, 'title', lx, add);
+  if (input.dirHint) scoreNames(foldWords(input.dirHint), 0.5, 'folder', lx, add);
 
   // ── 3. structural: everything is finished ──────────────────────────────
   const m = input.marks;
   if (m) {
     const total = m.done + m.partial + m.todo + m.blocked;
     if (total >= 10 && m.done / total >= 0.95) {
-      add('changelog', 5, `${m.done}/${total} işaretli, bitmemiş madde yok — ilerleme değil kayıt`);
+      add('changelog', 5, `${m.done}/${total} ticked with nothing unfinished — a record, not progress`);
     }
   }
 
@@ -160,13 +160,13 @@ export function classifyRole(input: RoleInput, lx: FoldedLexicon = lexicon()): R
     add(
       'research',
       4,
-      `${outside}/${totalTicks} ✅ tablolarda ama hiç durum sütunu yok — karşılaştırma/envanter`,
+      `${outside}/${totalTicks} ✅ in tables with no status column anywhere — a comparison or inventory`,
     );
   }
 
   // ── 5. structural: dated section headings ──────────────────────────────
   const dated = [...input.text.matchAll(DATE_HEADING)].length;
-  if (dated >= 3) add('changelog', 3, `${dated} tarihli başlık — günlük`);
+  if (dated >= 3) add('changelog', 3, `${dated} dated headings — a worklog`);
 
   const ranked = (Object.entries(scores) as Array<[DocRole, number]>)
     .filter(([r]) => r !== 'AMBIGUOUS')
