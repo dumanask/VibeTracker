@@ -213,7 +213,9 @@ async function showProviders(json: boolean): Promise<number> {
   out.push(`    openai      ${tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')}`);
   out.push(`    anthropic   ${tr('Anthropic API')}`);
   out.push('');
-  out.push(dim(tr('  Değiştirmek için config dosyasındaki [digest] bölümünü düzenle: vt config path')));
+  // Two ways, and the panel is named first because it is the one that does not
+  // require knowing where a TOML file lives on this operating system.
+  out.push(dim(tr('  Değiştirmek için: panodaki "LLM özeti" bölümü — ya da config dosyası: vt config path')));
   process.stdout.write(`${out.join('\n')}\n`);
   return 0;
 }

@@ -21,6 +21,14 @@ export {
   type ProviderId,
 } from './provider.ts';
 export {
+  isSelectable,
+  validateChoice,
+  SELECTABLE_PROVIDERS,
+  type ChoiceRefusal,
+  type ChoiceResult,
+  type ProviderChoice,
+} from './select.ts';
+export {
   clearKeyFile,
   keyFilePath,
   maskKey,

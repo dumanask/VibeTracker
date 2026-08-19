@@ -4,88 +4,18 @@
  * daemon is perfectly healthy while it happens — the worst kind of failure
  * this product can have.
  *
- * So the page is loaded here the way a browser would: the script is executed
- * against a stub DOM, and then its own functions are called with fixture data.
- * That catches a syntax error, a reference to something that no longer exists,
- * and — the reason this exists at all — the summary logic silently disagreeing
- * with `summarizeAgents` in core, which is what the terminal renders from.
+ * So the page is loaded the way a browser would — see `panel-harness.ts` —
+ * and its own functions are called with fixture data. That catches a syntax
+ * error, a reference to something that no longer exists, and — the reason this
+ * exists at all — the summary logic silently disagreeing with
+ * `summarizeAgents` in core, which is what the terminal renders from.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createContext, runInContext } from 'node:vm';
 import { summarizeAgents, compactRank } from '@vibetracker/core';
+import { readFileSync } from 'node:fs';
+import { loadPanel, PANEL } from './panel-harness.ts';
 import type { ProjectView, SessionView } from '@vibetracker/shared';
-
-const PANEL = join(fileURLToPath(new URL('../public/', import.meta.url)), 'index.html');
-
-/** Just enough DOM for the script to reach the end of its top-level code. */
-function loadPanel(hash = ''): Record<string, unknown> {
-  const html = readFileSync(PANEL, 'utf8');
-  const m = /<script>([\s\S]*)<\/script>/.exec(html);
-  assert.ok(m, 'panel has a script block');
-  const src = m[1]!.replace('"__VT_I18N__"', '({})').replace('__VT_TOKEN__', 'test-token');
-
-  const bodyAttrs: string[] = [];
-  const listeners = new Map<string, (e: { data: string }) => void>();
-  // One object per id, kept: the page writes its output into `innerHTML`, and
-  // a fresh stub on every lookup throws that output away.
-  const els = new Map<string, Record<string, unknown>>();
-  const element = (id: string): Record<string, unknown> => {
-    let e = els.get(id);
-    if (!e) {
-      e = {
-        hidden: false,
-        className: '',
-        textContent: '',
-        innerHTML: '',
-        dataset: {},
-        style: {},
-        setAttribute() {},
-        removeAttribute() {},
-        closest: () => null,
-      };
-      els.set(id, e);
-    }
-    return e;
-  };
-
-  const sandbox: Record<string, unknown> = {
-    document: {
-      getElementById: (id: string) => element(id),
-      querySelectorAll: () => [],
-      addEventListener() {},
-      body: { setAttribute: (k: string) => void bodyAttrs.push(k), removeAttribute() {} },
-      title: '',
-    },
-    location: { hash, pathname: '/', search: '', href: '' },
-    // The page opens an SSE stream on load; a stub keeps the test offline —
-    // and keeps the handlers, so a fixture can arrive the same way a real
-    // report does rather than by reaching past the page into its variables.
-    EventSource: class {
-      addEventListener(name: string, fn: (e: { data: string }) => void): void {
-        listeners.set(name, fn);
-      }
-    },
-    setInterval: () => 0,
-    setTimeout: () => 0,
-    fetch: () => Promise.reject(new Error('offline')),
-    console,
-  };
-  sandbox.window = sandbox;
-  const ctx = createContext(sandbox);
-  runInContext(src, ctx, { filename: 'index.html' });
-  sandbox.__bodyAttrs = bodyAttrs;
-  sandbox.__els = els;
-  sandbox.__push = (name: string, payload: unknown): void => {
-    const fn = listeners.get(name);
-    assert.ok(fn, `page never subscribed to "${name}"`);
-    fn({ data: JSON.stringify(payload) });
-  };
-  return sandbox;
-}
 
 function session(over: Partial<SessionView>): SessionView {
   return {

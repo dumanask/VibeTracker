@@ -84,6 +84,25 @@ export interface ServerDeps {
   addPath?: (path: string) => Promise<
     { ok: true; projectId: string; displayName: string } | { ok: false; reason: 'notdir' | 'failed' }
   >;
+  /**
+   * The `[digest]` section as a page can show it. Never carries the key.
+   *
+   * Read fresh from the config file on every call rather than from anything
+   * this process is holding, because it is not this process that acts on it —
+   * `vt digest` reads the file when somebody types it, possibly days later,
+   * and a panel reporting a cached answer would be describing a decision the
+   * command will not make.
+   */
+  digest?: () => Promise<unknown>;
+  /**
+   * Write a provider choice. Validated in the engine before it arrives here.
+   *
+   * Returns the same shape `digest()` does, so one round trip both saves and
+   * re-reads — the fields that get normalised on the way in (a default address
+   * cleared, a conventional variable name dropped) are visibly what they now
+   * are rather than what was typed.
+   */
+  setDigest?: (choice: unknown) => Promise<unknown>;
 }
 
 /**
@@ -383,6 +402,50 @@ export class DaemonServer {
       json(res, 200, { ok: true, stopping: true });
       setTimeout(() => this.#deps.onShutdown?.(), 50).unref();
       return;
+    }
+
+    // Which LLM writes the summary, from the window rather than from a text
+    // editor. The one setting in this product that decides whether anything
+    // leaves the machine, and until now the only way to change it was to find
+    // a TOML file — so it stayed at its default, which is the safe answer but
+    // not always the wanted one.
+    if (path === '/api/v1/digest') {
+      if (req.method === 'GET') {
+        if (!this.#deps.digest) return json(res, 501, { error: tr('bu sürümde yok') });
+        return json(res, 200, await this.#deps.digest());
+      }
+      if (req.method !== 'POST') return json(res, 405, { error: tr('POST gerekli') });
+      if (!this.#deps.setDigest) return json(res, 501, { error: tr('bu sürümde yok') });
+      let body: unknown;
+      try {
+        body = JSON.parse(await readBody(req, TRACKING_BODY_LIMIT));
+      } catch {
+        return json(res, 400, { error: tr('gövde okunamadı') });
+      }
+      // The refusal codes come back from the engine; the sentences are made
+      // here, because this is the layer that knows a person is reading them.
+      const saved = (await this.#deps.setDigest(body)) as
+        | { ok: true; view: unknown }
+        | { ok: false; reason: string };
+      if (saved.ok === false) {
+        const why: Record<string, string> = {
+          cli: tr('Kendi komutunu çalıştıran seçenek buradan ayarlanamaz — config dosyasından yazılır.'),
+          provider: tr('Böyle bir sağlayıcı yok.'),
+          model: tr('Model adı geçersiz.'),
+          base_url: tr('Adres geçersiz.'),
+          base_url_scheme: tr('Adres http:// veya https:// olmalı.'),
+          key_env: tr('Ortam değişkeni adı geçersiz.'),
+          key_env_looks_like_key: tr('Buraya anahtarın kendisi değil, onu tutan ortam değişkeninin adı yazılır.'),
+          shape: tr('gövde okunamadı'),
+          failed: tr('yapılandırma yazılamadı'),
+        };
+        const message = why[saved.reason] ?? tr('gövde okunamadı');
+        return json(res, saved.reason === 'failed' ? 500 : 400, {
+          error: message,
+          reason: saved.reason,
+        });
+      }
+      return json(res, 200, saved.view);
     }
 
     if (path === '/api/v1/board') {

@@ -5,6 +5,7 @@ import {
   ScanContext,
   discoverProjects,
   identifyDirectory,
+  validateChoice,
   type ScanOptions,
 } from '@vibetracker/engine';
 import { dataDir, configPath, claudeDir, loadConfig, writeConfig } from '@vibetracker/platform';
@@ -29,6 +30,7 @@ import { HookIngest } from './hooks/ingest.ts';
 import { buildBoard, type Board } from './board.ts';
 import { Momentum } from './momentum.ts';
 import { loadOrCreateApiToken, loadOrCreateHookToken } from './tokens.ts';
+import { digestView } from './digest-settings.ts';
 
 export const DEFAULT_PORT = 47823;
 
@@ -179,6 +181,8 @@ export class Daemon {
           tracked: isTracked(this.#tracking, c.projectId),
         })),
       addPath: (path) => this.#addPath(path),
+      digest: () => this.#digest(),
+      setDigest: (choice) => this.#setDigest(choice),
     });
   }
 
@@ -439,6 +443,62 @@ export class Daemon {
       }
     }
     return { mode: 'selected', selected };
+  }
+
+  /**
+   * The `[digest]` section, read from disk each time.
+   *
+   * Not from `#opts` or from anything cached at boot: the daemon never runs a
+   * digest, `vt digest` reads the file when a person types it, and a panel
+   * that answered from a startup snapshot would describe a decision that
+   * command is not going to make. Reading a small TOML file on a click is not
+   * a cost worth optimising against correctness.
+   */
+  async #digest(): Promise<unknown> {
+    const { config } = await loadConfig();
+    return digestView(config.digest);
+  }
+
+  /**
+   * Write a provider choice, having first refused the ones a socket may not make.
+   *
+   * `command` and `args` are never touched — not written, and not cleared when
+   * the provider moves away from `cli`. They are inert unless the provider
+   * names them, and silently deleting a line somebody typed into their own
+   * config file is not this endpoint's business.
+   */
+  async #setDigest(input: unknown): Promise<
+    { ok: true; view: unknown } | { ok: false; reason: string }
+  > {
+    const choice = validateChoice(input);
+    if (!choice.ok) return { ok: false, reason: choice.reason };
+    const path = configPath();
+    let text = '';
+    try {
+      text = readFileSync(path, 'utf8');
+    } catch {
+      // No config yet — the same reasoning as `#setTracking`: one table beats
+      // materialising a template the user never asked for.
+    }
+    try {
+      await writeConfig(
+        setTomlValues(text, 'digest', {
+          provider: choice.value.provider,
+          model: choice.value.model,
+          base_url: choice.value.baseUrl,
+          api_key_env: choice.value.keyEnv,
+        }),
+        path,
+      );
+    } catch {
+      return { ok: false, reason: 'failed' };
+    }
+    // Named in the log because it is the one setting that decides whether
+    // anything leaves this machine. The address is included and the key never
+    // is; this log is read by `vt doctor --bundle`.
+    const where = choice.value.baseUrl ? ` · ${choice.value.baseUrl}` : '';
+    log(t`LLM sağlayıcısı değiştirildi · ${choice.value.provider}${where}`);
+    return { ok: true, view: await this.#digest() };
   }
 
   async #setTracking(mode: string, selected: string[]): Promise<void> {

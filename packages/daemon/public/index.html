@@ -418,6 +418,33 @@
              border-block-start:1px solid var(--edge); background:var(--trough); }
   .pickbar .msg { font-size:10.5px; color:var(--dim); }
 
+  /* ── which model writes the summary ────────────────────────────────── */
+  /* Reuses .pick so the two choosers in this column are visibly the same
+     kind of control; only what a provider row has to say beyond its name
+     needs rules of its own. */
+  .llm .now { padding:7px var(--pad); font-family:var(--mono); font-size:11px;
+              display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; }
+  .llm .now b { font-weight:600; }
+  .llm .out { color:var(--amber); }
+  .llm .stay { color:var(--phos); }
+  .llm .bad { color:var(--alarm); }
+  .llm label { align-items:flex-start; }
+  .llm label input { margin-top:2px; }
+  .llm .name { min-width:88px; }
+  .llm .note { color:var(--dim); font-family:var(--sans); font-size:10.5px;
+               margin-inline-start:auto; text-align:end; }
+  .llm .fields { display:flex; flex-direction:column; gap:6px;
+                 padding:8px var(--pad); border-block-start:1px solid var(--edge); }
+  .llm .fields label { display:flex; align-items:center; gap:8px; border:0;
+                       padding:0; cursor:auto; }
+  .llm .fields span { min-width:88px; color:var(--dim); }
+  .llm .fields input { flex:1; min-width:0; background:var(--base); color:var(--ink);
+                       border:1px solid var(--bevel); font-family:var(--mono);
+                       font-size:11px; padding:3px 6px; }
+  .llm .hint { padding:7px var(--pad); border-block-start:1px solid var(--edge);
+               color:var(--dim); font-size:10.5px; font-family:var(--sans); }
+  .llm .hint code { font-family:var(--mono); color:var(--ink); }
+
   footer { margin-top:34px; color:var(--dim); font-size:10px;
            border-top:1px solid var(--edge); padding-top:10px;
            font-family:var(--mono); letter-spacing:.02em; }
@@ -515,6 +542,10 @@
     <div class="pickwrap">
       <button class="backbtn" id="pickToggle" data-tr="izlenecekleri seç">izlenecekleri seç</button>
       <div class="pick" id="pick" hidden></div>
+    </div>
+    <div class="pickwrap">
+      <button class="backbtn" id="llmToggle" data-tr="LLM özeti — hangi model">LLM özeti — hangi model</button>
+      <div class="pick llm" id="llm" hidden></div>
     </div>
   </div>
 
@@ -1210,6 +1241,200 @@ async function saveTracking(body) {
   }
 }
 
+// ── which model writes the summary ──────────────────────────────────────
+// The same decision `vt digest providers` reports, made from the window
+// instead of from a text editor. It was previously reachable only by finding
+// a TOML file, which meant in practice that it stayed at its default — and
+// the default is off.
+//
+// Two things this panel will not do, both deliberate and both explained where
+// they are enforced (engine/src/digest/select.ts, daemon/src/digest-settings.ts):
+// it cannot set the provider that runs a command of your choosing, and it
+// never touches the API key. The key box here holds the *name* of an
+// environment variable; the key itself goes in with `vt digest key`.
+let llmOpen = false;
+/** The daemon's answer, or null before the first load. */
+let llm = null;
+/** The provider the radio buttons are on — not yet what the file says. */
+let llmPick = null;
+/** Typed-but-unsaved text, so a re-render does not eat what you are writing. */
+let llmDraft = { model: '', base_url: '', api_key_env: '' };
+
+/** Name and one line of why, per provider. Literals, so the scanner sees them. */
+function llmLabel(id) {
+  if (id === 'off') return [tr('Kapalı'), tr('yapısal motor tek başına çalışır; hiçbir şey gönderilmez')];
+  if (id === 'ollama') return [tr('Ollama'), tr('bu makinedeki model; anahtar istemez, veri çıkmaz')];
+  if (id === 'claude-cli') return [tr('claude komutu'), tr('anahtar istemez; mevcut aboneliğinin kotasından yer')];
+  if (id === 'codex-cli') return [tr('codex komutu'), tr('anahtar istemez; Codex aboneliğinin kotasından yer')];
+  if (id === 'openai') return [tr('OpenAI uyumlu'), tr('adresle OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
+  if (id === 'anthropic') return [tr('Anthropic API'), tr('anahtar gerekir')];
+  return [id, ''];
+}
+
+/** The egress sentence, in the three words that matter. Mirrors `vt digest`. */
+function llmEgress(e) {
+  if (e === 'no') return `<span class="stay">${esc(tr('veri bu makineden çıkmaz'))}</span>`;
+  if (e === 'yes') return `<span class="out">${esc(tr('veri bu makineden ÇIKAR'))}</span>`;
+  return `<span class="out">${esc(tr('veri çıkar mı — bilinmiyor'))}</span>`;
+}
+
+async function loadLlm() {
+  try {
+    const res = await fetch('/api/v1/digest?t=' + encodeURIComponent(TOKEN), {
+      headers: { 'X-VT-Token': TOKEN },
+    });
+    if (!res.ok) throw new Error(String(res.status));
+    llm = await res.json();
+    llmPick = llm.provider;
+    llmDraft = { model: llm.model, base_url: llm.baseUrl, api_key_env: llm.keyEnv };
+  } catch (e) {
+    llm = 'error';
+  }
+  renderLlm();
+}
+
+/** The option object for whatever the radios are on, or null while on `cli`. */
+function llmPicked() {
+  if (!llm || llm === 'error') return null;
+  return llm.options.find(o => o.id === llmPick) || null;
+}
+
+function renderLlm() {
+  const el = document.getElementById('llm');
+  el.hidden = !llmOpen;
+  if (!llmOpen) return;
+  if (!llm) { el.innerHTML = `<div class="pickbar">${esc(tr('yükleniyor…'))}</div>`; return; }
+  if (llm === 'error') { el.innerHTML = `<div class="pickbar">${esc(tr('okunamadı'))}</div>`; return; }
+
+  // What the file says right now, before any of the radios below.
+  const now = [`<b>${esc(llm.provider)}</b>`];
+  if (llm.provider !== 'off') {
+    if (llm.modelEffective) now.push(esc(llm.modelEffective));
+    if (llm.baseUrlEffective) now.push(esc(llm.baseUrlEffective));
+    if (llm.commandLine) now.push(esc(llm.commandLine));
+    now.push(llmEgress(llm.egress));
+    now.push(llm.ready
+      ? `<span class="stay">${esc(tr('hazır'))}</span>`
+      : `<span class="bad">${esc(tr('eksik yapılandırma'))}</span>`);
+  } else {
+    now.push(esc(tr('panodaki her sayı bu makinede hesaplanıyor')));
+  }
+  // Each fact is its own flex child, so the row's gap separates them. Joined
+  // raw, `openai` and its address ran together into one unreadable word.
+  let html = `<div class="now">${now.map(x => `<span>${x}</span>`).join('')}</div>`;
+
+  // A configured `cli` is state, not an option — it cannot be ticked because
+  // this panel will not write a command. Saying so beats a row that silently
+  // refuses.
+  if (!llm.inOptions) {
+    html += `<div class="hint">${esc(tr('Kendi komutunu çalıştıran seçenek yalnızca config dosyasından ayarlanır. Aşağıdan başka bir sağlayıcıya geçebilirsin.'))}</div>`;
+  }
+
+  html += llm.options.map(o => {
+    const [name, why] = llmLabel(o.id);
+    const mark = o.installed === true
+      ? `<span class="stay">${esc(tr('kurulu'))}</span>`
+      : o.installed === false ? `<span class="bad">${esc(tr('kurulu değil'))}</span>` : '';
+    return `<label>
+      <input type="radio" name="llmp" value="${esc(o.id)}" ${o.id === llmPick ? 'checked' : ''}>
+      <span class="name">${esc(name)}</span>
+      <span>${esc(why)}</span>
+      <span class="note">${mark}</span>
+    </label>`;
+  }).join('');
+
+  const picked = llmPicked();
+  if (picked && picked.id !== 'off') {
+    const rows = [];
+    rows.push(`<label><span>${esc(tr('model'))}</span><input id="llmModel" value="${esc(llmDraft.model)}" placeholder="${esc(picked.modelDefault)}" spellcheck="false"></label>`);
+    if (picked.baseUrlDefault) {
+      rows.push(`<label><span>${esc(tr('adres'))}</span><input id="llmBase" value="${esc(llmDraft.base_url)}" placeholder="${esc(picked.baseUrlDefault)}" spellcheck="false"></label>`);
+    }
+    if (picked.needsKey) {
+      rows.push(`<label><span>${esc(tr('anahtar değişkeni'))}</span><input id="llmKeyEnv" value="${esc(llmDraft.api_key_env)}" placeholder="${esc(picked.keyEnvDefault || '')}" spellcheck="false" autocomplete="off"></label>`);
+    }
+    html += `<div class="fields">${rows.join('')}</div>`;
+
+    // The key itself, and why it is not a box on this page.
+    if (picked.needsKey) {
+      const have = llm.provider === picked.id && llm.key.present;
+      const where = llm.key.from === 'env' ? (llm.key.envName || '') : llm.keyFile;
+      html += `<div class="hint">${
+        have
+          ? esc(t`Anahtar var: ${llm.key.masked} · ${where}`)
+          : esc(tr('Anahtarın kendisi buraya yazılmaz — bu dosya yedeklenir ve teşhis paketine girer.')) +
+            ' <code>vt digest key &lt;anahtar&gt;</code>'
+      }</div>`;
+    }
+  }
+
+  html += `<div class="pickbar">
+    <button id="llmSave">${esc(tr('kaydet'))}</button>
+    <span class="msg" id="llmMsg"></span>
+  </div>`;
+  el.innerHTML = html;
+}
+
+async function saveLlm() {
+  const msg = document.getElementById('llmMsg');
+  const value = id => { const box = document.getElementById(id); return box ? box.value.trim() : ''; };
+  const body = {
+    provider: llmPick,
+    model: value('llmModel'),
+    base_url: value('llmBase'),
+    api_key_env: value('llmKeyEnv'),
+  };
+  if (msg) msg.textContent = tr('kaydediliyor…');
+  try {
+    const res = await fetch('/api/v1/digest?t=' + encodeURIComponent(TOKEN), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-VT-Token': TOKEN },
+      body: JSON.stringify(body),
+    });
+    const answer = await res.json();
+    if (!res.ok) {
+      // The daemon's sentence, not a generic failure: it is the one that knows
+      // which of the four fields was wrong and why.
+      if (msg) msg.textContent = answer.error || tr('kaydedilemedi');
+      return;
+    }
+    // Re-read from the answer rather than from what was typed: the daemon
+    // clears a default address and drops a conventional variable name, and a
+    // panel still showing the typed version would disagree with the file.
+    llm = answer;
+    llmPick = llm.provider;
+    llmDraft = { model: llm.model, base_url: llm.baseUrl, api_key_env: llm.keyEnv };
+    renderLlm();
+    const after = document.getElementById('llmMsg');
+    if (after) after.textContent = tr('kaydedildi');
+  } catch (e) {
+    if (msg) msg.textContent = tr('kaydedilemedi');
+  }
+}
+
+// Typing is kept out of the render path: re-rendering on every keystroke
+// would move the caret, and the draft is what a later render reads back.
+document.addEventListener('input', (e) => {
+  const box = e.target;
+  if (!box || !box.id) return;
+  if (box.id === 'llmModel') llmDraft.model = box.value;
+  else if (box.id === 'llmBase') llmDraft.base_url = box.value;
+  else if (box.id === 'llmKeyEnv') llmDraft.api_key_env = box.value;
+});
+
+document.addEventListener('change', (e) => {
+  const box = e.target;
+  if (!box || box.name !== 'llmp') return;
+  llmPick = box.value;
+  // Seeded from the file when the radios come back to what is configured, and
+  // cleared otherwise: carrying an Ollama address over to Anthropic would
+  // offer to save a setting that provider does not have.
+  llmDraft = llm && llm !== 'error' && llmPick === llm.provider
+    ? { model: llm.model, base_url: llm.baseUrl, api_key_env: llm.keyEnv }
+    : { model: '', base_url: '', api_key_env: '' };
+  renderLlm();
+});
+
 document.addEventListener('click', (e) => {
   const row = e.target.closest && e.target.closest('.prow[data-open]');
   if (row) { setView('detail', row.dataset.open); return; }
@@ -1222,6 +1447,18 @@ document.addEventListener('click', (e) => {
     renderPick();
     return;
   }
+  const llmBtn = e.target.closest && e.target.closest('#llmToggle');
+  if (llmBtn) {
+    llmOpen = !llmOpen;
+    // Re-read on every open rather than once: `vt init`, `vt digest key` and a
+    // hand edit all change this file while the page is sitting there, and a
+    // panel showing a stale provider is worse than one that takes a moment.
+    if (llmOpen) { llm = null; void loadLlm(); }
+    renderLlm();
+    return;
+  }
+  const llmSave = e.target.closest && e.target.closest('#llmSave');
+  if (llmSave) { void saveLlm(); return; }
   const all = e.target.closest && e.target.closest('#pickAll');
   if (all) { void saveTracking({ mode: 'all', selected: [] }); return; }
   const save = e.target.closest && e.target.closest('#pickSave');
