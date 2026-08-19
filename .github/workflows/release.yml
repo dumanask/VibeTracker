@@ -112,11 +112,24 @@ jobs:
       # and the job dies with "held broken packages" before compiling a line.
       # Tauri 2 uses ayatana; ci.yml has always installed only that one, which
       # is why the desktop check was green while the release build was not.
+      #
+      # `apt-get` waits for the dpkg lock forever by default, and a fresh
+      # runner is often still finishing `unattended-upgrades` when the job
+      # starts. Measured: the v0.1.2 Linux job sat in this one step for
+      # sixty-three minutes and would have sat there for six hours, which is
+      # worse than failing -- `publish` needs the whole matrix, so the release
+      # simply never appeared and nothing said why. A bounded wait turns a hang
+      # into an error, and `timeout-minutes` turns an error into one that
+      # arrives while somebody is still looking.
       - name: linux dependencies
         if: matrix.key == 'linux'
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          set -euo pipefail
+          sudo apt-get update -o Acquire::Retries=3 -o DPkg::Lock::Timeout=300
+          sudo apt-get install -y -o Acquire::Retries=3 -o DPkg::Lock::Timeout=300 \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
             build-essential curl wget file libssl-dev
 
