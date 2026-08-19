@@ -9,7 +9,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { hasCommand, whichCommand } from '../src/which.ts';
@@ -24,7 +24,12 @@ test('the running node is found by name, and nonsense is not', () => {
 });
 
 test('a name is looked up in PATH; a path is taken at its word', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'vt-which-'));
+  // Canonicalised, because `whichCommand` canonicalises what it returns and a
+  // temp directory is the one place that reliably is not canonical: Windows
+  // hands back an 8.3 short name (`C:/Users/RUNNER~1/...`) and macOS hands
+  // back `/var/folders/...`, a symlink to `/private/var/folders/...`. Both
+  // failed in CI while the code under test was doing exactly its job.
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'vt-which-')));
   const saved = process.env['PATH'];
   try {
     const exe = process.platform === 'win32' ? 'vt-fake.cmd' : 'vt-fake';
@@ -40,7 +45,7 @@ test('a name is looked up in PATH; a path is taken at its word', () => {
 
     // A path is not searched for anywhere. It is what it says or it is nothing.
     assert.equal(whichCommand(full), full);
-    assert.equal(whichCommand(join(dir, 'vt-yok')), null);
+    assert.equal(whichCommand(join(dir, 'vt-no-such-file')), null);
 
     // And a directory is not a program, however runnable its name looks.
     assert.equal(whichCommand(dir), null);
