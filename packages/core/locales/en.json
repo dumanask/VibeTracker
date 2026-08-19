@@ -836,5 +836,6 @@
   "üstte tutulamaz": "cannot be kept on top",
   "LaunchAgent: {0}": "LaunchAgent: {0}",
   "systemd --user: {0}.service": "systemd --user: {0}.service",
-  "Zamanlanmış Görev: {0}": "Scheduled Task: {0}"
+  "Zamanlanmış Görev: {0}": "Scheduled Task: {0}",
+  "Sürüm, platform ve Node sürümü — hata bildirirken bunu ekle": "Version, platform and Node version — include this when reporting a bug"
 }

@@ -25,6 +25,7 @@ interface Args {
   quick: boolean;
   tailKb: number;
   help: boolean;
+  version: boolean;
   signalWaiting: boolean;
   open: boolean;
   yes: boolean;
@@ -60,6 +61,7 @@ function parseArgs(argv: string[]): Args {
     quick: false,
     tailKb: 256,
     help: false,
+    version: false,
     dryRun: false,
     signalWaiting: false,
     open: false,
@@ -82,6 +84,13 @@ function parseArgs(argv: string[]): Args {
       case '-h':
       case '--help':
         args.help = true;
+        break;
+      // Every command-line tool answers this, and somebody filing a bug report
+      // is asked for it first. Refusing it with "unknown option" was the first
+      // thing a person trying the package on a machine we do not own saw.
+      case '-V':
+      case '--version':
+        args.version = true;
         break;
       case '--json':
         args.json = true;
@@ -239,6 +248,16 @@ async function main(): Promise<number> {
   if (args.command === 'lang') {
     const { runLang } = await import('./lang.ts');
     return runLang(args.sub);
+  }
+  if (args.version) {
+    // Version, platform and Node in one line: the three facts every bug
+    // report needs and the three people forget to include.
+    const { VERSION } = await import('@vibetracker/daemon');
+    process.stdout.write(
+      `vibetracker ${VERSION} · ${process.platform}-${process.arch} · node ${process.versions.node}
+`,
+    );
+    return 0;
   }
   if (args.help) {
     process.stdout.write(usage());

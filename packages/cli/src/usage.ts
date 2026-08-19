@@ -72,6 +72,7 @@ const options = (): Row[] => [
   ['--signal-waiting', tr('Bekleyen oturum varsa çıkış kodu 10 döndür')],
   ['--lang <tr|en>', tr("Bu çalıştırma için dil (VT_LANG ve config'in üstünde)")],
   ['--dry-run', tr('vt digest: gönderilecek metni göster, gönderme')],
+  ['--version, -V', tr('Sürüm, platform ve Node sürümü — hata bildirirken bunu ekle')],
 ];
 
 const daemonOptions = (): Row[] => [
