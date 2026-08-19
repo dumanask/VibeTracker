@@ -68,6 +68,36 @@ kararınla açılır:
   sağlayıcıya gider. Gönderilmeden önce tam yük sana gösterilir; ham plan dosyası
   hiçbir zaman gönderilmez.
 
+### LLM özeti — hangi model, kimin hesabından
+
+Varsayılan `off`. Kapalıyken paneldeki her sayıyı yerel motor hesaplar ve
+hiçbir şey makineden çıkmaz.
+
+Açacaksan sağlayıcıyı sen seçersin — tek bir satıcıya bağlı değildir:
+
+| `provider` | Ne demek | Veri makineden çıkar mı |
+|---|---|---|
+| `off` | kapalı (varsayılan) | hayır |
+| `ollama` | makinendeki Ollama | **hayır** |
+| `openai` | OpenAI *biçimi*: `base_url` ile OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LM Studio, vLLM, llama.cpp, Gemini uyumluluk ucu | adrese bağlı — loopback ise hayır |
+| `anthropic` | Anthropic API | evet |
+| `claude-cli` | makinendeki `claude` komutu, mevcut aboneliğinden | evet |
+
+Nereye gittiğini tahmin etmen gerekmez: `vt digest providers` ve `vt doctor`
+bunu açıkça yazar, ve `vt digest` göndermeden önce "bu metin bu makineden
+çıkacak / çıkmayacak" satırını gösterir.
+
+**Anahtar config dosyasına yazılmaz.** `[digest].api_key_env` anahtarın
+kendisini değil, anahtarı tutan **ortam değişkeninin adını** taşır — çünkü bu
+dosya yedeklenir, ekran görüntüsü alınır ve `vt doctor --bundle` tarafından
+okunur. Ortam değişkeni pratik değilse `vt digest key <anahtar>` 0600 bir
+dosyaya yazar; o dosya teşhis paketine hiç girmez.
+
+**Daemon hiçbir zaman LLM çağırmaz.** Tek çağıran, senin elle çalıştırdığın
+`vt digest` komutudur. Sonuç veritabanına yazılır ve panelde *sayılan* bir
+sayıdan görsel olarak ayrı çizilir: taralı çubuk, `~` öneki ve hangi modelin
+söylediği.
+
 ## Telemetri
 
 Yok. `[privacy].telemetry` varsayılan `false` ve açılsa bile toplanan şey

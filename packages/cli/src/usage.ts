@@ -43,6 +43,9 @@ const commands = (): Row[] => [
   // entry cannot be both.
   [`vt board [${tr('proje-adı')}]`, tr('Faz panosu — commit geçmişinden çıkarılmış zaman çizelgesi')],
   [`vt projects [${tr('alt-komut')}]`, tr('İzlenecek projeleri seç (list|add|rm|all)')],
+  [`vt digest [${tr('proje-adı')}]`, tr('LLM özeti — faz adı, engel, sonraki adım (varsayılan kapalı)')],
+  ['vt digest providers', tr('Hangi LLM kullanılıyor, hangileri seçilebilir')],
+  ['vt digest key <anahtar>', tr("API anahtarını 0600 bir dosyaya yaz (config'e asla yazılmaz)")],
   ['vt demo [--all]', tr('Sentetik ortamda panel — gerçek veriye dokunmaz')],
   ['vt lang [missing]', tr('Dil durumu; çevrilmemiş metinleri listele')],
   ['vt --help', tr('Bu yardım')],
@@ -68,6 +71,7 @@ const options = (): Row[] => [
   ['--tail <kb>', tr('Transcript kuyruk penceresi, KB (varsayılan 256)')],
   ['--signal-waiting', tr('Bekleyen oturum varsa çıkış kodu 10 döndür')],
   ['--lang <tr|en>', tr("Bu çalıştırma için dil (VT_LANG ve config'in üstünde)")],
+  ['--dry-run', tr('vt digest: gönderilecek metni göster, gönderme')],
 ];
 
 const daemonOptions = (): Row[] => [

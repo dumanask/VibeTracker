@@ -81,6 +81,7 @@ export async function collectChecks(): Promise<{ checks: Check[]; projectPaths: 
     checks.push(...(await checkHooks()));
     checks.push(...(await checkOtherAgents(ctx)));
     checks.push(await checkVoice());
+    checks.push(await checkDigest());
     checks.push(checkWriteSafety());
   } finally {
     await ctx.close();
@@ -377,6 +378,61 @@ async function checkGit(): Promise<Check> {
         tr('kopyası ayrı kartlar olarak görünebilir. Dal ve kirli dosya sayısı gösterilmez.'),
     };
   }
+}
+
+/**
+ * Which model, if any, and whether the answer is honest about egress.
+ *
+ * Here because "what LLM is this using?" is a question a person is entitled to
+ * be able to answer without reading the source, and because the honest answer
+ * for most installs is "none, and nothing is sent" -- which is worth saying
+ * out loud rather than leaving as an absence.
+ */
+async function checkDigest(): Promise<Check> {
+  const { loadConfig: load } = await import('@vibetracker/platform');
+  const {
+    resolveKey: resolve,
+    needsKey: wants,
+    leavesMachine: leaves,
+    DEFAULT_BASE: bases,
+    DEFAULT_MODEL: models,
+  } = await import('@vibetracker/engine');
+  let cfg;
+  try {
+    ({ config: cfg } = await load());
+  } catch {
+    return { id: 'digest', label: tr('LLM özeti'), status: 'info', detail: tr('yapılandırma okunamadı') };
+  }
+  const d = cfg.digest;
+  if (d.provider === 'off') {
+    return {
+      id: 'digest',
+      label: tr('LLM özeti'),
+      status: 'info',
+      detail: tr('kapalı — her sayı yerel hesaplanıyor, hiçbir şey gönderilmiyor'),
+      fix: tr('Açmak istersen seçenekler için: vt digest providers'),
+    };
+  }
+  const base = d.base_url || bases[d.provider as 'anthropic' | 'openai' | 'ollama'] || '';
+  const model = d.model || models[d.provider];
+  const key = resolve(d.provider, d.api_key_env);
+  const egress = leaves({ provider: d.provider, model, baseUrl: d.base_url, apiKey: key.key });
+  const where = egress ? tr('veri makineden çıkar') : tr('veri makineden çıkmaz');
+  if (wants(d.provider, d.base_url) && key.key === null) {
+    return {
+      id: 'digest',
+      label: tr('LLM özeti'),
+      status: 'warn',
+      detail: `${d.provider} · ${model} · ${tr('anahtar yok')}`,
+      fix: t`${key.envName ?? tr('ortam değişkeni')} ayarla, ya da: vt digest key <anahtar>`,
+    };
+  }
+  return {
+    id: 'digest',
+    label: tr('LLM özeti'),
+    status: 'ok',
+    detail: `${d.provider} · ${model}${base ? ' · ' + base : ''} · ${where}`,
+  };
 }
 
 function checkDataDir(): Check {

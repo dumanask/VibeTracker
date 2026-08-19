@@ -27,6 +27,37 @@ function git(cwd: string, args: string[]): Promise<string | null> {
   });
 }
 
+/**
+ * Recent commit subjects, newest first.
+ *
+ * Subjects only. Never a diff, never a file, never a name or an address: a
+ * commit subject is a sentence the author wrote about their own work, which is
+ * the one part of a repository's history that is a claim rather than content.
+ * The digest sends these; nothing else from git goes with it.
+ */
+export async function readRecentCommits(
+  cwd: string,
+  limit = 20,
+): Promise<Array<{ subject: string; atMs: number }>> {
+  const raw = await git(cwd, [
+    'log',
+    `-n${Math.max(1, Math.min(200, limit))}`,
+    '--no-merges',
+    // NUL between fields so a subject containing anything at all is safe.
+    '--format=%ct%x00%s',
+  ]);
+  if (raw === null) return [];
+  const out: Array<{ subject: string; atMs: number }> = [];
+  for (const line of raw.split('\n')) {
+    if (!line) continue;
+    const [secs, subject] = line.split('\0');
+    const at = Number(secs) * 1000;
+    if (!Number.isFinite(at) || subject === undefined) continue;
+    out.push({ subject, atMs: at });
+  }
+  return out;
+}
+
 export interface GitFacts {
   toplevel: string;
   commonDir: string;

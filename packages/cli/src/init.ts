@@ -27,6 +27,7 @@ import { t, fmtAge, formatIssues, loadConfigText, tr } from '@vibetracker/core';
 import { DEFAULT_PORT } from '@vibetracker/daemon';
 import type { Config } from '@vibetracker/core';
 import { askText, choose, confirm, isInteractive } from './prompt.ts';
+import { DEFAULT_BASE, DEFAULT_KEY_ENV, DEFAULT_MODEL, needsKey } from '@vibetracker/engine';
 import { installHooks } from './hooks.ts';
 import { autostartStatus, installAutostart } from './autostart.ts';
 import { runDoctor } from './doctor.ts';
@@ -155,16 +156,53 @@ export async function runInit(args: InitArgs): Promise<number> {
     args.yes ? 'off' : 'http',
   );
 
+  // Whose model, not whether to use ours.
+  //
+  // The first version of this question offered "your Claude subscription" or
+  // "an API key", which assumed everyone running the tool is an Anthropic
+  // customer. Most are not. `openai` here is the wire format rather than the
+  // company — one `base_url` reaches OpenRouter, Groq, DeepSeek, Mistral, xAI,
+  // Together, LM Studio, vLLM and Gemini's compatibility endpoint — so the
+  // list is four real answers instead of one vendor and a fallback.
   const digestProvider = await choose<Config['digest']['provider']>(
     tr('LLM özeti (faz adı, blocker, sonraki adım) — varsayılan kapalı.'),
     [
       { value: 'off', label: tr('Kapalı (önerilen)'), detail: tr('yapısal motor tek başına çalışır; hiçbir veri makineden çıkmaz') },
-      { value: 'claude-cli', label: tr('Kendi Claude aboneliğim'), detail: tr('claude -p ile; anahtar istemez, kotandan yer') },
-      { value: 'api', label: tr('Kendi API anahtarım'), detail: tr('tipik ~$5-7/ay; anahtarı sonra config dosyasına yazarsın') },
-      { value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('veri makineden çıkmaz; kalite belirgin düşer') },
+      { value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('veri makineden çıkmaz; anahtar istemez; kalite belirgin düşer') },
+      { value: 'openai', label: tr('OpenAI uyumlu bir servis'), detail: tr('OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM… base_url ile hepsi') },
+      { value: 'anthropic', label: tr('Anthropic API'), detail: tr('tipik ~$5-7/ay; anahtarı ortam değişkeninde tutarsın') },
+      { value: 'claude-cli', label: tr('Makinemdeki claude komutu'), detail: tr('anahtar istemez, mevcut aboneliğinin kotasından yer') },
     ],
     'off',
   );
+
+  // Where, and with what. Only asked when the answer above was one that can
+  // point at more than one place — an `off` install should not be interrogated
+  // about endpoints it will never call.
+  let digestModel = '';
+  let digestBaseUrl = '';
+  let digestKeyEnv = '';
+  if (digestProvider === 'openai' || digestProvider === 'ollama' || digestProvider === 'anthropic') {
+    digestBaseUrl =
+      digestProvider === 'anthropic'
+        ? ''
+        : await askText(tr('  Adres (base_url)?'), DEFAULT_BASE[digestProvider]);
+    digestModel = await askText(tr('  Model?'), DEFAULT_MODEL[digestProvider]);
+    if (needsKey(digestProvider, digestBaseUrl)) {
+      digestKeyEnv = await askText(
+        tr('  Anahtarı hangi ortam değişkeni tutuyor?'),
+        DEFAULT_KEY_ENV[digestProvider] ?? '',
+      );
+      process.stdout.write(
+        t`  Anahtarın kendisi config'e yazılmaz. ${digestKeyEnv} değişkenini ayarla, ya da \`vt digest key\` ile 0600 bir dosyaya koy.
+`,
+      );
+    }
+    // The base_url is normalised to the default when the user just pressed
+    // enter, so the config file does not pin an address it did not need to.
+    if (digestBaseUrl === DEFAULT_BASE[digestProvider as 'openai' | 'ollama']) digestBaseUrl = '';
+    if (digestModel === DEFAULT_MODEL[digestProvider]) digestModel = '';
+  }
 
   const lan = await choose<'local' | 'lan'>(
     tr('Panele başka cihazlardan erişilsin mi?'),
@@ -207,6 +245,9 @@ export async function runInit(args: InitArgs): Promise<number> {
     bind,
     hooksMode: hooksMode === 'http' ? 'http' : 'off',
     digestProvider,
+    digestModel,
+    digestBaseUrl,
+    digestKeyEnv,
     agents: ['claude-code'],
   });
 

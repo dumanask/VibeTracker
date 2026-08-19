@@ -33,6 +33,7 @@ export {
   resolveProjectIdentity,
   type GitFacts,
   type ProjectIdentity,
+  readRecentCommits,
 } from './git.ts';
 export {
   findBrowser,

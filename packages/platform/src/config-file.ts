@@ -48,6 +48,10 @@ interface TemplateChoices {
   bind: string;
   hooksMode: 'http' | 'command' | 'off';
   digestProvider: Config['digest']['provider'];
+  /** Only asked about when the provider is one that can point somewhere else. */
+  digestModel?: string;
+  digestBaseUrl?: string;
+  digestKeyEnv?: string;
   agents: string[];
 }
 
@@ -91,10 +95,27 @@ mode = ${tomlValue(c.hooksMode)}
 high_fidelity = false
 
 [digest]
-# LLM özeti varsayılan KAPALI. Açarsan plan belgelerinin özeti modele gider.
-# off | claude-cli | api | ollama
+# LLM özeti varsayılan KAPALI. Açarsan plan belgelerinin *özeti* modele gider
+# -- plan dosyalarının kendisi, transcript, kod ve dosya içeriği asla.
+# Kapalıyken paneldeki her sayıyı yerel motor hesaplar; hiçbir şey makineden
+# çıkmaz.
+#
+#   off        : kapalı
+#   claude-cli : makinendeki "claude" komutu. Anahtar istemez, mevcut
+#                aboneliğine yazılır.
+#   anthropic  : Anthropic API'si
+#   openai     : OpenAI *biçimi*. base_url ile OpenRouter, Groq, DeepSeek,
+#                Mistral, xAI, Together, LM Studio, vLLM, llama.cpp ve
+#                Gemini'nin uyumluluk ucu -- hepsi bu.
+#   ollama     : makinendeki Ollama. Veri makineden çıkmaz.
 provider = ${tomlValue(c.digestProvider)}
-model = ''
+model = ${tomlValue(c.digestModel ?? '')}                    # boş = sağlayıcının varsayılanı
+base_url = ${tomlValue(c.digestBaseUrl ?? '')}                 # boş = sağlayıcının kendi adresi
+# Anahtarın KENDİSİ değil, anahtarı tutan ortam değişkeninin ADI. Bu dosya
+# yedeklenir, ekran görüntüsü alınır ve "vt doctor --bundle" tarafından
+# okunur; sır buraya yazılmaz. Boş bırakırsan sağlayıcının olağan değişkeni
+# denenir, sonra "vt digest key" ile yazdığın 0600 dosya.
+api_key_env = ${tomlValue(c.digestKeyEnv ?? '')}
 daily_usd_cap = ${d.digest.daily_usd_cap}
 per_project_min_interval_min = ${d.digest.per_project_min_interval_min}
 max_per_project_per_day = ${d.digest.max_per_project_per_day}

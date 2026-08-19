@@ -28,6 +28,8 @@ interface Args {
   signalWaiting: boolean;
   open: boolean;
   yes: boolean;
+  /** Build the payload and show it, but never send it. */
+  dryRun: boolean;
   highFidelity: boolean;
   port?: number;
   intervalMs?: number;
@@ -58,6 +60,7 @@ function parseArgs(argv: string[]): Args {
     quick: false,
     tailKb: 256,
     help: false,
+    dryRun: false,
     signalWaiting: false,
     open: false,
     yes: false,
@@ -129,6 +132,9 @@ function parseArgs(argv: string[]): Args {
         break;
       case '--open':
         args.open = true;
+        break;
+      case '--dry-run':
+        args.dryRun = true;
         break;
       case '-y':
       case '--yes':
@@ -267,6 +273,16 @@ Kullanım: vt daemon [stop]
   if (args.command === 'demo') {
     const { runDemo } = await import('./demo.ts');
     return runDemo({ huge: args.all, html: args.html, json: args.json });
+  }
+  if (args.command === 'digest') {
+    const { runDigestCmd } = await import('./digest.ts');
+    return runDigestCmd({
+      sub: args.sub,
+      operands: args.operands ?? [],
+      json: args.json,
+      yes: args.yes,
+      dryRun: args.dryRun,
+    });
   }
   if (args.command === 'board') {
     const { runBoard } = await import('./board.ts');

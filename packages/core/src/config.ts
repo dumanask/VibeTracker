@@ -83,8 +83,33 @@ export interface Config {
     high_fidelity: boolean;
   };
   digest: {
-    provider: 'off' | 'claude-cli' | 'api' | 'ollama';
+    /**
+     * Which model writes the summary — and, more to the point, whose.
+     *
+     * The first version of this offered "your Claude subscription" or "an API
+     * key", which quietly assumed everybody using the tool is an Anthropic
+     * customer. Most are not, and the ones who are may not want this
+     * particular job billed there.
+     *
+     * So the list is the shape of the market rather than one vendor's product
+     * line, and `openai` is deliberately not "OpenAI": it is the wire format
+     * that OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LM Studio,
+     * vLLM, llama.cpp and Gemini's compatibility endpoint all speak. Pointing
+     * `base_url` at one of those is the whole configuration.
+     */
+    provider: 'off' | 'claude-cli' | 'anthropic' | 'openai' | 'ollama';
     model: string;
+    /** Empty means the provider's own default. Set it to reach anything else. */
+    base_url: string;
+    /**
+     * The **name** of an environment variable holding the key, never the key.
+     *
+     * A config file is plain text a person edits, keeps in a backup and pastes
+     * into an issue, and `vt doctor --bundle` reads it. A secret has no
+     * business in any of those. Empty falls back to the provider's usual
+     * variable, and then to the 0600 key file `vt digest key` writes.
+     */
+    api_key_env: string;
     daily_usd_cap: number;
     per_project_min_interval_min: number;
     max_per_project_per_day: number;
@@ -146,6 +171,8 @@ export function defaultConfig(): Config {
     hooks: { mode: 'http', high_fidelity: false },
     digest: {
       provider: 'off',
+      base_url: '',
+      api_key_env: '',
       model: '',
       daily_usd_cap: 1.5,
       per_project_min_interval_min: 360,
@@ -200,7 +227,7 @@ const STRICT_SECTIONS = new Set(['privacy', 'security']);
 const ENUMS = {
   lang: ['tr', 'en'],
   hookMode: ['http', 'command', 'off'],
-  digestProvider: ['off', 'claude-cli', 'api', 'ollama'],
+  digestProvider: ['off', 'claude-cli', 'anthropic', 'openai', 'ollama'],
   projectDigest: ['inherit', 'off'],
   trackingMode: ['all', 'selected'],
 } as const;
@@ -385,11 +412,18 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
   r.unknown(digest, 'digest', [
     'provider',
     'model',
+    'base_url',
+    'api_key_env',
     'daily_usd_cap',
     'per_project_min_interval_min',
     'max_per_project_per_day',
     'preview_before_send',
   ]);
+  // `api` was what "bring your own key" was called when Anthropic was the only
+  // thing it could reach. Renaming it without accepting the old spelling would
+  // turn one `vt init` answer into a config error on the next upgrade, so it is
+  // read as what it always meant.
+  if (digest['provider'] === 'api') digest['provider'] = 'anthropic';
 
   const privacy = r.table(raw, 'privacy');
   r.unknown(privacy, 'privacy', [
@@ -452,6 +486,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
     digest: {
       provider: r.enum(digest, 'digest', 'provider', ENUMS.digestProvider, d.digest.provider),
       model: r.str(digest, 'digest', 'model', d.digest.model),
+      base_url: r.str(digest, 'digest', 'base_url', d.digest.base_url),
+      api_key_env: r.str(digest, 'digest', 'api_key_env', d.digest.api_key_env),
       daily_usd_cap: r.num(digest, 'digest', 'daily_usd_cap', d.digest.daily_usd_cap, { min: 0 }),
       per_project_min_interval_min: r.num(
         digest,

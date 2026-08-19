@@ -55,3 +55,4 @@ export {
   type AdapterNote,
 } from './agents/index.ts';
 export { type LineApplier, type TailTarget } from './tail.ts';
+export * from './digest/index.ts';
