@@ -25,6 +25,7 @@ import {
 import { interrupts, type SessionStateName, type StatusReport } from '@vibetracker/shared';
 import { Store, type MaintenanceResult, type StateChange } from './store.ts';
 import { DaemonServer } from './server.ts';
+import { bindWarning } from './security.ts';
 import { enableFileLog, log } from './log.ts';
 import { HookRing } from './hooks/ring.ts';
 import { HookIngest } from './hooks/ingest.ts';
@@ -213,6 +214,9 @@ export class Daemon {
       clients: this.#server.clientCount,
       rssMb: Math.round(process.memoryUsage().rss / 1048576),
       db: { path: this.#store.path, ...stats },
+      // `vt doctor` reads this, and a daemon reachable from the network should
+      // say so to the tool whose job is telling you what your install is doing.
+      bind: this.#opts.host,
       transcripts: this.#ctx.tail().stats(),
       hooks: this.hookHealth(),
       maintenance: this.#lastMaintenance,
@@ -674,6 +678,11 @@ export class Daemon {
           t`${this.#ring.dropped} hook events were dropped: the buffer filled. States may be incomplete.`,
         );
       }
+      // Repeated on every report rather than logged once at startup. Reaching
+      // the whole network is a decision worth being reminded of, and the
+      // reminder has to be where the user is looking.
+      const wide = bindWarning(this.#opts.host, this.#server.boundPort);
+      if (wide) report.warnings.push(wide);
 
       // Dwell timers come from the store, not from this scan: "waiting for 41
       // minutes" is only answerable because we remember when the state began.

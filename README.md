@@ -277,6 +277,13 @@ loopback — which is why checking `remoteAddress` alone proves nothing (DNS reb
 layers: loopback socket → `Host` allowlist → `Origin` allowlist → constant-time token. No
 CORS header is ever sent. All six scenarios are tested.
 
+**Reaching it from another machine** is `bind` under `[server]`, and it costs exactly one
+of those four layers — the socket check, which is the one you are asking to give up. The
+`Host` allowlist grows to this machine's own hostname and interface addresses and to
+nothing else, so an attacker's domain resolving to your address is still refused, and the
+token is still required. `vt doctor` says so as long as it stays that way, and so does
+every dashboard frame: a decision made once in a config file should not stop being visible.
+
 ### The phase engine — refusing to produce a number is a feature too
 
 The project card now has a line like `Stage 5 · phase 0/4 █████······ 33%`, and under it

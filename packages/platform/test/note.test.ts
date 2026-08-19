@@ -351,9 +351,30 @@ test('a model estimate is drawn as one, and only when nothing was counted', () =
   assert.match(source, /\$p\.progress\.percent\) \{[\s\S]{0,200}?\} elseif \(\$p\.digest/);
   // Amber, outlined, no glow.
   assert.match(source, /if \(r\.Guess\) \{[\s\S]{0,300}?new Pen\(Amber\)\)/);
-  // And the label says it is an estimate rather than a measurement.
-  assert.match(source, /r\.Approximate \|\| r\.Guess \? "~"/);
+  // And the label says it is an estimate rather than a measurement. The tilde
+  // is written once, in `Pct`, which is also the only place that knows which
+  // side of the number the percent sign goes on.
+  assert.match(source, /Pct\(r\.Percent, r\.Approximate \|\| r\.Guess\)/);
+  assert.match(source, /approximate \? "~" : ""/);
   assert.match(source, /r\.Guess \? Amber : Ink/);
+});
+
+/**
+ * `%42` in an English window.
+ *
+ * Photographed from the running note with the interface in English. Turkish
+ * writes `%99` and English writes `99%`; `fmtPercent` exists in the TypeScript
+ * for exactly that reason, and this window draws its own text in C# and so
+ * never went near it. The same three hardcoded signs were found on the
+ * dashboard when the source language flipped -- while Turkish was the source
+ * they had all been right by accident.
+ */
+test('the percent sign is placed by the caller, not by the window', () => {
+  // No sign is built into the drawing code any more.
+  assert.doesNotMatch(source, /"%" \+ \(int\)Math\.Round/);
+  // The template arrives with the rest of the words, and has a default that is
+  // right for the language this file is written in.
+  assert.match(source, /T\("percent", "\{0\}%"\)/);
 });
 
 /**

@@ -402,7 +402,7 @@ export function writeSparseTranscript(projectsDir: string, now: number, sizeByte
   mkdirSync(dir, { recursive: true });
   const path = join(dir, 'sess-huge.jsonl');
 
-  const head = line('summary', now - 30 * DAY, { summary: 'devasa oturum' });
+  const head = line('summary', now - 30 * DAY, { summary: 'a huge session' });
   const tail =
     line('user', now - 120_000, {
       cwd: '/huge',

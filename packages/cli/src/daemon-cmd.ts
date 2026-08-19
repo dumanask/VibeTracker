@@ -6,6 +6,7 @@ import {
   readRuntimeInfo,
   runtimeFilePath,
 } from '@vibetracker/daemon';
+import { loadConfig } from '@vibetracker/platform';
 import { t, tr } from '@vibetracker/core';
 
 export interface DaemonArgs {
@@ -14,11 +15,24 @@ export interface DaemonArgs {
   open: boolean;
 }
 
-/** Run the daemon in the foreground until interrupted. */
+/**
+ * Run the daemon in the foreground until interrupted.
+ *
+ * This is where `[server]` stops being a description and becomes the daemon's
+ * options. It used to be neither: `port`, `bind` and `interval_ms` were parsed
+ * and validated and then read by nothing, so `vt config check` printed an
+ * address the daemon had never been told about.
+ *
+ * A flag still beats the file -- `--port` is what you reach for when the file
+ * is the thing you are trying to work around -- and the file beats the
+ * built-in default.
+ */
 export async function runDaemon(args: DaemonArgs): Promise<number> {
+  const { config } = await loadConfig();
   const daemon = new Daemon({
-    port: args.port,
-    scanIntervalMs: args.intervalMs,
+    port: args.port ?? config.server.port,
+    host: config.server.bind,
+    scanIntervalMs: args.intervalMs ?? config.server.interval_ms,
   });
 
   try {

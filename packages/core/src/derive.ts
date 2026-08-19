@@ -59,6 +59,14 @@ export interface DerivedState {
  *    process tree separates those two, and only by age: a child spawned after
  *    the call began is the work, an older one is infrastructure (MCP servers
  *    live for the whole session, so "has children" alone means nothing).
+ *
+ * 3. ...but the converse of that is absolute, and cheap. A process blocked on
+ *    a prompt burns nothing. So cpu can never *prove* a permission gate and can
+ *    always *refute* one, and it is consulted before every branch that would
+ *    claim one. Measured: a session running a test suite at 20% cpu was called
+ *    WAITING_PERMISSION three times in ten minutes, because the tree said no
+ *    child had started since the call -- true, and irrelevant, because the work
+ *    was not a descendant of the pid we were watching.
  */
 export function deriveState(input: DeriveInput): DerivedState {
   const { liveness, facts, cpuPct, descendants, prevState, now } = input;
@@ -100,8 +108,9 @@ export function deriveState(input: DeriveInput): DerivedState {
 
     // A tool that finishes in milliseconds does not stay open for half a
     // minute. When one does, the agent is not slow — it is sitting on a
-    // permission prompt. No process tree is needed to know this.
-    if (toolClass === 'local-instant' && ageMs > LOCAL_TOOL_PERMISSION_MS) {
+    // permission prompt. No process tree is needed to know this, only the
+    // certainty that a blocked process is not also a running one.
+    if (!busyCpu && toolClass === 'local-instant' && ageMs > LOCAL_TOOL_PERMISSION_MS) {
       evidence.push(t`perm:local tool open for ${fmtAge(ageMs)}, should finish in milliseconds`);
       return {
         state: SessionState.WaitingPermission,
@@ -134,7 +143,7 @@ export function deriveState(input: DeriveInput): DerivedState {
           };
         }
         return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.9, evidence };
-      } else if (ageMs > SPAWN_GRACE_MS) {
+      } else if (ageMs > SPAWN_GRACE_MS && !busyCpu) {
         evidence.push(
           descendants.total > 0
             ? t`perm:no new descendants (${descendants.total} older ones, probably MCP)`

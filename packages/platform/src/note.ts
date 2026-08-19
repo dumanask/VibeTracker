@@ -126,6 +126,15 @@ export interface NoteLabels {
   speakWaitingAlt: string;
   speakManyAlt: string;
   /** Said by the strip, not by the voice: which voice answered, and whether it fits. */
+  /**
+   * Where the percent sign goes, as a template with `{0}` for the number.
+   *
+   * Turkish writes `%99` and English writes `99%`. Handed over rather than
+   * decided here for the same reason every other word is: this window renders
+   * what it is given, and a second place that decides how a number looks is a
+   * second place that can be wrong about it.
+   */
+  percent: string;
   voiceNone: string;
   voiceMismatch: string;
   /**
@@ -148,17 +157,20 @@ export interface NoteLabels {
 }
 
 export interface StartNoteOptions {
-  url: string;
-  token: string;
   /**
-   * Where the daemon publishes the port and token it is using now.
+   * Where the daemon publishes the port and token it is using.
    *
-   * The window is handed both at launch, which is enough for as long as the
-   * daemon that published them keeps running -- and no longer. Passing the file
-   * as well lets a window that has been refused go and look again instead of
-   * spending the rest of its life talking to a daemon that no longer exists.
+   * The only channel. The window used to be handed the url and the token as
+   * arguments as well, which put the token in the process table -- readable by
+   * everything on the machine, for as long as the window stayed open, which is
+   * all day. This product refuses to put a secret on a command line everywhere
+   * else and this was the exception.
+   *
+   * Nothing was lost by removing them: the window already read this file after
+   * a refusal, because a note that cannot follow a daemon restart is a note
+   * that goes quietly dead overnight. Now it reads it at startup too.
    */
-  runtimePath?: string;
+  runtimePath: string;
   labels: NoteLabels;
   shape?: NoteShape;
   /**
@@ -214,22 +226,23 @@ export function startNote(opts: StartNoteOptions): StartNoteResult {
     return { ok: false, reason: 'failed' };
   }
 
+  // No secret here, by construction. Everything on this list is a path or a
+  // two-letter language tag, and the whole list is repeated inside the
+  // launcher's `-Command` string below -- which is the second place it would
+  // have shown up in the process table.
   const inner = [
     '-NoProfile',
     '-ExecutionPolicy',
     'Bypass',
     '-File',
     NOTE_SCRIPT,
-    '-Url',
-    opts.url,
-    '-Token',
-    opts.token,
+    '-RuntimePath',
+    opts.runtimePath,
     '-StatePath',
     noteWindowStatePath(),
     '-LabelsPath',
     noteLabelsPath(),
   ];
-  if (opts.runtimePath) inner.push('-RuntimePath', opts.runtimePath);
   if (opts.shape) inner.push('-Mode', opts.shape);
   if (opts.lang) inner.push('-Lang', opts.lang);
   if (opts.langAlt) inner.push('-LangAlt', opts.langAlt);

@@ -566,6 +566,20 @@ async function checkDaemon(): Promise<Check[]> {
           (health.lastError ? t` · last error: ${health.lastError}` : ''),
       },
     ];
+
+    // Reaching the network is exactly the kind of thing a person runs
+    // `vt doctor` to find out about, and exactly the kind of thing a config
+    // file set months ago stops reminding them of.
+    const bind = typeof health.bind === 'string' ? health.bind : '127.0.0.1';
+    if (bind !== '127.0.0.1' && bind !== 'localhost' && bind !== '::1') {
+      out.push({
+        id: 'bind',
+        label: tr('Reach'),
+        status: 'warn',
+        detail: t`listening on ${bind} — anyone on this network can reach the dashboard`,
+        fix: tr('for this machine only, set bind = "127.0.0.1" under [server]'),
+      });
+    }
     if (tail) {
       out.push({
         id: 'tail-cache',

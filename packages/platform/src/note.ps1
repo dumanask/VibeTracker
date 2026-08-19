@@ -13,8 +13,17 @@
 # tracked -- was decided by the engine and is drawn here verbatim. When the
 # rules change, they change in one place and this follows without being edited.
 param(
-  [Parameter(Mandatory = $true)][string]$Url,
-  [Parameter(Mandatory = $true)][string]$Token,
+  # Where the daemon publishes the port and token it is currently using.
+  #
+  # The only source of either. They used to arrive as arguments, which put the
+  # token in the process table for as long as this window stayed open -- and
+  # this window is meant to stay open all day. Reading them from a file costs
+  # one file read at startup and nothing after that, because this script had to
+  # be able to re-read the file anyway: the daemon can move port, and it can be
+  # reinstalled underneath a window that is still up. Re-reading after a
+  # refusal turns "the post-it went dead at some point last night" into a
+  # two-second gap.
+  [Parameter(Mandatory = $true)][string]$RuntimePath,
   [string]$StatePath = '',
   # Every visible word comes from here. The file is written by the CLI from
   # the same catalog the terminal and the dashboard use, which is what keeps
@@ -29,16 +38,7 @@ param(
   # voice speaks `-Lang`: the sentence is then said in this one, because a
   # voice that cannot pronounce the interface language will mangle it, and a
   # correctly-read English line beats a mauled Turkish one.
-  [string]$LangAlt = '',
-  # Where the daemon publishes the port and token it is currently using.
-  #
-  # The window is launched with both as arguments, and for the length of one
-  # daemon that is enough. It is not enough for the length of one *window*: the
-  # daemon rotates nothing now, but it can move port, and it can be reinstalled
-  # under this window while the window is still up. Re-reading the file after a
-  # refusal costs one file read on a path that was already failing, and turns
-  # "the post-it went dead at some point last night" into a two-second gap.
-  [string]$RuntimePath = ''
+  [string]$LangAlt = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -264,6 +264,14 @@ public class Note : Form {
   string T(string key, string fallback) {
     string v;
     return L.TryGetValue(key, out v) && v.Length > 0 ? v : fallback;
+  }
+
+  /// <summary>A percentage, with the sign on whichever side this language
+  /// puts it. The template comes from the CLI: Turkish is "%{0}", English is
+  /// "{0}%", and this window is not the place that knows which.</summary>
+  string Pct(double value, bool approximate) {
+    string body = T("percent", "{0}%").Replace("{0}", ((int)Math.Round(value)).ToString());
+    return (approximate ? "~" : "") + body;
   }
 
   public List<Row> Rows = new List<Row>();
@@ -863,7 +871,7 @@ public class Note : Form {
     SizeF ls = g.MeasureString(label, fSmall);
     g.DrawString(label, fSmall, new SolidBrush(Dim), PadX, y + (h - ls.Height) / 2f);
 
-    string pct = LoadPercent < 0 ? "\u2014" : "%" + (int)Math.Round(LoadPercent);
+    string pct = LoadPercent < 0 ? "\u2014" : Pct(LoadPercent, false);
     SizeF ps = g.MeasureString(pct, fMono);
     float px = ClientSize.Width - PadX - ps.Width;
     g.DrawString(pct, fMono, new SolidBrush(LoadPercent < 0 ? Dim : Ink), px, y + (h - ps.Height) / 2f);
@@ -1056,7 +1064,7 @@ public class Note : Form {
 
   string PctText(Row r) {
     if (r.Percent < 0) return "\u2014";
-    return (r.Approximate || r.Guess ? "~" : "") + "%" + (int)Math.Round(r.Percent);
+    return Pct(r.Percent, r.Approximate || r.Guess);
   }
 
   /// <summary>One string, vertically centred in the row band.</summary>
@@ -1368,7 +1376,13 @@ $note.OnSpeakToggle = [Action] {
 }
 $note.OnOpenFull = [Action] {
   # The full dashboard is the browser's job; the note never grows into it.
-  try { Start-Process $Url } catch { }
+  #
+  # This is the one place the token unavoidably reaches a command line, and it
+  # is not ours: a browser cannot be handed a header, so the dashboard url
+  # carries `?t=`, exactly as `vt open` does. The difference from what this
+  # script used to do is lifetime -- a browser launch is a moment, a pinned
+  # note is a working day.
+  try { Start-Process ($script:base + '/?t=' + [uri]::EscapeDataString($script:token)) } catch { }
 }
 $note.Add_FormClosing({ Save-State })
 
@@ -1566,10 +1580,13 @@ function Announce($rows) {
 # Plain polling, not SSE: this is a readout that redraws twice a second at
 # most, and a streaming client here would be more code holding more state for
 # no visible difference.
-$script:token = $Token
-$script:base = ($Url -replace '\?.*$', '').TrimEnd('/')
-$script:headers = @{ 'X-VT-Token' = $script:token }
-$script:api = $script:base + '/api/v1/overview'
+# Read once here and re-read on every refusal; see `Reconnect-Daemon`. Empty
+# until the first read succeeds, which the poll loop already handles as "no
+# daemon" -- the same state as a daemon that is simply not running.
+$script:token = ''
+$script:base = ''
+$script:headers = @{}
+$script:api = ''
 $script:noticeTicks = 0
 
 # Re-read the daemon's published port and token.
@@ -1578,7 +1595,6 @@ $script:noticeTicks = 0
 # "there is a new daemon, try again" from "the daemon is simply down" without
 # retrying in a loop.
 function Reconnect-Daemon {
-  if (-not $RuntimePath) { return $false }
   try {
     $rt = Get-Content -LiteralPath $RuntimePath -Raw -ErrorAction Stop | ConvertFrom-Json
   } catch { return $false }
@@ -1591,6 +1607,11 @@ function Reconnect-Daemon {
   $script:api = $script:base + '/api/v1/overview'
   return $true
 }
+
+# The first read. A failure here is not fatal: the window opens, says it cannot
+# find a daemon, and keeps trying -- which is the same thing it does when the
+# daemon stops later, so there is one code path rather than two.
+[void](Reconnect-Daemon)
 
 # One GET, with a single reconnect-and-retry when it fails.
 function Get-Api([string]$path, [int]$timeout = 4) {

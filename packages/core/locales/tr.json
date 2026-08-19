@@ -872,5 +872,10 @@
   "removed": "silindi",
   "kept": "korundu",
   "was not there": "yoktu",
-  "FAILED": "HATA"
+  "FAILED": "HATA",
+  "Origin refused": "Origin reddedildi",
+  "the dashboard is listening on {0}:{1} — anyone on this network can reach it": "panel {0}:{1} üzerinde dinliyor — bu ağdaki herkes erişebilir",
+  "Reach": "Erişim",
+  "listening on {0} — anyone on this network can reach the dashboard": "{0} üzerinde dinliyor — bu ağdaki herkes panele erişebilir",
+  "for this machine only, set bind = \"127.0.0.1\" under [server]": "yalnızca bu makine için [server] altında bind = \"127.0.0.1\" yapın"
 }

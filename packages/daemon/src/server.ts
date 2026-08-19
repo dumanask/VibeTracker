@@ -230,7 +230,7 @@ export class DaemonServer {
     // now sends the token it finds there; anything that cannot is answered with
     // exactly what the comment always promised.
     if (path === '/api/v1/health') {
-      const known = guard(req, url, this.boundPort, this.#deps.token);
+      const known = guard(req, url, this.boundPort, this.#deps.token, this.#deps.host);
       const id = { ok: true, daemonId: this.#deps.daemonId, version: this.#deps.version };
       return json(res, 200, known.ok ? { ...id, ...this.#deps.health() } : id);
     }
@@ -245,7 +245,7 @@ export class DaemonServer {
     // they differ when a test binds port 0 and lets the OS choose, and a guard
     // that checked the configured port would reject every request in exactly
     // the setup that exercises it.
-    const g = guard(req, url, this.boundPort, this.#deps.token);
+    const g = guard(req, url, this.boundPort, this.#deps.token, this.#deps.host);
     if (!g.ok) return json(res, g.status ?? 403, { error: g.reason });
 
     if (path === '/' || path === '/index.html') {

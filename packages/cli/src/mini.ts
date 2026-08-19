@@ -24,7 +24,7 @@ import {
   type NoteShape,
 } from '@vibetracker/platform';
 import { readRuntimeInfo, runtimeFilePath } from '@vibetracker/daemon';
-import { getLang, t, tr, trInto, type Lang } from '@vibetracker/core';
+import { fmtPercent, getLang, t, tr, trInto, type Lang } from '@vibetracker/core';
 import { dashboardUrl } from './daemon-cmd.ts';
 
 export interface MiniArgs {
@@ -106,6 +106,9 @@ function noteLabels(): NoteLabels {
     // wrong: only the window can see which voices are installed.
     speakWaitingAlt: trInto(altLang(), 'is now waiting for you'),
     speakManyAlt: trInto(altLang(), 'projects are now waiting for you'),
+    // `fmtPercent` is the authority on which side the sign goes; asked here
+    // with a stand-in number so the window gets the shape, not one answer.
+    percent: fmtPercent(0).replace('0', '{0}'),
     voiceNone: tr('no voice'),
     voiceMismatch: tr('language mismatch'),
     // Shown in the title strip while the pointer rests on a button.
@@ -156,8 +159,8 @@ export async function runMini(args: MiniArgs): Promise<number> {
       return 0;
     }
     const started = startNote({
-      url: dashboardUrl(info.port, info.token),
-      token: info.token,
+      // Neither the url nor the token is handed over: both live in the runtime
+      // file the window is pointed at, so neither reaches a command line.
       runtimePath: runtimeFilePath(),
       labels: noteLabels(),
       shape: args.shape,
