@@ -452,7 +452,7 @@ export class Store {
           );
 
           const prev = readState.get(s.sessionId) as
-            | { state: string; sub_reason: string | null; since_ts: number }
+            | { state: SessionStateName; sub_reason: string | null; since_ts: number }
             | undefined;
           const subReason = s.openTools[0] ? `tool:${s.openTools[0]}` : null;
 
@@ -850,8 +850,10 @@ export interface MaintenanceResult {
 export interface StateChange {
   sessionId: string;
   projectId: string;
-  from: string | null;
-  to: string;
+  // Named states, not free strings: `interrupts()` has to ask what this is,
+  // and a cast at the one place that asks is a type that gave up.
+  from: SessionStateName | null;
+  to: SessionStateName;
   subReason: string | null;
   dwellMs: number | null;
 }

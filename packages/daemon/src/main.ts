@@ -127,7 +127,7 @@ export class Daemon {
    * again. Bounded by the sessions the daemon has seen and pruned by
    * maintenance; see `#emitChange` for what it is defending against.
    */
-  #alerted = new Map<string, string>();
+  #alerted = new Map<string, SessionStateName>();
   #momentum = new Momentum();
   #hooks = new HookIngest();
   #oversize = 0;
@@ -809,7 +809,7 @@ export class Daemon {
     // surface. This used to include STALLED, which the dashboard then filtered
     // out again -- so the daemon's idea of "worth interrupting for" and the
     // dashboard's disagreed, and each new surface picked one at random.
-    if (!interrupts(c.to as SessionStateName)) return;
+    if (!interrupts(c.to)) return;
 
     // Once is enough.
     //
