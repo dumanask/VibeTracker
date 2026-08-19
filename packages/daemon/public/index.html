@@ -1266,6 +1266,8 @@ function llmLabel(id) {
   if (id === 'ollama') return [tr('Ollama'), tr('bu makinedeki model; anahtar istemez, veri çıkmaz')];
   if (id === 'claude-cli') return [tr('claude komutu'), tr('anahtar istemez; mevcut aboneliğinin kotasından yer')];
   if (id === 'codex-cli') return [tr('codex komutu'), tr('anahtar istemez; Codex aboneliğinin kotasından yer')];
+  if (id === 'opencode-cli') return [tr('opencode komutu'), tr('anahtar istemez; opencode aboneliğinin kotasından yer')];
+  if (id === 'gemini-cli') return [tr('gemini komutu'), tr('anahtar istemez; Google hesabının kotasından yer')];
   if (id === 'openai') return [tr('OpenAI uyumlu'), tr('adresle OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
   if (id === 'anthropic') return [tr('Anthropic API'), tr('anahtar gerekir')];
   return [id, ''];

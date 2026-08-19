@@ -104,7 +104,16 @@ export interface Config {
      * command left to the user, so a program nobody here has heard of still
      * works.
      */
-    provider: 'off' | 'claude-cli' | 'codex-cli' | 'cli' | 'anthropic' | 'openai' | 'ollama';
+    provider:
+      | 'off'
+      | 'claude-cli'
+      | 'codex-cli'
+      | 'opencode-cli'
+      | 'gemini-cli'
+      | 'cli'
+      | 'anthropic'
+      | 'openai'
+      | 'ollama';
     model: string;
     /** Empty means the provider's own default. Set it to reach anything else. */
     base_url: string;
@@ -247,7 +256,17 @@ const STRICT_SECTIONS = new Set(['privacy', 'security']);
 const ENUMS = {
   lang: ['tr', 'en'],
   hookMode: ['http', 'command', 'off'],
-  digestProvider: ['off', 'claude-cli', 'codex-cli', 'cli', 'anthropic', 'openai', 'ollama'],
+  digestProvider: [
+    'off',
+    'claude-cli',
+    'codex-cli',
+    'opencode-cli',
+    'gemini-cli',
+    'cli',
+    'anthropic',
+    'openai',
+    'ollama',
+  ],
   projectDigest: ['inherit', 'off'],
   trackingMode: ['all', 'selected'],
 } as const;

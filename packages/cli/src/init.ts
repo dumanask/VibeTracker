@@ -173,6 +173,8 @@ export async function runInit(args: InitArgs): Promise<number> {
   // decides what is worth putting in front of somebody on their first run.
   const hasClaude = hasCommand('claude');
   const hasCodex = hasCommand('codex');
+  const hasOpencode = hasCommand('opencode');
+  const hasGemini = hasCommand('gemini');
   const hasOllama = hasCommand('ollama');
   const options: Array<{ value: Config['digest']['provider']; label: string; detail: string }> = [
     { value: 'off', label: tr('Kapalı (önerilen)'), detail: tr('yapısal motor tek başına çalışır; hiçbir veri makineden çıkmaz') },
@@ -185,6 +187,12 @@ export async function runInit(args: InitArgs): Promise<number> {
   }
   if (hasCodex) {
     options.push({ value: 'codex-cli', label: tr('Makinemdeki codex komutu — kurulu'), detail: tr('anahtar istemez, Codex aboneliğinin kotasından yer') });
+  }
+  if (hasOpencode) {
+    options.push({ value: 'opencode-cli', label: tr('Makinemdeki opencode komutu — kurulu'), detail: tr('anahtar istemez, opencode aboneliğinin kotasından yer') });
+  }
+  if (hasGemini) {
+    options.push({ value: 'gemini-cli', label: tr('Makinemdeki gemini komutu — kurulu'), detail: tr('anahtar istemez, Google hesabının kotasından yer') });
   }
   if (!hasOllama) {
     options.push({ value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('kurulu değil; kurarsan veri makineden hiç çıkmaz') });

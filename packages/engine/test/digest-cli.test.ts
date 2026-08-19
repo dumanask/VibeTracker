@@ -61,6 +61,21 @@ const REQ = {
   timeoutMs: 30_000,
 };
 
+test('an empty argument survives the shell it has to cross', async () => {
+  // Found by running it. On Windows a `.cmd` shim needs a shell, so Node is
+  // handed one string and each argument is quoted into it — and an empty
+  // string matched nothing that looked like it needed quoting, so it was
+  // written as nothing and ceased to be an argument at all.
+  //
+  // That is not a corner case here: `gemini --prompt ""` is what puts that CLI
+  // into headless mode. With the empty value gone the flag arrived without
+  // one, the program printed its usage and exited 1, and the whole thing
+  // surfaced as "the model failed".
+  const cfg = nodeCli('process.stdout.write(JSON.stringify(process.argv.slice(1)))', ['', 'SON']);
+  const reply = await chat(cfg, REQ);
+  assert.deepEqual(JSON.parse(reply.text), ['', 'SON']);
+});
+
 test('egress has three answers, because one of the providers is not ours', () => {
   const of = (provider: ProviderConfig['provider'], baseUrl = ''): string =>
     egress({ provider, model: '', baseUrl, apiKey: null });

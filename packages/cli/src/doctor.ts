@@ -9,6 +9,7 @@ import {
   scan,
   ScanContext,
   type DetectResult,
+  cliProgram,
 } from '@vibetracker/engine';
 import {
   claudeDir,
@@ -441,7 +442,7 @@ async function checkDigest(): Promise<Check> {
   // summary. It is exactly what a doctor is for.
   if (cli) {
     const exe =
-      d.provider === 'claude-cli' ? 'claude' : d.provider === 'codex-cli' ? 'codex' : d.command.trim();
+      cliProgram(d);
     const path = exe ? which(exe) : null;
     if (!exe) {
       return {

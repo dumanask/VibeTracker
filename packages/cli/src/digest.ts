@@ -26,6 +26,8 @@ import {
   ScanContext,
   buildPayload,
   clearKeyFile,
+  cliCommandLine,
+  cliProgram,
   egress,
   isCliProvider,
   isLocal,
@@ -87,13 +89,6 @@ function baseFor(d: { provider: ProviderId; base_url: string }): string {
   return d.base_url || DEFAULT_BASE[d.provider];
 }
 
-/** What a CLI provider will actually run, as one line. */
-function commandLine(p: ProviderConfig): string {
-  if (p.provider === 'claude-cli') return 'claude -p';
-  if (p.provider === 'codex-cli') return 'codex exec';
-  return [p.command ?? '', ...(p.args ?? [])].filter(Boolean).join(' ');
-}
-
 /**
  * The egress line, in the three words that matter.
  *
@@ -130,13 +125,7 @@ async function showProviders(json: boolean): Promise<number> {
   // A CLI provider is only ready if the program is there. This is the failure
   // that would otherwise surface as a stack trace at the end of a minute of
   // waiting, on the one command that costs the user something.
-  const exe = isCliProvider(d.provider)
-    ? d.provider === 'claude-cli'
-      ? 'claude'
-      : d.provider === 'codex-cli'
-        ? 'codex'
-        : d.command.trim()
-    : '';
+  const exe = cliProgram(d);
   const exePath = exe ? whichCommand(exe) : null;
   const ready =
     d.provider === 'off'
@@ -175,7 +164,7 @@ async function showProviders(json: boolean): Promise<number> {
     if (model) out.push(`    ${tr('model')}       ${model}`);
     if (base) out.push(`    ${tr('adres')}       ${base}`);
     if (isCliProvider(d.provider)) {
-      out.push(`    ${tr('komut')}       ${commandLine(p) || red(tr('yazılmamış'))}`);
+      out.push(`    ${tr('komut')}       ${cliCommandLine(p) || red(tr('yazılmamış'))}`);
       out.push(
         exePath === null
           ? `    ${red(tr('bulunamadı'))}  ${exe ? t`"${exe}" PATH'te yok` : tr('[digest] command boş')}`
@@ -209,6 +198,8 @@ async function showProviders(json: boolean): Promise<number> {
   out.push(`    ollama      ${tr('makinendeki model; anahtar yok, veri çıkmaz')}${mark('ollama')}`);
   out.push(`    claude-cli  ${tr('makinendeki claude komutu; aboneliğinin kotasından yer')}${mark('claude')}`);
   out.push(`    codex-cli   ${tr('makinendeki codex komutu; Codex aboneliğinden yer')}${mark('codex')}`);
+  out.push(`    opencode-cli ${tr('makinendeki opencode komutu; onun aboneliğinden yer')}${mark('opencode')}`);
+  out.push(`    gemini-cli  ${tr('makinendeki gemini komutu; Google hesabından yer')}${mark('gemini')}`);
   out.push(`    cli         ${tr('başka herhangi bir komut — command + args ile')}`);
   out.push(`    openai      ${tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')}`);
   out.push(`    anthropic   ${tr('Anthropic API')}`);
@@ -394,7 +385,7 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
     // happens next is a program of the user's choosing, and approving a send
     // without seeing the command would be approving half the decision.
     if (isCliProvider(provider.provider)) {
-      head.push(`  ${tr('komut')}      ${commandLine(provider)}`);
+      head.push(`  ${tr('komut')}      ${cliCommandLine(provider)}`);
     }
   }
   head.push(t`  yük        ${payload.tokens} token · ${payload.system.length + payload.user.length} karakter`);
@@ -428,7 +419,10 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   // either way, but this one arrives before the confirmation prompt instead of
   // after it.
   if (isCliProvider(provider.provider)) {
-    const exe = commandLine(provider).split(' ')[0] ?? '';
+    // The program, asked for directly. Splitting the display line off the
+    // front of a preview worked while every preset's first word happened to be
+    // its program, which is a coincidence rather than a rule.
+    const exe = cliProgram(provider);
     if (!exe) {
       process.stderr.write(tr('\nÇalıştırılacak komut yazılmamış: [digest] command\n'));
       return 3;

@@ -28,6 +28,8 @@ import {
   DEFAULT_KEY_ENV,
   DEFAULT_MODEL,
   SELECTABLE_PROVIDERS,
+  cliCommandLine,
+  cliProgram,
   egress,
   isCliProvider,
   keyFilePath,
@@ -112,24 +114,11 @@ export interface DigestView {
   options: DigestOption[];
 }
 
-/** The program a CLI provider runs, or empty for the ones that open a socket. */
-function programOf(d: DigestConfigSlice): string {
-  if (d.provider === 'claude-cli') return 'claude';
-  if (d.provider === 'codex-cli') return 'codex';
-  if (d.provider === 'cli') return d.command.trim();
-  return '';
-}
-
-/** What a CLI provider will actually run, as one line. Mirrors `vt digest`. */
-function commandLineOf(d: DigestConfigSlice): string {
-  if (d.provider === 'claude-cli') return 'claude -p';
-  if (d.provider === 'codex-cli') return 'codex exec';
-  if (d.provider === 'cli') return [d.command, ...d.args].filter(Boolean).join(' ');
-  return '';
-}
-
 function optionFor(id: ProviderId): DigestOption {
-  const program = id === 'claude-cli' ? 'claude' : id === 'codex-cli' ? 'codex' : id === 'ollama' ? 'ollama' : '';
+  // `ollama` is the one non-CLI provider with a program worth looking for:
+  // its server is normally installed alongside a command of the same name,
+  // and "you have not installed it" is the useful thing to say about it.
+  const program = id === 'ollama' ? 'ollama' : cliProgram({ provider: id });
   return {
     id,
     installed: program ? whichCommand(program) !== null : null,
@@ -146,7 +135,7 @@ function optionFor(id: ProviderId): DigestOption {
 
 export function digestView(d: DigestConfigSlice): DigestView {
   const key = resolveKey(d.provider, d.api_key_env);
-  const program = programOf(d);
+  const program = cliProgram(d);
   const commandPath = program ? whichCommand(program) : null;
   const wantsKey = d.provider !== 'off' && needsKey(d.provider, d.base_url);
   const baseUrlEffective =
@@ -174,7 +163,7 @@ export function digestView(d: DigestConfigSlice): DigestView {
     baseUrlEffective,
     keyEnvDefault: DEFAULT_KEY_ENV[d.provider],
     command: d.provider === 'cli' ? d.command : '',
-    commandLine: commandLineOf(d),
+    commandLine: cliCommandLine(d),
     commandPath,
     needsKey: wantsKey,
     key: {

@@ -864,5 +864,15 @@
   "Adres http:// veya https:// olmalı.": "The address must be http:// or https://.",
   "Ortam değişkeni adı geçersiz.": "Invalid environment variable name.",
   "Buraya anahtarın kendisi değil, onu tutan ortam değişkeninin adı yazılır.": "This field takes the name of the environment variable holding the key, not the key itself.",
-  "  Değiştirmek için: panodaki \"LLM özeti\" bölümü — ya da config dosyası: vt config path": "  To change it: the \"LLM summary\" section on the dashboard — or the config file: vt config path"
+  "  Değiştirmek için: panodaki \"LLM özeti\" bölümü — ya da config dosyası: vt config path": "  To change it: the \"LLM summary\" section on the dashboard — or the config file: vt config path",
+  "makinendeki opencode komutu; onun aboneliğinden yer": "the opencode command on your machine; eats its own subscription quota",
+  "makinendeki gemini komutu; Google hesabından yer": "the gemini command on your machine; eats your Google account quota",
+  "Makinemdeki opencode komutu — kurulu": "The opencode command on my machine — installed",
+  "anahtar istemez, opencode aboneliğinin kotasından yer": "needs no key, eats your opencode subscription quota",
+  "Makinemdeki gemini komutu — kurulu": "The gemini command on my machine — installed",
+  "anahtar istemez, Google hesabının kotasından yer": "needs no key, eats your Google account quota",
+  "opencode komutu": "the opencode command",
+  "anahtar istemez; opencode aboneliğinin kotasından yer": "needs no key; eats your opencode subscription quota",
+  "gemini komutu": "the gemini command",
+  "anahtar istemez; Google hesabının kotasından yer": "needs no key; eats your Google account quota"
 }

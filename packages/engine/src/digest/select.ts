@@ -43,6 +43,8 @@ export const SELECTABLE_PROVIDERS: readonly ProviderId[] = [
   'ollama',
   'claude-cli',
   'codex-cli',
+  'opencode-cli',
+  'gemini-cli',
   'openai',
   'anthropic',
 ];

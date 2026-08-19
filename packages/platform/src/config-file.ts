@@ -108,6 +108,8 @@ high_fidelity = false
 #   claude-cli : makinendeki "claude" komutu. Anahtar istemez, mevcut
 #                aboneliğine yazılır.
 #   codex-cli  : makinendeki "codex" komutu. Aynısı, Codex aboneliğiyle.
+#   opencode-cli : makinendeki "opencode" komutu. Aynısı, onun aboneliğiyle.
+#   gemini-cli : makinendeki "gemini" komutu. Aynısı, Google hesabınla.
 #   cli        : başka herhangi bir komut -- aşağıdaki "command" ve "args".
 #                gemini, opencode, aider, kendi betiğin... ne kuruluysa.
 #   anthropic  : Anthropic API'si

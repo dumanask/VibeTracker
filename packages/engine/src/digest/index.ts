@@ -1,6 +1,10 @@
 export {
   chat,
+  cliCommandLine,
+  cliProgram,
   codexArgs,
+  geminiArgs,
+  opencodeArgs,
   egress,
   isCliProvider,
   isLocal,
@@ -9,6 +13,7 @@ export {
   substituteArgs,
   ProviderError,
   CLI_PLACEHOLDERS,
+  CLI_PROGRAM,
   CLI_PROVIDERS,
   DEFAULT_BASE,
   DEFAULT_KEY_ENV,
