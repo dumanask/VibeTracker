@@ -758,7 +758,7 @@ function progressRow(p, digest) {
   if (p.phase) {
     const total = p.phase.total > p.phase.ordinal ? ' / ' + p.phase.total : '';
     const sub = p.phase.sub ? ' · ' + esc(p.phase.sub) : '';
-    bits.push(`<span class="phase" title="kaynak: ${esc(p.phase.basis)}">${esc(p.phase.labelRaw)}${total}${sub}</span>`);
+    bits.push(`<span class="phase" title="${tr('source')}: ${esc(p.phase.basis)}">${esc(p.phase.labelRaw)}${total}${sub}</span>`);
   }
   if (guessPhase) {
     const pos = guessPhase.phaseIndex !== null && guessPhase.phaseTotal
@@ -775,7 +775,7 @@ function progressRow(p, digest) {
     // measurement of anything and reading it as one is the failure the whole
     // percentage engine is arranged to avoid.
     bits.push(`<span class="bar guess"><i style="width:${segWidth(guessPct.percentEstimate)}%"></i></span>`);
-    bits.push(`<span class="pct guess" title="${esc(guessPct.provider + ' · ' + guessPct.model)}">~%${segWidth(guessPct.percentEstimate)}</span>`);
+    bits.push(`<span class="pct guess" title="${esc(guessPct.provider + ' · ' + guessPct.model)}">${fmtPercent(segWidth(guessPct.percentEstimate), true)}</span>`);
   } else {
     bits.push('<span class="bar none"></span><span class="pct">—</span>');
     if (p.percentSuppressed) bits.push(`<span class="noprog">${esc(say(p.percentSuppressed))}</span>`);
@@ -812,7 +812,7 @@ function digestBlock(d) {
   }
   if (d.summary) rows.push(`<div class="dg-sum">${esc(d.summary)}</div>`);
   if (d.percentEstimate !== null && d.percentEstimate !== undefined) {
-    rows.push(`<div class="dg-line"><b>${tr('progress')}</b> ~%${esc(String(d.percentEstimate))}
+    rows.push(`<div class="dg-line"><b>${tr('progress')}</b> ${fmtPercent(esc(String(d.percentEstimate)), true)}
       <span class="dg-kind">${esc(d.percentBasis)} · ${esc(d.confidence)}</span></div>`);
   }
   if (d.nextAction) rows.push(`<div class="dg-line"><b>${tr('next')}</b> ${esc(d.nextAction)}</div>`);
@@ -1010,7 +1010,7 @@ function renderLoad() {
   const wait = Math.min(100 - run, Math.round(100 * Math.min(l.waiting, l.live) / l.live));
   el.innerHTML = `<span>${label}</span><span class="track">` +
     `<i class="run" style="width:${run}%"></i><i class="wait" style="width:${wait}%"></i>` +
-    `</span><span class="pc">%${Math.round(l.percent)}</span>`;
+    `</span><span class="pc">${fmtPercent(Math.round(l.percent), false)}</span>`;
 }
 
 /** The same bar the detailed card draws, at list scale. */

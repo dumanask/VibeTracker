@@ -82,7 +82,7 @@ export function parseWithPositions(text: string): JsonNode {
   p.skipTrivia();
   const node = p.parseValue();
   p.skipTrivia();
-  if (p.pos < text.length) throw new JsonParseError('beklenmeyen fazladan içerik', p.pos);
+  if (p.pos < text.length) throw new JsonParseError('unexpected trailing content', p.pos);
   return node;
 }
 

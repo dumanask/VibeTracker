@@ -112,7 +112,7 @@ test('codex: free text is redacted where it enters, not where it is drawn', () =
   applyCodexLines(t, [
     JSON.stringify({
       type: 'event_msg',
-      payload: { type: 'user_message', message: 'anahtar sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA ile dene' },
+      payload: { type: 'user_message', message: 'try the key sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
     }),
   ]);
   assert.ok(t.facts.lastPrompt);

@@ -728,7 +728,7 @@ public class Note : Form {
     using (Brush b = new SolidBrush(Color.FromArgb((int)(255 * k), c.R, c.G, c.B)))
       g.DrawString(n, fLcd, b,
         (ClientSize.Width - sz.Width) / 2f, (ClientSize.Height - sz.Height) / 2f - 6);
-    string label = NeedsYou > 0 ? T("waiting", "bekliyor") : T("clear", "temiz");
+    string label = NeedsYou > 0 ? T("waiting", "waiting") : T("clear", "clear");
     SizeF ls = g.MeasureString(label, fSmall);
     g.DrawString(label, fSmall, new SolidBrush(Dim),
       (ClientSize.Width - ls.Width) / 2f, ClientSize.Height - ls.Height - 8);
@@ -777,7 +777,7 @@ public class Note : Form {
     // as a typo to anyone who speaks the language. The catalog text is what
     // gets drawn, exactly as written -- only spaced out, which turns no letter
     // into another one.
-    string title = Picking ? T("choose", "izlenecekleri sec") : T("product", "VibeTracker");
+    string title = Picking ? T("choose", "choose what to track") : T("product", "VibeTracker");
     Spaced(g, title, fSmall, Picking ? Phosphor : Dim, PadX + 14, 6f, 1.6f);
 
     // Buttons: small, square, clustered right -- Winamp's grammar, and it
@@ -811,7 +811,7 @@ public class Note : Form {
     string right = Notice.Length > 0
       ? Notice
       : hover.Length > 0 ? T(hover, "")
-      : NeedsYou > 0 ? NeedsYou + " " + T("waiting", "bekliyor") : "";
+      : NeedsYou > 0 ? NeedsYou + " " + T("waiting", "waiting") : "";
     if (right.Length > 0) {
       SizeF sz = g.MeasureString(right, fSmall);
       float rx = rPick.X - GapX - sz.Width;
@@ -855,7 +855,7 @@ public class Note : Form {
     int y = BarH, h = LoadH;
     using (Brush b = new SolidBrush(Panel)) g.FillRectangle(b, 0, y, ClientSize.Width, h);
 
-    string label = T("load", "sistem yuku");
+    string label = T("load", "system load");
     SizeF ls = g.MeasureString(label, fSmall);
     g.DrawString(label, fSmall, new SolidBrush(Dim), PadX, y + (h - ls.Height) / 2f);
 
@@ -906,7 +906,7 @@ public class Note : Form {
     using (Brush b = new SolidBrush(Panel)) g.FillRectangle(b, rAdd);
     using (Pen p = new Pen(Edge))
       g.DrawLine(p, PadX, BarH + LoadH - 1, ClientSize.Width - PadX, BarH + LoadH - 1);
-    string s = "+  " + T("addPath", "klasor sec");
+    string s = "+  " + T("addPath", "choose folder");
     SizeF sz = g.MeasureString(s, fSmall);
     g.DrawString(s, fSmall, new SolidBrush(Cyan), PadX, BarH + (LoadH - sz.Height) / 2f);
   }
@@ -922,7 +922,7 @@ public class Note : Form {
     int top = ListTop();
     if (Picks.Count == 0) {
       bool failed = PickError.Length > 0;
-      Cell(g, failed ? PickError : T("nopick", "proje bulunamadi"),
+      Cell(g, failed ? PickError : T("nopick", "no projects found"),
         fSmall, failed ? Alarm : Dim, PadX, top,
         ClientSize.Width - PadX * 2, false);
       return;
@@ -975,7 +975,7 @@ public class Note : Form {
   }
 
   void Empty(Graphics g, int y) {
-    Cell(g, Connected ? T("empty", "izlenen proje yok") : T("nodaemon", "daemon yok"),
+    Cell(g, Connected ? T("empty", "no projects tracked") : T("nodaemon", "no daemon"),
       fSmall, Dim, PadX, y, ClientSize.Width - PadX * 2, false);
   }
 
@@ -1039,14 +1039,14 @@ public class Note : Form {
   /// empty column and a broken renderer look the same.
   /// </summary>
   string WaitText(Row r) {
-    return r.Waiting > 0 ? r.Waiting + " " + T("waiting", "bekliyor") : "\u2014";
+    return r.Waiting > 0 ? r.Waiting + " " + T("waiting", "waiting") : "\u2014";
   }
 
   string RunText(Row r) {
-    if (r.Running > 0) return r.Running + " " + T("running", "calisiyor");
+    if (r.Running > 0) return r.Running + " " + T("running", "running");
     // Nothing waiting and nothing running is still two situations: a session
     // with nothing to do, and no session at all.
-    if (r.Waiting == 0) return r.Live > 0 ? T("idle", "bosta") : T("off", "kapali");
+    if (r.Waiting == 0) return r.Live > 0 ? T("idle", "idle") : T("off", "off");
     return "\u2014";
   }
 

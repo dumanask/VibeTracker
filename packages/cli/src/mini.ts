@@ -104,8 +104,8 @@ function noteLabels(): NoteLabels {
     // The same two lines in the other language the catalog ships, because the
     // window may find no voice that speaks this one. Deciding here would be
     // wrong: only the window can see which voices are installed.
-    speakWaitingAlt: trInto(altLang(), 'beklemeye geçti'),
-    speakManyAlt: trInto(altLang(), 'proje beklemeye geçti'),
+    speakWaitingAlt: trInto(altLang(), 'is now waiting for you'),
+    speakManyAlt: trInto(altLang(), 'projects are now waiting for you'),
     voiceNone: tr('no voice'),
     voiceMismatch: tr('language mismatch'),
     // Shown in the title strip while the pointer rests on a button.

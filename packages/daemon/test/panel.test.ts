@@ -363,7 +363,7 @@ test('saving the chooser sends a change, not a whole selection', async () => {
   assert.doesNotMatch(
     html,
     /saveTracking\(\{\s*mode:\s*'selected'/,
-    'seçim hâlâ bütün olarak gönderiliyor',
+    'the selection is still sent as a whole list',
   );
   // "hepsi" is the one button that legitimately states a whole mode.
   assert.match(html, /saveTracking\(\{ mode: 'all', selected: \[\] \}\)/);
@@ -430,7 +430,7 @@ test('the digest is drawn as a claim, with its model and its age on it', () => {
   assert.match(html, /sahte-1/);
   // The estimate is marked as one, and is not rendered through the counted
   // bar: `.bar` belongs to numbers that were counted.
-  assert.match(html, /~%70/);
+  assert.match(html, /~70%/);
   const afterDigest = html.slice(html.indexOf('class="digest"'));
   assert.doesNotMatch(afterDigest.slice(0, afterDigest.indexOf('</div>\n  </div>')), /class="bar/);
 

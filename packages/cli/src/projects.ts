@@ -89,7 +89,7 @@ async function discover(): Promise<ProjectView[]> {
       if (seen.has(k.projectId)) continue;
       // A project with no session at all still has an identity and a name,
       // and that is everything the chooser needs. It carries no sessions
-      // because there genuinely are none — `activity` says "oturum yok".
+      // because there genuinely are none — `activity` says "no sessions".
       out.push({
         projectId: k.projectId,
         identityKind: k.identityKind,

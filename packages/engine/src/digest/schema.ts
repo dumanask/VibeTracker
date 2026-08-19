@@ -154,7 +154,7 @@ export function parseDigest(raw: string): ParseResult {
   if (evidence.length === 0) return { ok: false, reason: 'no evidence was cited' };
 
   const summary = cap(o['summary'], 400);
-  if (!summary) return { ok: false, reason: 'özet yok' };
+  if (!summary) return { ok: false, reason: 'no summary' };
 
   let confidence = pick(o['confidence'], CONFIDENCES, 'low');
   const percentEstimate = intOrNull(o['percent_estimate'], 0, 100);

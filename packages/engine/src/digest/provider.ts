@@ -330,7 +330,7 @@ async function post(
 
 /** `POST /v1/messages` — Anthropic's own shape. */
 async function chatAnthropic(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
-  if (!cfg.apiKey) throw new ProviderError('anahtar yok', 'config');
+  if (!cfg.apiKey) throw new ProviderError('no key', 'config');
   const base = cfg.baseUrl || DEFAULT_BASE.anthropic;
   const body = await post(
     joinUrl(base, '/v1/messages'),

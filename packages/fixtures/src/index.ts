@@ -84,9 +84,9 @@ const TITLES = [
 
 const PROMPTS = [
   'run the tests and fix them',
-  'build al, exe üret',
+  'make a build and produce the exe',
   'take a look at this file',
-  'plana göre devam et',
+  'carry on according to the plan',
 ];
 
 const TOOLS = ['Bash', 'Read', 'Edit', 'Grep', 'WebFetch'];
@@ -105,7 +105,7 @@ function line(type: string, at: number, extra: Record<string, unknown> = {}): st
  */
 function transcript(sessionId: string, cwd: string, at: number, index: number): string {
   const parts: string[] = [];
-  parts.push(line('summary', at - DAY, { summary: 'oturum özeti' }));
+  parts.push(line('summary', at - DAY, { summary: 'session summary' }));
   for (let i = 0; i < 12; i++) {
     const t = at - (12 - i) * 60_000;
     parts.push(
@@ -158,7 +158,7 @@ function subagents(dir: string, sessionId: string, count: number): void {
       join(sub, `agent-${i}.meta.json`),
       JSON.stringify({
         agentType: 'general-purpose',
-        description: 'alt görev',
+        description: 'subtask',
         toolUseId: `tu_${i}`,
         spawnDepth: 1,
       }),

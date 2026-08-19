@@ -228,7 +228,7 @@ test('a command that is not there is a configuration problem, not a crash', asyn
           model: '',
           baseUrl: '',
           apiKey: null,
-          command: 'vt-boyle-bir-komut-yok',
+          command: 'vt-no-such-command',
           args: [],
         },
         { ...REQ, timeoutMs: 15_000 },

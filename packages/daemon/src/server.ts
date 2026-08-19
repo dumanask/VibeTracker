@@ -456,7 +456,7 @@ export class DaemonServer {
       return json(res, data ? 200 : 404, data ?? { error: tr('project not found') });
     }
 
-    return json(res, 404, { error: 'yok' });
+    return json(res, 404, { error: 'not found' });
   }
 
   /**

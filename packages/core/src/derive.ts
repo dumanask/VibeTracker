@@ -66,7 +66,7 @@ export function deriveState(input: DeriveInput): DerivedState {
   if (cpuPct !== null) evidence.push(t`proc:cpu ${cpuPct.toFixed(1)}%`);
 
   if (!facts) {
-    evidence.push('tail:transcript-yok');
+    evidence.push('tail:no-transcript');
     return { state: SessionState.Starting, confidence: 0.6, evidence };
   }
 

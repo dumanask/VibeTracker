@@ -17,8 +17,8 @@ import { hasCommand, whichCommand } from '../src/which.ts';
 test('the running node is found by name, and nonsense is not', () => {
   // Whatever is running this test is on PATH by definition on a developer
   // machine, but the guaranteed-true statement is the negative one.
-  assert.equal(whichCommand('vt-boyle-bir-komut-yok'), null);
-  assert.equal(hasCommand('vt-boyle-bir-komut-yok'), false);
+  assert.equal(whichCommand('vt-no-such-command'), null);
+  assert.equal(hasCommand('vt-no-such-command'), false);
   assert.equal(whichCommand(''), null);
   assert.equal(whichCommand('   '), null);
 });

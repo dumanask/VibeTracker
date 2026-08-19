@@ -443,7 +443,7 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
   if (version > CONFIG_VERSION) {
     r.warn(
       'config_version',
-      `config sürümü ${version}, bu VibeTracker ${CONFIG_VERSION} biliyor`,
+      `config version ${version}; this VibeTracker knows ${CONFIG_VERSION}`,
       'written for a newer version — settings it does not recognise will be ignored',
     );
   }
@@ -511,8 +511,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
       // every write, so it is reported rather than silently skipped.
       r.err(
         `privacy.custom_patterns[${i}]`,
-        `geçersiz düzenli ifade: ${(e as Error).message}`,
-        'bu desen redaksiyona dahil edilmedi',
+        `invalid regular expression: ${(e as Error).message}`,
+        'this pattern was left out of redaction',
       );
     }
   }
@@ -635,7 +635,7 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
     r.warn(
       'tracking.selected',
       'no project picked to track — all of them are shown',
-      'vt projects add <proje> ile seç, ya da mode = all yaz',
+      'pick some with `vt projects add <project>`, or write mode = all',
     );
     config.tracking.mode = 'all';
   }

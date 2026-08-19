@@ -857,5 +857,6 @@
   "needs no key, eats your own account quota": "anahtar istemez, kendi hesabının kotasından yer",
   "a command not on the list — config file only": "listede olmayan bir komut — yalnızca config dosyasından",
   "  An agent CLI you are already signed in to — needs no key, eats your own account quota": "  Zaten giriş yapmış olduğun ajan CLI'ı — anahtar istemez, kendi hesabından yer",
-  "An agent CLI you are already signed in to — needs no key, eats your own account quota": "Zaten giriş yapmış olduğun ajan CLI'ı — anahtar istemez, kendi hesabından yer"
+  "An agent CLI you are already signed in to — needs no key, eats your own account quota": "Zaten giriş yapmış olduğun ajan CLI'ı — anahtar istemez, kendi hesabından yer",
+  "source": "kaynak"
 }

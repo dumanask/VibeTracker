@@ -157,7 +157,7 @@ export class HookIngest {
 
     switch (event) {
       case 'PermissionRequest':
-        s.pendingTool = safeField(p.tool_name, 'bilinmeyen araç');
+        s.pendingTool = safeField(p.tool_name, 'unknown tool');
         this.#set(
           s,
           SessionState.WaitingPermission,
@@ -191,7 +191,7 @@ export class HookIngest {
 
       case 'UserPromptSubmit':
         s.pendingTool = undefined;
-        this.#set(s, SessionState.Busy, 'prompt', 'hook:istem gönderildi', now);
+        this.#set(s, SessionState.Busy, 'prompt', 'hook:prompt submitted', now);
         return;
 
       case 'PreToolUse':
