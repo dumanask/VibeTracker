@@ -11,6 +11,22 @@ the network.**
 
 Apache-2.0 · Windows, macOS, Linux · an npm package or a desktop app
 
+## Install
+
+**Desktop app** — download the package for your platform from
+[Releases](https://github.com/dumanask/VibeTracker/releases). Node is not required: the
+package carries its own runtime. The builds are not code signed, so Windows SmartScreen
+shows a warning ("More info" → "Run anyway") and macOS needs
+**System Settings → Privacy & Security → Open Anyway** after the first refusal. That gap is
+[stated rather than hidden](#unsigned-and-it-says-so).
+
+**If you already have Node 22.20+:**
+
+```bash
+npm i -g vibetracker
+vt init
+```
+
 ---
 
 ## Status: open source · six agents · three platforms

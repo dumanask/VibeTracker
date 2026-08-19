@@ -35,7 +35,7 @@ jobs:
   # takes a minute, and there is no point building three desktop bundles for a
   # commit whose tests do not pass.
   npm:
-    name: npm paketi
+    name: npm package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - name: paketle
+      - name: pack
         run: node scripts/pack.mjs
       - name: the licence really is in the package
         run: |
