@@ -30,6 +30,7 @@
  * breaks that file for them, not for us.
  */
 import { DEFAULT_BASE, DEFAULT_KEY_ENV, type ProviderId } from './provider.ts';
+import { CLI_PRESETS } from './presets.ts';
 
 /**
  * The providers a remote caller may select, in the order a chooser shows them.
@@ -41,10 +42,11 @@ import { DEFAULT_BASE, DEFAULT_KEY_ENV, type ProviderId } from './provider.ts';
 export const SELECTABLE_PROVIDERS: readonly ProviderId[] = [
   'off',
   'ollama',
-  'claude-cli',
-  'codex-cli',
-  'opencode-cli',
-  'gemini-cli',
+  // Every preset in the table. Derived rather than listed, so adding an agent
+  // CLI reaches the dashboard without a second edit — which is the whole point
+  // of the table, and was the thing that made `opencode` unreachable from the
+  // window while `codex` beside it was fine.
+  ...CLI_PRESETS.map((p) => p.id as ProviderId),
   'openai',
   'anthropic',
 ];

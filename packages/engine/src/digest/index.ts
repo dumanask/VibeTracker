@@ -2,9 +2,6 @@ export {
   chat,
   cliCommandLine,
   cliProgram,
-  codexArgs,
-  geminiArgs,
-  opencodeArgs,
   egress,
   isCliProvider,
   isLocal,
@@ -25,6 +22,15 @@ export {
   type ProviderConfig,
   type ProviderId,
 } from './provider.ts';
+export {
+  codexArgs,
+  geminiArgs,
+  opencodeArgs,
+  presetFor,
+  CLI_PRESETS,
+  type CliPreset,
+  type PresetContext,
+} from './presets.ts';
 export {
   isSelectable,
   validateChoice,

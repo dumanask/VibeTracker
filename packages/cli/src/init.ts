@@ -13,7 +13,7 @@
  * machine is touched, and each answer defaults to the option that changes the
  * least.
  */
-import { ScanContext, scan } from '@vibetracker/engine';
+import { CLI_PRESETS, ScanContext, scan } from '@vibetracker/engine';
 import {
   claudeDir,
   configExists,
@@ -171,10 +171,6 @@ export async function runInit(args: InitArgs): Promise<number> {
   // "the tool you already pay for" is only an answer if it names a tool that
   // is there. Everything is still reachable from the config file; this only
   // decides what is worth putting in front of somebody on their first run.
-  const hasClaude = hasCommand('claude');
-  const hasCodex = hasCommand('codex');
-  const hasOpencode = hasCommand('opencode');
-  const hasGemini = hasCommand('gemini');
   const hasOllama = hasCommand('ollama');
   const options: Array<{ value: Config['digest']['provider']; label: string; detail: string }> = [
     { value: 'off', label: tr('Kapalı (önerilen)'), detail: tr('yapısal motor tek başına çalışır; hiçbir veri makineden çıkmaz') },
@@ -182,17 +178,16 @@ export async function runInit(args: InitArgs): Promise<number> {
   if (hasOllama) {
     options.push({ value: 'ollama', label: tr('Yerel model (Ollama) — kurulu'), detail: tr('veri makineden çıkmaz; anahtar istemez; kalite belirgin düşer') });
   }
-  if (hasClaude) {
-    options.push({ value: 'claude-cli', label: tr('Makinemdeki claude komutu — kurulu'), detail: tr('anahtar istemez, mevcut aboneliğinin kotasından yer') });
-  }
-  if (hasCodex) {
-    options.push({ value: 'codex-cli', label: tr('Makinemdeki codex komutu — kurulu'), detail: tr('anahtar istemez, Codex aboneliğinin kotasından yer') });
-  }
-  if (hasOpencode) {
-    options.push({ value: 'opencode-cli', label: tr('Makinemdeki opencode komutu — kurulu'), detail: tr('anahtar istemez, opencode aboneliğinin kotasından yer') });
-  }
-  if (hasGemini) {
-    options.push({ value: 'gemini-cli', label: tr('Makinemdeki gemini komutu — kurulu'), detail: tr('anahtar istemez, Google hesabının kotasından yer') });
+  // Every agent CLI in the engine's table that is actually on this machine.
+  // One template key rather than a label per program: the names are proper
+  // nouns, and a list that grows should not grow the translation job with it.
+  for (const preset of CLI_PRESETS) {
+    if (!hasCommand(preset.program)) continue;
+    options.push({
+      value: preset.id as Config['digest']['provider'],
+      label: t`Makinemdeki ${preset.program} komutu — kurulu`,
+      detail: tr('anahtar istemez, kendi hesabının kotasından yer'),
+    });
   }
   if (!hasOllama) {
     options.push({ value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('kurulu değil; kurarsan veri makineden hiç çıkmaz') });

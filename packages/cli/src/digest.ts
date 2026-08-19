@@ -25,6 +25,7 @@ import {
   ProviderError,
   ScanContext,
   buildPayload,
+  CLI_PRESETS,
   clearKeyFile,
   cliCommandLine,
   cliProgram,
@@ -194,18 +195,30 @@ async function showProviders(json: boolean): Promise<number> {
     whichCommand(name) ? green(` ← ${tr('kurulu')}`) : dim(` ${tr('(kurulu değil)')}`);
   out.push('');
   out.push(bold(tr('  Seçebileceklerin')));
-  out.push(`    off         ${tr('kapalı — yapısal motor tek başına çalışır')}`);
-  out.push(`    ollama      ${tr('makinendeki model; anahtar yok, veri çıkmaz')}${mark('ollama')}`);
-  out.push(`    claude-cli  ${tr('makinendeki claude komutu; aboneliğinin kotasından yer')}${mark('claude')}`);
-  out.push(`    codex-cli   ${tr('makinendeki codex komutu; Codex aboneliğinden yer')}${mark('codex')}`);
-  out.push(`    opencode-cli ${tr('makinendeki opencode komutu; onun aboneliğinden yer')}${mark('opencode')}`);
-  out.push(`    gemini-cli  ${tr('makinendeki gemini komutu; Google hesabından yer')}${mark('gemini')}`);
-  out.push(`    cli         ${tr('başka herhangi bir komut — command + args ile')}`);
-  out.push(`    openai      ${tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')}`);
-  out.push(`    anthropic   ${tr('Anthropic API')}`);
+  const row = (name: string, desc: string, program = ''): void => {
+    out.push(`    ${name.padEnd(11)} ${desc}${program ? mark(program) : ''}`);
+  };
+  row('off', tr('kapalı — yapısal motor tek başına çalışır'));
+  row('ollama', tr('makinendeki model; anahtar yok, veri çıkmaz'), 'ollama');
+  row('openai', tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…'));
+  row('anthropic', tr('Anthropic API'));
+  row('cli', tr('listede olmayan bir komut — yalnızca config dosyasından'));
+
+  // The agent CLIs as a grid rather than as thirteen copies of one sentence.
+  // What differs between them is only whether it is on this machine, so that
+  // is what the list shows; the sentence is said once above it.
   out.push('');
-  // Two ways, and the panel is named first because it is the one that does not
-  // require knowing where a TOML file lives on this operating system.
+  out.push(bold(tr('  Zaten giriş yapmış olduğun ajan CLI\'ı — anahtar istemez, kendi hesabından yer')));
+  const width = Math.max(...CLI_PRESETS.map((preset) => preset.id.length)) + 3;
+  for (let i = 0; i < CLI_PRESETS.length; i += 3) {
+    const cells = CLI_PRESETS.slice(i, i + 3).map((preset) => {
+      const here = whichCommand(preset.program) !== null;
+      const cell = `${here ? '✓' : ' '} ${preset.id}`;
+      return here ? green(cell.padEnd(width)) : dim(cell.padEnd(width));
+    });
+    out.push(`    ${cells.join('')}`.trimEnd());
+  }
+  out.push('');
   out.push(dim(tr('  Değiştirmek için: panodaki "LLM özeti" bölümü — ya da config dosyası: vt config path')));
   process.stdout.write(`${out.join('\n')}\n`);
   return 0;

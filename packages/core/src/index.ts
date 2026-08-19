@@ -139,6 +139,7 @@ export {
   type LoadedConfig,
   type ProjectConfig,
   type TrackingConfig,
+  ENUMS,
 } from './config.ts';
 
 // ── i18n ────────────────────────────────────────────────────────────────

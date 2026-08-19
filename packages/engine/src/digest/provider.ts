@@ -36,44 +36,56 @@
  */
 
 import { whichCommand } from '@vibetracker/platform';
+import { CLI_PRESETS, presetFor, type CliPreset } from './presets.ts';
 
+/**
+ * The presets, plus `cli` for a command the user names, plus the three that
+ * open a socket, plus off.
+ *
+ * Written out rather than derived from `CLI_PRESETS` because a union has to
+ * exist at compile time and the table is a value. The test in
+ * `digest-presets.test.ts` asserts the two agree, which is the half a type
+ * cannot check.
+ */
 export type ProviderId =
   | 'off'
   | 'claude-cli'
   | 'codex-cli'
   | 'opencode-cli'
   | 'gemini-cli'
+  | 'aider-cli'
+  | 'amp-cli'
+  | 'continue-cli'
+  | 'copilot-cli'
+  | 'crush-cli'
+  | 'droid-cli'
+  | 'goose-cli'
+  | 'llm-cli'
+  | 'qwen-cli'
   | 'cli'
   | 'anthropic'
   | 'openai'
   | 'ollama';
 
 /** The providers that run a program instead of opening a socket. */
-export type CliProviderId = 'claude-cli' | 'codex-cli' | 'opencode-cli' | 'gemini-cli' | 'cli';
+export type CliProviderId = Exclude<ProviderId, 'off' | 'anthropic' | 'openai' | 'ollama'>;
+
 export const CLI_PROVIDERS: readonly CliProviderId[] = [
-  'claude-cli',
-  'codex-cli',
-  'opencode-cli',
-  'gemini-cli',
+  ...CLI_PRESETS.map((p) => p.id as CliProviderId),
   'cli',
 ];
 
 /**
  * The program each preset runs. Empty for `cli`, whose program the user names.
  *
- * A table rather than a chain of `if`s because four surfaces need this answer:
- * the runner, the "is it installed" check, the line the preview prints, and
- * the chooser in the dashboard. The fourth is the reason it is exported — a
- * chooser that offers a preset it cannot see the program for is offering a
- * dead option.
+ * Derived from the table because four surfaces need this answer — the runner,
+ * the "is it installed" check, the line a preview prints, and the chooser in
+ * the dashboard — and four copies of it drift one entry at a time.
  */
-export const CLI_PROGRAM: Record<CliProviderId, string> = {
-  'claude-cli': 'claude',
-  'codex-cli': 'codex',
-  'opencode-cli': 'opencode',
-  'gemini-cli': 'gemini',
-  cli: '',
-};
+export const CLI_PROGRAM: Record<CliProviderId, string> = Object.fromEntries([
+  ...CLI_PRESETS.map((p) => [p.id, p.program]),
+  ['cli', ''],
+]) as Record<CliProviderId, string>;
 
 export function isCliProvider(p: ProviderId): p is CliProviderId {
   return (CLI_PROVIDERS as readonly string[]).includes(p);
@@ -106,13 +118,7 @@ export function cliCommandLine(cfg: {
   if (cfg.provider === 'cli') {
     return [cfg.command ?? '', ...(cfg.args ?? [])].filter(Boolean).join(' ');
   }
-  const shown: Record<Exclude<CliProviderId, 'cli'>, string> = {
-    'claude-cli': 'claude -p',
-    'codex-cli': 'codex exec',
-    'opencode-cli': 'opencode run',
-    'gemini-cli': 'gemini --prompt',
-  };
-  return shown[cfg.provider];
+  return presetFor(cfg.provider)?.display ?? '';
 }
 
 export interface ProviderConfig {
@@ -177,15 +183,12 @@ export const DEFAULT_BASE: Record<'anthropic' | 'openai' | 'ollama', string> = {
  */
 export const DEFAULT_KEY_ENV: Record<ProviderId, string | null> = {
   off: null,
-  'claude-cli': null,
-  'codex-cli': null,
-  'opencode-cli': null,
-  'gemini-cli': null,
   cli: null,
+  ...(Object.fromEntries(CLI_PRESETS.map((p) => [p.id, null])) as Record<string, null>),
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   ollama: null,
-};
+} as Record<ProviderId, string | null>;
 
 /**
  * A model that exists, per family, when the user named none.
@@ -197,15 +200,12 @@ export const DEFAULT_KEY_ENV: Record<ProviderId, string | null> = {
  */
 export const DEFAULT_MODEL: Record<ProviderId, string> = {
   off: '',
-  'claude-cli': '',
-  'codex-cli': '',
-  'opencode-cli': '',
-  'gemini-cli': '',
   cli: '',
+  ...(Object.fromEntries(CLI_PRESETS.map((p) => [p.id, ''])) as Record<string, string>),
   anthropic: 'claude-haiku-4-5-20251001',
   openai: 'gpt-4o-mini',
   ollama: 'llama3.1:8b',
-};
+} as Record<ProviderId, string>;
 
 export function isLocal(url: string): boolean {
   try {
@@ -249,21 +249,16 @@ export function egress(cfg: ProviderConfig): Egress {
   switch (cfg.provider) {
     case 'off':
       return 'no';
-    // These talk to a vendor on our behalf, which is still egress.
-    //
-    // Reported for what each one does out of the box. All four can be pointed
-    // somewhere else by their own config — `codex` at a different
-    // `model_provider`, `opencode` at a local model — and none of that is
-    // visible from here. The answer is therefore the conservative one rather
-    // than a claim about a file this codebase does not read.
-    case 'claude-cli':
-    case 'codex-cli':
-    case 'opencode-cli':
-    case 'gemini-cli':
-      return 'yes';
     case 'cli':
       return 'unknown';
     default:
+      // Every preset talks to a vendor on our behalf, which is the same thing
+      // as far as the user's data is concerned. Reported for what each does
+      // out of the box: several can be pointed elsewhere by their own config —
+      // `codex` at a different `model_provider`, `opencode` or `llm` at a local
+      // model — and none of that is visible from here, so the answer is the
+      // conservative one rather than a claim about a file we do not read.
+      if (isCliProvider(cfg.provider)) return 'yes';
       return isLocal(cfg.baseUrl || DEFAULT_BASE[cfg.provider]) ? 'no' : 'yes';
   }
 }
@@ -665,213 +660,93 @@ async function withScratch<T>(fn: (dir: string) => Promise<T>): Promise<T> {
 }
 
 /**
- * The `claude` CLI, if the user already has one.
+ * Run one preset from the table.
  *
- * Costs nothing extra and needs no key: it bills whatever subscription is
- * already signed in. Slower, and it eats the same quota the user's actual
- * coding sessions eat, which is why it is offered rather than defaulted to.
+ * The same six steps for every program, which is why there is one of these
+ * rather than one function per CLI:
+ *
+ * 1. Ask what flags this build has, when the row wants that asked.
+ * 2. Make a scratch directory — the program runs *inside* it, so an agent CLI
+ *    that looks around finds an empty folder rather than the repository being
+ *    summarised.
+ * 3. Build the arguments from the row.
+ * 4. Hand the prompt over on stdin, or in a 0600 file for the one row that
+ *    cannot take stdin. Never on the command line.
+ * 5. Fail loudly, with the program's own words rather than an exit code.
+ * 6. Let the row pull the answer out.
  */
-async function chatClaudeCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
-  const args = ['-p', '--output-format', 'json'];
-  if (cfg.model) args.push('--model', cfg.model);
-  // In an empty directory, not in the repository being summarised. `claude -p`
-  // is an agent with tools; the working directory is the one thing that
-  // decides what it can look at.
-  const r = await withScratch((dir) =>
-    runCommand('claude', args, flatten(req), req.timeoutMs, { signal: req.signal, cwd: dir }),
-  );
-  if (r.code !== 0) throw cliFailed('claude', r);
-  try {
-    const parsed = JSON.parse(r.stdout) as {
-      result?: unknown;
-      usage?: { input_tokens?: unknown; output_tokens?: unknown };
-    };
-    const text = str(parsed.result);
-    if (!text) throw new ProviderError('boş yanıt', 'shape');
-    return {
-      text,
-      inputTokens: num(parsed.usage?.input_tokens),
-      outputTokens: num(parsed.usage?.output_tokens),
-      model: cfg.model || undefined,
-    };
-  } catch (e) {
-    if (e instanceof ProviderError) throw e;
-    throw new ProviderError('yanıt JSON değil', 'shape');
-  }
-}
-
-/**
- * Which flags this `codex` has.
- *
- * Codex is a fast-moving CLI and the installed version is whatever the user
- * installed. Rather than pin a flag set and break on the versions that do not
- * have it — or omit useful flags and be careless on the versions that do —
- * the arguments are chosen from `codex exec --help`, which costs one process
- * on a call that is about to spend a minute talking to a model.
- *
- * Pure, so the choice is testable without a `codex` on the machine.
- */
-export function codexArgs(
-  help: string,
-  opts: { model: string; outFile: string; workDir: string },
-): string[] {
-  const has = (flag: string): boolean => help.includes(flag);
-  const args = ['exec'];
-  // We are not in a repository and do not want to be treated as if we were.
-  if (has('--skip-git-repo-check')) args.push('--skip-git-repo-check');
-  // Codex is an agent, not a completion endpoint. It is asked a question about
-  // text it was handed, so it has no reason to touch a disk — and read-only is
-  // the strongest thing its own sandbox offers by name.
-  if (has('--sandbox')) args.push('--sandbox', 'read-only');
-  // Do not leave a session transcript of our payload behind on the way.
-  if (has('--ephemeral')) args.push('--ephemeral');
-  if (has('--color')) args.push('--color', 'never');
-  // An empty scratch directory: if it does look around, there is nothing there.
-  if (has('--cd')) args.push('--cd', opts.workDir);
-  // The final message alone. Without it the answer arrives wrapped in the
-  // agent's own progress narration, which is parseable but not dependably so.
-  if (has('--output-last-message')) args.push('--output-last-message', opts.outFile);
-  if (opts.model) args.push('--model', opts.model);
-  // Read the prompt from stdin.
-  args.push('-');
-  return args;
-}
-
-/**
- * The `codex` CLI, if the user already has one.
- *
- * The same bargain as `claude-cli`, for the people who have the other
- * subscription — which is the entire point of this file existing.
- */
-async function chatCodexCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
-  const help = await runCommand('codex', ['exec', '--help'], '', 20_000, {
-    signal: req.signal,
-  }).catch((e: unknown) => {
-    throw e instanceof ProviderError ? e : new ProviderError(String(e), 'config');
-  });
-  return await withScratch(async (dir) => {
-    const { mkdirSync, readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const outFile = join(dir, 'answer.txt');
-    const workDir = join(dir, 'work');
-    mkdirSync(workDir, { recursive: true });
-    const args = codexArgs(help.stdout + help.stderr, { model: cfg.model, outFile, workDir });
-    const r = await runCommand('codex', args, flatten(req), req.timeoutMs, {
+async function chatPreset(
+  preset: CliPreset,
+  cfg: ProviderConfig,
+  req: ChatRequest,
+): Promise<ChatReply> {
+  let help = '';
+  if (preset.probe) {
+    // Bounded separately from the run: a help probe that hangs is a broken
+    // install, not a slow model, and waiting the model's timeout for it would
+    // turn a typo into a two-minute pause.
+    const probed = await runCommand(preset.program, preset.probe, '', 20_000, {
       signal: req.signal,
-      cwd: workDir,
-    });
-    if (r.code !== 0) throw cliFailed('codex', r);
-    let text = '';
-    try {
-      text = readFileSync(outFile, 'utf8').trim();
-    } catch {
-      // No `--output-last-message` on this version; the answer is in the
-      // narration and `parseDigest` takes the outermost brace pair anyway.
-      text = r.stdout;
-    }
-    if (!text.trim()) throw new ProviderError('boş yanıt', 'shape');
-    return { text, model: cfg.model || 'codex' };
-  });
-}
-
-
-/**
- * `opencode run`, if the user already has one.
- *
- * Added because it was asked for, and the asking was right: `opencode` is as
- * ordinary an answer to "which model" as `claude` or `codex`, and leaving it
- * out meant the only way to reach it was to write a command into a config
- * file by hand — which is a fine answer for a program nobody has heard of and
- * a poor one for a program on the same shortlist as the two that are here.
- *
- * The prompt goes in on stdin. Measured, not assumed: `opencode run` with no
- * positional argument and a piped prompt reaches the model.
- *
- * Pure, so the flag choice is testable without an `opencode` on the machine.
- */
-export function opencodeArgs(help: string, opts: { model: string; workDir: string }): string[] {
-  const has = (flag: string): boolean => help.includes(flag);
-  const args = ['run'];
-  // Third-party plugins are somebody else's code running against our payload.
-  if (has('--pure')) args.push('--pure');
-  // An empty scratch directory: if it does look around, there is nothing there.
-  if (has('--dir')) args.push('--dir', opts.workDir);
-  if (opts.model && has('--model')) args.push('--model', opts.model);
-  return args;
-}
-
-async function chatOpencodeCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
-  const help = await runCommand('opencode', ['run', '--help'], '', 20_000, {
-    signal: req.signal,
-  }).catch((e: unknown) => {
-    throw e instanceof ProviderError ? e : new ProviderError(String(e), 'config');
-  });
-  return await withScratch(async (dir) => {
-    const { mkdirSync } = await import('node:fs');
-    const { join } = await import('node:path');
-    const workDir = join(dir, 'work');
-    mkdirSync(workDir, { recursive: true });
-    const args = opencodeArgs(help.stdout + help.stderr, { model: cfg.model, workDir });
-    const r = await runCommand('opencode', args, flatten(req), req.timeoutMs, {
-      signal: req.signal,
-      cwd: workDir,
-    });
-    // Measured against a real install: a billing failure and an unavailable
-    // model both exit 1 and print the reason on stdout, wrapped in colour
-    // codes it emits even when nothing is watching. `cliFailed` reads the last
-    // lines of stderr; the reason is on the other stream, so it goes in too.
-    if (r.code !== 0) {
-      const why = usefulTail(r.stdout + '\n' + r.stderr);
-      throw new ProviderError(`opencode çıkış kodu ${r.code}${why ? ': ' + why : ''}`, 'http');
-    }
-    if (!r.stdout.trim()) throw new ProviderError('boş yanıt', 'shape');
-    return { text: r.stdout, model: cfg.model || 'opencode' };
-  });
-}
-
-/**
- * The `gemini` CLI, if the user already has one.
- *
- * `-p` is what makes it headless, and its own help says the prompt given there
- * is *appended to stdin* — so an empty `-p` with the payload piped in keeps
- * the rule this file is built around: nothing on the command line.
- *
- * `--skip-trust` is not optional. Without it Gemini refuses to run outside a
- * directory it has been told to trust, and since ours is a scratch directory
- * created seconds earlier it never will be. Measured on a real install.
- */
-export function geminiArgs(help: string, opts: { model: string }): string[] {
-  const has = (flag: string): boolean => help.includes(flag);
-  const args: string[] = [];
-  if (has('--skip-trust')) args.push('--skip-trust');
-  // Read-only, by the name its own approval engine uses.
-  if (has('--approval-mode')) args.push('--approval-mode', 'plan');
-  if (opts.model && has('--model')) args.push('--model', opts.model);
-  args.push('--prompt', '');
-  return args;
-}
-
-async function chatGeminiCli(cfg: ProviderConfig, req: ChatRequest): Promise<ChatReply> {
-  const help = await runCommand('gemini', ['--help'], '', 20_000, { signal: req.signal }).catch(
-    (e: unknown) => {
+    }).catch((e: unknown) => {
       throw e instanceof ProviderError ? e : new ProviderError(String(e), 'config');
-    },
-  );
-  return await withScratch(async (dir) => {
-    const args = geminiArgs(help.stdout + help.stderr, { model: cfg.model });
-    const r = await runCommand('gemini', args, flatten(req), req.timeoutMs, {
-      signal: req.signal,
-      cwd: dir,
     });
-    if (r.code !== 0) throw cliFailed('gemini', r);
-    // A zero exit with nothing on stdout is not a summary. Gemini puts its
-    // reasons on stderr — including a true-colour warning it prints on every
-    // run — so the tail of that stream is the only thing left to report.
-    if (!r.stdout.trim()) {
-      const why = usefulTail(r.stderr);
-      throw new ProviderError(why ? `gemini: ${why}` : 'boş yanıt', why ? 'http' : 'shape');
+    help = probed.stdout + probed.stderr;
+  }
+
+  return await withScratch(async (dir) => {
+    const { mkdirSync, readFileSync, writeFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const workDir = join(dir, 'work');
+    mkdirSync(workDir, { recursive: true });
+    const outFile = join(dir, 'answer.txt');
+    const promptFile = join(dir, 'prompt.txt');
+    const prompt = flatten(req);
+
+    const ctx = { help, model: cfg.model, workDir, outFile, promptFile };
+    const args = preset.args(ctx);
+
+    // Written only for the row that asked for it, at 0600, and taken away with
+    // the directory. Everything else gets it on stdin.
+    const viaFile = preset.promptVia === 'file';
+    if (viaFile) writeFileSync(promptFile, prompt, { mode: 0o600 });
+
+    const r = await runCommand(preset.program, args, viaFile ? '' : prompt, req.timeoutMs, {
+      signal: req.signal,
+      cwd: workDir,
+    });
+
+    if (r.code !== 0) {
+      // Both streams. Measured: `opencode` prints its reason on stdout and
+      // exits 1, while `gemini` puts its on stderr — reading only one of them
+      // reports "exit code 1" and nothing else to whoever has to fix it.
+      const why = usefulTail(r.stdout + '\n' + r.stderr);
+      throw new ProviderError(
+        `${preset.program} çıkış kodu ${r.code}${why ? ': ' + why : ''}`,
+        'http',
+      );
     }
-    return { text: r.stdout, model: cfg.model || 'gemini' };
+
+    let outFileText: string | null = null;
+    try {
+      outFileText = readFileSync(outFile, 'utf8').trim() || null;
+    } catch {
+      // The row either did not ask for one or this build does not write it.
+    }
+
+    const reply = preset.read
+      ? preset.read(r, { ...ctx, outFileText })
+      : { text: outFileText ?? r.stdout };
+
+    if (!reply.text.trim()) {
+      // A zero exit with nothing to show is not an answer. Whatever the
+      // program said on the way is the only thing left to report.
+      const why = usefulTail(r.stderr);
+      throw new ProviderError(
+        why ? `${preset.program}: ${why}` : 'boş yanıt',
+        why ? 'http' : 'shape',
+      );
+    }
+    return { ...reply, model: cfg.model || preset.program };
   });
 }
 
@@ -957,17 +832,12 @@ export async function chat(cfg: ProviderConfig, req: ChatRequest): Promise<ChatR
       return await chatOpenAI(cfg, req);
     case 'ollama':
       return await chatOllama(cfg, req);
-    case 'claude-cli':
-      return await chatClaudeCli(cfg, req);
-    case 'codex-cli':
-      return await chatCodexCli(cfg, req);
-    case 'opencode-cli':
-      return await chatOpencodeCli(cfg, req);
-    case 'gemini-cli':
-      return await chatGeminiCli(cfg, req);
     case 'cli':
       return await chatCli(cfg, req);
-    default:
+    default: {
+      const preset = presetFor(cfg.provider);
+      if (preset) return await chatPreset(preset, cfg, req);
       throw new ProviderError('bilinmeyen sağlayıcı', 'unsupported');
+    }
   }
 }

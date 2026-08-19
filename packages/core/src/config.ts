@@ -110,9 +110,19 @@ export interface Config {
       | 'codex-cli'
       | 'opencode-cli'
       | 'gemini-cli'
+      | 'aider-cli'
+      | 'amp-cli'
+      | 'continue-cli'
+      | 'copilot-cli'
+      | 'crush-cli'
+      | 'droid-cli'
+      | 'goose-cli'
+      | 'llm-cli'
+      | 'qwen-cli'
       | 'cli'
       | 'anthropic'
       | 'openai'
+      | 'ollama'
       | 'ollama';
     model: string;
     /** Empty means the provider's own default. Set it to reach anything else. */
@@ -253,7 +263,15 @@ export interface LoadedConfig {
  */
 const STRICT_SECTIONS = new Set(['privacy', 'security']);
 
-const ENUMS = {
+/**
+ * The accepted values for every enumerated setting.
+ *
+ * Exported so the engine's test can check that its own table of agent CLIs and
+ * this list have not drifted apart. They are in different packages on purpose
+ * — core must not depend on the engine — which means nothing but a test can
+ * hold them together.
+ */
+export const ENUMS = {
   lang: ['tr', 'en'],
   hookMode: ['http', 'command', 'off'],
   digestProvider: [
@@ -262,6 +280,15 @@ const ENUMS = {
     'codex-cli',
     'opencode-cli',
     'gemini-cli',
+    'aider-cli',
+    'amp-cli',
+    'continue-cli',
+    'copilot-cli',
+    'crush-cli',
+    'droid-cli',
+    'goose-cli',
+    'llm-cli',
+    'qwen-cli',
     'cli',
     'anthropic',
     'openai',

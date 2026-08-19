@@ -65,6 +65,15 @@ export interface DigestOption {
   needsKey: boolean;
   egress: Egress;
   /**
+   * The program this option runs, or empty when it opens a socket.
+   *
+   * Sent so the page can name it without carrying its own copy of the table.
+   * The agent CLIs are proper nouns — `crush`, `droid`, `aider` — so a chooser
+   * that shows the program name needs no translated label per row, which is
+   * what keeps adding one to a table from also being a translation job.
+   */
+  program: string;
+  /**
    * What this option would use if nothing were typed.
    *
    * Sent so a chooser can show them as placeholders. A form whose model box is
@@ -121,6 +130,7 @@ function optionFor(id: ProviderId): DigestOption {
   const program = id === 'ollama' ? 'ollama' : cliProgram({ provider: id });
   return {
     id,
+    program: cliProgram({ provider: id }),
     installed: program ? whichCommand(program) !== null : null,
     needsKey: id !== 'off' && needsKey(id, ''),
     // The address a fresh choice would use, since that is what picking it now

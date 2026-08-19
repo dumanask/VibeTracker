@@ -30,11 +30,15 @@ import {
   geminiArgs,
   isCliProvider,
   opencodeArgs,
+  presetFor,
+  CLI_PRESETS,
   CLI_PROGRAM,
   CLI_PROVIDERS,
+  SELECTABLE_PROVIDERS,
   ProviderError,
   type ProviderConfig,
 } from '../src/digest/index.ts';
+import { ENUMS } from '@vibetracker/core';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures');
 const help = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
@@ -232,5 +236,101 @@ test('a preset that is not installed says so instead of throwing a stack', async
   } finally {
     if (saved === undefined) delete process.env['PATH'];
     else process.env['PATH'] = saved;
+  }
+});
+
+test('the table, the config enum and the chooser cannot drift apart', () => {
+  // Three lists have to agree and only one of them is the source. A type
+  // cannot check this: `ProviderId` is a compile-time union, `ENUMS` is a
+  // runtime array in another package that must not import the engine, and the
+  // chooser is derived. This is the half a compiler does not cover — and the
+  // failure it prevents is the one that started all of this, a provider the
+  // engine could run that no surface offered.
+  for (const preset of CLI_PRESETS) {
+    assert.ok(
+      (ENUMS.digestProvider as readonly string[]).includes(preset.id),
+      `${preset.id} is missing from ENUMS.digestProvider in core/config.ts`,
+    );
+    assert.ok(
+      (SELECTABLE_PROVIDERS as readonly string[]).includes(preset.id),
+      `${preset.id} is missing from the dashboard's chooser`,
+    );
+    assert.equal(CLI_PROGRAM[preset.id as keyof typeof CLI_PROGRAM], preset.program);
+  }
+  // And nothing claims to be a CLI provider without a row behind it.
+  for (const id of CLI_PROVIDERS) {
+    if (id === 'cli') continue;
+    assert.ok(presetFor(id), `${id} has no row in CLI_PRESETS`);
+  }
+});
+
+test('every row is a distinct program with a display line and a prompt route', () => {
+  const ids = new Set<string>();
+  const programs = new Set<string>();
+  for (const preset of CLI_PRESETS) {
+    assert.ok(!ids.has(preset.id), `duplicate id ${preset.id}`);
+    assert.ok(!programs.has(preset.program), `duplicate program ${preset.program}`);
+    ids.add(preset.id);
+    programs.add(preset.program);
+
+    assert.match(preset.id, /^[a-z0-9-]+-cli$/, preset.id);
+    assert.ok(preset.program.length > 0, preset.id);
+    assert.ok(preset.display.startsWith(preset.program), preset.id);
+    assert.ok(preset.promptVia === undefined || preset.promptVia === 'file', preset.id);
+  }
+});
+
+test('no row can put the prompt on a command line', () => {
+  // The rule the whole CLI half of this feature rests on, checked against
+  // every row rather than against the ones somebody remembered to test. The
+  // arguments are built with a payload-shaped model name and a payload-shaped
+  // help text; neither may come back out in a place a process listing sees.
+  const secret = 'GIZLI-PLAN-METNI';
+  for (const preset of CLI_PRESETS) {
+    const args = preset.args({
+      help: '--model --dir --cwd --pure --quiet --skip-trust --approval-mode --output-format --no-session --silent --no-ask-user --no-git --no-auto-commits --dry-run --no-stream --yes-always --message-file',
+      model: 'MODEL',
+      workDir: 'WORK',
+      outFile: 'OUT',
+      promptFile: 'PROMPT',
+    });
+    for (const a of args) {
+      assert.ok(!a.includes(secret), preset.id);
+      // Nothing multi-line, and nothing that reads as prose: every argument is
+      // a flag, a fixed word, or one of the four paths handed in.
+      assert.ok(!a.includes('\n'), preset.id);
+    }
+    // A row that takes the prompt in a file must actually name the file it was
+    // given — otherwise the prompt is written to a path nothing reads and the
+    // program is asked nothing at all.
+    if (preset.promptVia === 'file') {
+      assert.ok(args.includes('PROMPT'), `${preset.id} never uses promptFile`);
+    }
+  }
+});
+
+test('a row asks for nothing its build does not have', () => {
+  // Empty help means an old build that printed no flags we recognise. Every
+  // row must degrade to its bare invocation rather than to an unknown-option
+  // error, because the alternative is that a `vt digest` fails on the versions
+  // this table was not written against.
+  for (const preset of CLI_PRESETS) {
+    const bare = preset.args({
+      help: '',
+      model: 'MODEL',
+      workDir: 'WORK',
+      outFile: 'OUT',
+      promptFile: 'PROMPT',
+    });
+    for (const a of bare) {
+      if (!a.startsWith('-')) continue;
+      // The only flags allowed without help behind them are the ones that are
+      // part of the invocation itself rather than an option: codex's `-`,
+      // aider's `--message-file`, gemini's `--prompt`, amp's `-x`, cn's `-p`.
+      assert.ok(
+        ['-', '-x', '-p', '-m', '--prompt', '--message-file'].includes(a),
+        `${preset.id} passes ${a} without checking for it`,
+      );
+    }
   }
 });

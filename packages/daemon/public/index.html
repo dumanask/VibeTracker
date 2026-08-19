@@ -1260,16 +1260,21 @@ let llmPick = null;
 /** Typed-but-unsaved text, so a re-render does not eat what you are writing. */
 let llmDraft = { model: '', base_url: '', api_key_env: '' };
 
-/** Name and one line of why, per provider. Literals, so the scanner sees them. */
-function llmLabel(id) {
+/**
+ * Name and one line of why, per option.
+ *
+ * The four that are not agent CLIs get their own sentence. The rest are named
+ * by their program — `crush`, `droid`, `aider` are proper nouns, so there is
+ * nothing to translate per row and adding one to the engine's table reaches
+ * this list without a second edit or a new catalog key.
+ */
+function llmLabel(o) {
+  const id = o.id;
   if (id === 'off') return [tr('Kapalı'), tr('yapısal motor tek başına çalışır; hiçbir şey gönderilmez')];
   if (id === 'ollama') return [tr('Ollama'), tr('bu makinedeki model; anahtar istemez, veri çıkmaz')];
-  if (id === 'claude-cli') return [tr('claude komutu'), tr('anahtar istemez; mevcut aboneliğinin kotasından yer')];
-  if (id === 'codex-cli') return [tr('codex komutu'), tr('anahtar istemez; Codex aboneliğinin kotasından yer')];
-  if (id === 'opencode-cli') return [tr('opencode komutu'), tr('anahtar istemez; opencode aboneliğinin kotasından yer')];
-  if (id === 'gemini-cli') return [tr('gemini komutu'), tr('anahtar istemez; Google hesabının kotasından yer')];
   if (id === 'openai') return [tr('OpenAI uyumlu'), tr('adresle OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')];
   if (id === 'anthropic') return [tr('Anthropic API'), tr('anahtar gerekir')];
+  if (o.program) return [o.program, tr('makinendeki komut; anahtar istemez, kendi hesabının kotasından yer')];
   return [id, ''];
 }
 
@@ -1333,7 +1338,7 @@ function renderLlm() {
   }
 
   html += llm.options.map(o => {
-    const [name, why] = llmLabel(o.id);
+    const [name, why] = llmLabel(o);
     const mark = o.installed === true
       ? `<span class="stay">${esc(tr('kurulu'))}</span>`
       : o.installed === false ? `<span class="bad">${esc(tr('kurulu değil'))}</span>` : '';

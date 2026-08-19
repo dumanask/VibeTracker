@@ -105,13 +105,19 @@ high_fidelity = false
 #
 #   off        : kapalı
 #   ollama     : makinendeki Ollama. Anahtar istemez, veri makineden çıkmaz.
-#   claude-cli : makinendeki "claude" komutu. Anahtar istemez, mevcut
-#                aboneliğine yazılır.
-#   codex-cli  : makinendeki "codex" komutu. Aynısı, Codex aboneliğiyle.
-#   opencode-cli : makinendeki "opencode" komutu. Aynısı, onun aboneliğiyle.
-#   gemini-cli : makinendeki "gemini" komutu. Aynısı, Google hesabınla.
-#   cli        : başka herhangi bir komut -- aşağıdaki "command" ve "args".
-#                gemini, opencode, aider, kendi betiğin... ne kuruluysa.
+#
+#   Zaten giriş yapmış olduğun ajan CLI'ı -- anahtar istemez, o programın
+#   kendi hesabından yer. Hangileri kurulu: "vt digest providers"
+#
+#     claude-cli   codex-cli   opencode-cli   gemini-cli   qwen-cli
+#     crush-cli    droid-cli   goose-cli      copilot-cli  continue-cli
+#     amp-cli      aider-cli   llm-cli
+#
+#   İstem her zaman stdin'den (aider'da 0600 bir dosyadan) verilir; komut
+#   satırına asla yazılmaz, çünkü komut satırını makinedeki herkes okuyabilir.
+#
+#   cli        : listede olmayan herhangi bir komut -- aşağıdaki "command" ve
+#                "args". Panodan seçilemez, yalnızca buradan yazılır.
 #   anthropic  : Anthropic API'si
 #   openai     : OpenAI *biçimi*. base_url ile OpenRouter, Groq, DeepSeek,
 #                Mistral, xAI, Together, LM Studio, vLLM, llama.cpp ve
@@ -130,9 +136,11 @@ api_key_env = ${tomlValue(c.digestKeyEnv ?? '')}
 # görünür ve bu metin senin plan belgelerinin özeti.
 # Yer tutucular: {prompt_file} (0600, sonra silinir), {output_file}, {model}
 #
-#   command = 'gemini'      / args = ['-m', '{model}']
-#   command = 'opencode'    / args = ['run']
-#   command = 'llm'         / args = ['-m', '{model}']
+# Yukarıdaki listede olan bir program için buna gerek yok; bu satır listede
+# OLMAYAN şeyler için. Örneğin istemi argüman olarak isteyen bir CLI:
+#
+#   command = 'cursor-agent' / args = ['-p', '--output-format', 'text']
+#   command = 'kendi-betigim' / args = ['{prompt_file}', '{output_file}']
 command = ${tomlValue(c.digestCommand ?? '')}
 args = ${tomlValue(c.digestArgs ?? [])}
 daily_usd_cap = ${d.digest.daily_usd_cap}
