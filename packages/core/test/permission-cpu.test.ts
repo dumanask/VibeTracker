@@ -14,7 +14,12 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionState, type TranscriptFacts, type DescendantSummaryLike } from '@vibetracker/shared';
+import {
+  SessionState,
+  interrupts,
+  type TranscriptFacts,
+  type DescendantSummaryLike,
+} from '@vibetracker/shared';
 import { deriveState } from '../src/derive.ts';
 import { SPAWN_GRACE_MS, LOCAL_TOOL_PERMISSION_MS } from '../src/thresholds.ts';
 
@@ -96,4 +101,38 @@ test('cpu that cannot be sampled at all never vetoes', () => {
   // zero, and it is certainly not "busy".
   const s = state('Bash', SPAWN_GRACE_MS + 60_000, null);
   assert.equal(s.state, SessionState.WaitingPermission);
+});
+
+/**
+ * A question is not a stall.
+ *
+ * Read off the running board: an open `AskUserQuestion`, zero cpu, and seven
+ * and a half minutes later the verdict `STALLED` -- which means "alive, no
+ * progress, this looks wrong". Nothing was wrong. The agent had asked a
+ * question and was waiting to be read, which is the one thing this whole
+ * product exists to put on a screen.
+ */
+test('a tool that blocks on a person is answered by the call, not by a deadline', () => {
+  const s = state('AskUserQuestion', 60_000, 0);
+  assert.equal(s.state, SessionState.WaitingInput);
+  assert.equal(s.subReason, 'question');
+});
+
+test('...and does not wait out a stall deadline first', () => {
+  // The old path called this STALLED once the generic thinking deadline had
+  // passed. Well past it now, and still a question.
+  const s = state('ExitPlanMode', 20 * 60_000, 0);
+  assert.equal(s.state, SessionState.WaitingInput);
+});
+
+test('it is a question, not a permission gate, so nothing new interrupts', () => {
+  // `interrupts()` is unchanged by this: the board learns sooner, the machine
+  // stays as quiet as it was.
+  assert.equal(interrupts(state('AskUserQuestion', 60_000, 0).state), false);
+});
+
+test('a freshly written call is still just work in flight', () => {
+  // The twenty-second window covers the gap between the call being written and
+  // its result being read; jumping straight to "waiting on you" would flicker.
+  assert.equal(state('AskUserQuestion', 5_000, 0).state, SessionState.Busy);
 });

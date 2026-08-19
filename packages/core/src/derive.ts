@@ -120,6 +120,22 @@ export function deriveState(input: DeriveInput): DerivedState {
       return { state: SessionState.Busy, subReason: `tool:${openTool}`, confidence: 0.8, evidence };
     }
 
+    // A question, asked and unanswered. There is no deadline to wait out here
+    // and nothing to measure: the tool blocks on a person, so the call is the
+    // answer. Without this the branch fell through to the generic path and
+    // announced STALLED seven and a half minutes later -- "alive, no progress,
+    // this looks wrong" -- about an agent that was doing exactly the right
+    // thing and waiting for you to read it.
+    if (toolClass === 'blocks-on-human') {
+      evidence.push(t`ask:${openTool} has been waiting on you for ${fmtAge(ageMs)}`);
+      return {
+        state: SessionState.WaitingInput,
+        subReason: 'question',
+        confidence: 0.9,
+        evidence,
+      };
+    }
+
     // A tool that finishes in milliseconds does not stay open for half a
     // minute. When one does, the agent is not slow — it is sitting on a
     // permission prompt. No process tree is needed to know this, only the

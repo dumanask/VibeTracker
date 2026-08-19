@@ -130,8 +130,16 @@ export interface ProcessProbe {
  * - `local-instant`: completes in milliseconds. Still being open after tens of
  *   seconds is not slowness, it is a permission prompt.
  * - `network`: legitimately slow and invisible to both CPU and the process tree.
+ * - `blocks-on-human`: waits for a person and for nothing else. No process to
+ *   inspect, no cpu to measure, no deadline worth waiting out -- the call
+ *   itself is the whole answer.
  */
-export type ToolClass = 'spawns-children' | 'local-instant' | 'network' | 'unknown';
+export type ToolClass =
+  | 'spawns-children'
+  | 'local-instant'
+  | 'network'
+  | 'blocks-on-human'
+  | 'unknown';
 
 /**
  * Structural shape of a descendant summary, so pure logic can depend on it
@@ -144,6 +152,10 @@ export interface DescendantSummaryLike {
 }
 
 export function classifyTool(tool: string): ToolClass {
+  // First, because these are the only ones whose meaning is certain from the
+  // name alone. Everything below is an inference about how long something
+  // ought to take; this is not an inference at all.
+  if (tool === 'AskUserQuestion' || tool === 'ExitPlanMode') return 'blocks-on-human';
   if (tool === 'Bash' || tool === 'BashOutput' || tool === 'KillShell') return 'spawns-children';
   if (
     tool === 'Read' ||
