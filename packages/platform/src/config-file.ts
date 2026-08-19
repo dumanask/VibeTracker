@@ -52,6 +52,9 @@ interface TemplateChoices {
   digestModel?: string;
   digestBaseUrl?: string;
   digestKeyEnv?: string;
+  /** Only asked about when the provider is `cli`. */
+  digestCommand?: string;
+  digestArgs?: string[];
   agents: string[];
 }
 
@@ -101,13 +104,16 @@ high_fidelity = false
 # çıkmaz.
 #
 #   off        : kapalı
+#   ollama     : makinendeki Ollama. Anahtar istemez, veri makineden çıkmaz.
 #   claude-cli : makinendeki "claude" komutu. Anahtar istemez, mevcut
 #                aboneliğine yazılır.
+#   codex-cli  : makinendeki "codex" komutu. Aynısı, Codex aboneliğiyle.
+#   cli        : başka herhangi bir komut -- aşağıdaki "command" ve "args".
+#                gemini, opencode, aider, kendi betiğin... ne kuruluysa.
 #   anthropic  : Anthropic API'si
 #   openai     : OpenAI *biçimi*. base_url ile OpenRouter, Groq, DeepSeek,
 #                Mistral, xAI, Together, LM Studio, vLLM, llama.cpp ve
 #                Gemini'nin uyumluluk ucu -- hepsi bu.
-#   ollama     : makinendeki Ollama. Veri makineden çıkmaz.
 provider = ${tomlValue(c.digestProvider)}
 model = ${tomlValue(c.digestModel ?? '')}                    # boş = sağlayıcının varsayılanı
 base_url = ${tomlValue(c.digestBaseUrl ?? '')}                 # boş = sağlayıcının kendi adresi
@@ -116,6 +122,17 @@ base_url = ${tomlValue(c.digestBaseUrl ?? '')}                 # boş = sağlay�
 # okunur; sır buraya yazılmaz. Boş bırakırsan sağlayıcının olağan değişkeni
 # denenir, sonra "vt digest key" ile yazdığın 0600 dosya.
 api_key_env = ${tomlValue(c.digestKeyEnv ?? '')}
+
+# provider = "cli" iken çalıştırılacak komut. Metin stdin'den verilir --
+# komut satırına ASLA yazılmaz, çünkü komut satırı süreç tablosunda herkese
+# görünür ve bu metin senin plan belgelerinin özeti.
+# Yer tutucular: {prompt_file} (0600, sonra silinir), {output_file}, {model}
+#
+#   command = 'gemini'      / args = ['-m', '{model}']
+#   command = 'opencode'    / args = ['run']
+#   command = 'llm'         / args = ['-m', '{model}']
+command = ${tomlValue(c.digestCommand ?? '')}
+args = ${tomlValue(c.digestArgs ?? [])}
 daily_usd_cap = ${d.digest.daily_usd_cap}
 per_project_min_interval_min = ${d.digest.per_project_min_interval_min}
 max_per_project_per_day = ${d.digest.max_per_project_per_day}

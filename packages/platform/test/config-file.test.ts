@@ -55,3 +55,27 @@ test('the template keeps its comments', () => {
   // editing, so it is documented in the file itself rather than only here.
   assert.match(text, /\[privacy\][\s\S]*bilinmeyen bir anahtar hata sayılır/);
 });
+
+test('a cli provider survives the round trip, arguments and all', () => {
+  // The answer to "what LLM, though" for somebody who has neither an API key
+  // nor a Claude subscription: a command they already have. Which means the
+  // template has to write a string array, and TOML has to read it back — the
+  // one place in this file where a wrong quote turns into a config that parses
+  // but runs the wrong program.
+  const text = configTemplate({
+    ...CHOICES,
+    digestProvider: 'cli',
+    digestCommand: 'gemini',
+    digestArgs: ['-m', '{model}', '--in', '{prompt_file}'],
+  });
+  const { config, issues } = loadConfigText(text);
+  assert.deepEqual(issues, [], `beklenmedik uyarı: ${JSON.stringify(issues)}`);
+  assert.equal(config.digest.provider, 'cli');
+  assert.equal(config.digest.command, 'gemini');
+  assert.deepEqual(config.digest.args, ['-m', '{model}', '--in', '{prompt_file}']);
+
+  // And the file says what the placeholders are, because the person editing it
+  // is not going to have this source open.
+  assert.ok(text.includes('{prompt_file}'));
+  assert.ok(text.includes('codex-cli'));
+});

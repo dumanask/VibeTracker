@@ -393,10 +393,12 @@ async function checkDigest(): Promise<Check> {
   const {
     resolveKey: resolve,
     needsKey: wants,
-    leavesMachine: leaves,
+    egress: where_,
+    isCliProvider: isCli,
     DEFAULT_BASE: bases,
     DEFAULT_MODEL: models,
   } = await import('@vibetracker/engine');
+  const { whichCommand: which } = await import('@vibetracker/platform');
   let cfg;
   try {
     ({ config: cfg } = await load());
@@ -413,11 +415,58 @@ async function checkDigest(): Promise<Check> {
       fix: tr('Açmak istersen seçenekler için: vt digest providers'),
     };
   }
-  const base = d.base_url || bases[d.provider as 'anthropic' | 'openai' | 'ollama'] || '';
+  const cli = isCli(d.provider);
+  const base = cli ? '' : d.base_url || bases[d.provider as 'anthropic' | 'openai' | 'ollama'] || '';
   const model = d.model || models[d.provider];
   const key = resolve(d.provider, d.api_key_env);
-  const egress = leaves({ provider: d.provider, model, baseUrl: d.base_url, apiKey: key.key });
-  const where = egress ? tr('veri makineden çıkar') : tr('veri makineden çıkmaz');
+  const out = where_({
+    provider: d.provider,
+    model,
+    baseUrl: d.base_url,
+    apiKey: key.key,
+    command: d.command,
+    args: d.args,
+  });
+  const where =
+    out === 'yes'
+      ? tr('veri makineden çıkar')
+      : out === 'no'
+        ? tr('veri makineden çıkmaz')
+        : tr('veri çıkar mı bilinmiyor');
+
+  // A configured provider that names a program nobody can run is a failure
+  // that would otherwise wait until the day somebody actually wanted a
+  // summary. It is exactly what a doctor is for.
+  if (cli) {
+    const exe =
+      d.provider === 'claude-cli' ? 'claude' : d.provider === 'codex-cli' ? 'codex' : d.command.trim();
+    const path = exe ? which(exe) : null;
+    if (!exe) {
+      return {
+        id: 'digest',
+        label: tr('LLM özeti'),
+        status: 'warn',
+        detail: `${d.provider} · ${tr('komut yazılmamış')}`,
+        fix: tr('Config dosyasında [digest] command ayarla, ya da: vt digest providers'),
+      };
+    }
+    if (!path) {
+      return {
+        id: 'digest',
+        label: tr('LLM özeti'),
+        status: 'warn',
+        detail: `${d.provider} · "${exe}" ${tr("PATH'te bulunamadı")}`,
+        fix: tr('Kur, ya da başka bir sağlayıcı seç: vt digest providers'),
+      };
+    }
+    return {
+      id: 'digest',
+      label: tr('LLM özeti'),
+      status: 'ok',
+      detail: `${d.provider} · ${path}${model ? ' · ' + model : ''} · ${where}`,
+    };
+  }
+
   if (wants(d.provider, d.base_url) && key.key === null) {
     return {
       id: 'digest',

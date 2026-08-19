@@ -20,6 +20,7 @@ import {
   configPath,
   configTemplate,
   dataDir,
+  hasCommand,
   otherAgentDirs,
   writeConfig,
 } from '@vibetracker/platform';
@@ -162,17 +163,40 @@ export async function runInit(args: InitArgs): Promise<number> {
   // "an API key", which assumed everyone running the tool is an Anthropic
   // customer. Most are not. `openai` here is the wire format rather than the
   // company — one `base_url` reaches OpenRouter, Groq, DeepSeek, Mistral, xAI,
-  // Together, LM Studio, vLLM and Gemini's compatibility endpoint — so the
-  // list is four real answers instead of one vendor and a fallback.
+  // Together, LM Studio, vLLM and Gemini's compatibility endpoint — and the
+  // CLI answers run whatever agent is already signed in on this machine. The
+  // list is the shape of the market instead of one vendor and a fallback.
+  //
+  // It is filtered by what is actually installed, because an answer of
+  // "the tool you already pay for" is only an answer if it names a tool that
+  // is there. Everything is still reachable from the config file; this only
+  // decides what is worth putting in front of somebody on their first run.
+  const hasClaude = hasCommand('claude');
+  const hasCodex = hasCommand('codex');
+  const hasOllama = hasCommand('ollama');
+  const options: Array<{ value: Config['digest']['provider']; label: string; detail: string }> = [
+    { value: 'off', label: tr('Kapalı (önerilen)'), detail: tr('yapısal motor tek başına çalışır; hiçbir veri makineden çıkmaz') },
+  ];
+  if (hasOllama) {
+    options.push({ value: 'ollama', label: tr('Yerel model (Ollama) — kurulu'), detail: tr('veri makineden çıkmaz; anahtar istemez; kalite belirgin düşer') });
+  }
+  if (hasClaude) {
+    options.push({ value: 'claude-cli', label: tr('Makinemdeki claude komutu — kurulu'), detail: tr('anahtar istemez, mevcut aboneliğinin kotasından yer') });
+  }
+  if (hasCodex) {
+    options.push({ value: 'codex-cli', label: tr('Makinemdeki codex komutu — kurulu'), detail: tr('anahtar istemez, Codex aboneliğinin kotasından yer') });
+  }
+  if (!hasOllama) {
+    options.push({ value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('kurulu değil; kurarsan veri makineden hiç çıkmaz') });
+  }
+  options.push(
+    { value: 'openai', label: tr('OpenAI uyumlu bir servis'), detail: tr('OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM… base_url ile hepsi') },
+    { value: 'anthropic', label: tr('Anthropic API'), detail: tr('tipik ~$5-7/ay; anahtarı ortam değişkeninde tutarsın') },
+    { value: 'cli', label: tr('Başka bir komut'), detail: tr('gemini, opencode, aider, kendi betiğin… metni stdin ile alan her şey') },
+  );
   const digestProvider = await choose<Config['digest']['provider']>(
     tr('LLM özeti (faz adı, blocker, sonraki adım) — varsayılan kapalı.'),
-    [
-      { value: 'off', label: tr('Kapalı (önerilen)'), detail: tr('yapısal motor tek başına çalışır; hiçbir veri makineden çıkmaz') },
-      { value: 'ollama', label: tr('Yerel model (Ollama)'), detail: tr('veri makineden çıkmaz; anahtar istemez; kalite belirgin düşer') },
-      { value: 'openai', label: tr('OpenAI uyumlu bir servis'), detail: tr('OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM… base_url ile hepsi') },
-      { value: 'anthropic', label: tr('Anthropic API'), detail: tr('tipik ~$5-7/ay; anahtarı ortam değişkeninde tutarsın') },
-      { value: 'claude-cli', label: tr('Makinemdeki claude komutu'), detail: tr('anahtar istemez, mevcut aboneliğinin kotasından yer') },
-    ],
+    options,
     'off',
   );
 
@@ -182,6 +206,21 @@ export async function runInit(args: InitArgs): Promise<number> {
   let digestModel = '';
   let digestBaseUrl = '';
   let digestKeyEnv = '';
+  let digestCommand = '';
+  let digestArgs: string[] = [];
+  if (digestProvider === 'cli') {
+    digestCommand = await askText(tr('  Hangi komut?'), 'gemini');
+    const argLine = await askText(tr('  Argümanlar (boşlukla ayrılmış, boş bırakılabilir)?'), '');
+    digestArgs = argLine.split(/\s+/).filter(Boolean);
+    if (!hasCommand(digestCommand)) {
+      process.stdout.write(
+        t`  Uyarı: "${digestCommand}" PATH'te bulunamadı. Yazılacak, ama çalıştırılamaz.\n`,
+      );
+    }
+    process.stdout.write(
+      tr('  Metin komuta stdin ile verilir; komut satırına yazılmaz. Kabul etmiyorsa argümanlara {prompt_file} koy.\n'),
+    );
+  }
   if (digestProvider === 'openai' || digestProvider === 'ollama' || digestProvider === 'anthropic') {
     digestBaseUrl =
       digestProvider === 'anthropic'
@@ -248,6 +287,8 @@ export async function runInit(args: InitArgs): Promise<number> {
     digestModel,
     digestBaseUrl,
     digestKeyEnv,
+    digestCommand,
+    digestArgs,
     agents: ['claude-code'],
   });
 

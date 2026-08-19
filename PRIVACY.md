@@ -82,10 +82,23 @@ Açacaksan sağlayıcıyı sen seçersin — tek bir satıcıya bağlı değildi
 | `openai` | OpenAI *biçimi*: `base_url` ile OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LM Studio, vLLM, llama.cpp, Gemini uyumluluk ucu | adrese bağlı — loopback ise hayır |
 | `anthropic` | Anthropic API | evet |
 | `claude-cli` | makinendeki `claude` komutu, mevcut aboneliğinden | evet |
+| `codex-cli` | makinendeki `codex` komutu, Codex aboneliğinden | evet |
+| `cli` | senin yazdığın herhangi bir komut (`gemini`, `opencode`, kendi betiğin…) | **bilinmiyor** — o komut ne yapıyorsa |
 
 Nereye gittiğini tahmin etmen gerekmez: `vt digest providers` ve `vt doctor`
 bunu açıkça yazar, ve `vt digest` göndermeden önce "bu metin bu makineden
 çıkacak / çıkmayacak" satırını gösterir.
+
+`cli` için o satır **"bilinmiyor"** der ve öyle kalır. VibeTracker senin
+seçtiğin komutun içine bakmaz; loopback'e mi gidiyor yoksa internete mi,
+bunu yalnızca sen bilirsin. Emin olmadığımız bir şeyi "çıkmaz" diye
+yazmayız — her yüzey "bilinmiyor"u "çıkıyor" gibi ele alır.
+
+**Komut satırına hiçbir şey yazılmaz.** Metin komuta **stdin** ile verilir,
+çünkü komut satırı süreç tablosunda makinedeki her şey tarafından okunabilir —
+bu ürünün kendi süreç sondası dâhil. Bir komut stdin kabul etmiyorsa
+argümanlara `{prompt_file}` koyabilirsin: 0600 izinli geçici bir dosya yazılır
+ve çalışma biter bitmez silinir. Bilerek `{prompt}` diye bir yer tutucu yoktur.
 
 **Anahtar config dosyasına yazılmaz.** `[digest].api_key_env` anahtarın
 kendisini değil, anahtarı tutan **ortam değişkeninin adını** taşır — çünkü bu

@@ -96,8 +96,15 @@ export interface Config {
      * that OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, LM Studio,
      * vLLM, llama.cpp and Gemini's compatibility endpoint all speak. Pointing
      * `base_url` at one of those is the whole configuration.
+     *
+     * The same reasoning produced `cli`. Whoever is being watched by this tool
+     * already has an agent CLI signed in, and that CLI is a model endpoint
+     * that costs nothing extra and needs no key. `claude-cli` and `codex-cli`
+     * are the two common enough to name; `cli` is the same mechanism with the
+     * command left to the user, so a program nobody here has heard of still
+     * works.
      */
-    provider: 'off' | 'claude-cli' | 'anthropic' | 'openai' | 'ollama';
+    provider: 'off' | 'claude-cli' | 'codex-cli' | 'cli' | 'anthropic' | 'openai' | 'ollama';
     model: string;
     /** Empty means the provider's own default. Set it to reach anything else. */
     base_url: string;
@@ -110,6 +117,17 @@ export interface Config {
      * variable, and then to the 0600 key file `vt digest key` writes.
      */
     api_key_env: string;
+    /**
+     * `provider = "cli"` only: the program to run, and its arguments.
+     *
+     * The prompt is handed over on stdin. There is no `{prompt}` placeholder
+     * and there will not be one — a command line is world-readable in the
+     * process table, and the payload is a summary of the user's own plans.
+     * `{prompt_file}` (a 0600 file, deleted after), `{output_file}` and
+     * `{model}` are substituted for programs that need them.
+     */
+    command: string;
+    args: string[];
     daily_usd_cap: number;
     per_project_min_interval_min: number;
     max_per_project_per_day: number;
@@ -174,6 +192,8 @@ export function defaultConfig(): Config {
       base_url: '',
       api_key_env: '',
       model: '',
+      command: '',
+      args: [],
       daily_usd_cap: 1.5,
       per_project_min_interval_min: 360,
       max_per_project_per_day: 4,
@@ -227,7 +247,7 @@ const STRICT_SECTIONS = new Set(['privacy', 'security']);
 const ENUMS = {
   lang: ['tr', 'en'],
   hookMode: ['http', 'command', 'off'],
-  digestProvider: ['off', 'claude-cli', 'anthropic', 'openai', 'ollama'],
+  digestProvider: ['off', 'claude-cli', 'codex-cli', 'cli', 'anthropic', 'openai', 'ollama'],
   projectDigest: ['inherit', 'off'],
   trackingMode: ['all', 'selected'],
 } as const;
@@ -414,6 +434,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
     'model',
     'base_url',
     'api_key_env',
+    'command',
+    'args',
     'daily_usd_cap',
     'per_project_min_interval_min',
     'max_per_project_per_day',
@@ -488,6 +510,8 @@ export function validateConfig(raw: TomlTable): { config: Config; issues: Config
       model: r.str(digest, 'digest', 'model', d.digest.model),
       base_url: r.str(digest, 'digest', 'base_url', d.digest.base_url),
       api_key_env: r.str(digest, 'digest', 'api_key_env', d.digest.api_key_env),
+      command: r.str(digest, 'digest', 'command', d.digest.command),
+      args: r.strings(digest, 'digest', 'args', d.digest.args),
       daily_usd_cap: r.num(digest, 'digest', 'daily_usd_cap', d.digest.daily_usd_cap, { min: 0 }),
       per_project_min_interval_min: r.num(
         digest,

@@ -1,4 +1,5 @@
 export { claudeDir, dataDir, configDir, vscodeUserDirs, otherAgentDirs } from './dirs.ts';
+export { whichCommand, hasCommand } from './which.ts';
 export { listVoices, speaksLanguage, type Voice, type VoiceReport } from './voices.ts';
 export {
   configPath,

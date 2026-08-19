@@ -9,8 +9,9 @@
  * The other half of what it is for is the answer to "which model, though". The
  * summary is one paragraph of judgement, and requiring a particular vendor for
  * it would exclude most of the people the tool is for. So the provider is a
- * choice, one of the answers is "a model on your own machine", and one is a
- * wire format rather than a company — see `provider.ts`.
+ * choice: one answer is a model on your own machine, one is a wire format
+ * rather than a company, and three are "the agent CLI you already have" —
+ * `claude`, `codex`, or a command you name yourself. See `provider.ts`.
  *
  * What it does **not** do: compute the percentage. That is counted locally out
  * of things that can be counted, and refused when they cannot. A model is
@@ -25,6 +26,8 @@ import {
   ScanContext,
   buildPayload,
   clearKeyFile,
+  egress,
+  isCliProvider,
   isLocal,
   keyFilePath,
   leavesMachine,
@@ -37,8 +40,9 @@ import {
   writeKeyFile,
   type DigestInput,
   type ProviderConfig,
+  type ProviderId,
 } from '@vibetracker/engine';
-import { readGitFacts, readRecentCommits, loadConfig } from '@vibetracker/platform';
+import { readGitFacts, readRecentCommits, loadConfig, whichCommand } from '@vibetracker/platform';
 import { getLang, say, t, tr } from '@vibetracker/core';
 import { confirm, isInteractive } from './prompt.ts';
 import type { ProjectView } from '@vibetracker/shared';
@@ -72,7 +76,40 @@ function providerConfig(cfg: Awaited<ReturnType<typeof loadConfig>>['config']): 
     model: d.model,
     baseUrl: d.base_url,
     apiKey: key.key,
+    command: d.command,
+    args: d.args,
   };
+}
+
+/** The address a provider would use, or empty for the ones that have none. */
+function baseFor(d: { provider: ProviderId; base_url: string }): string {
+  if (d.provider === 'off' || isCliProvider(d.provider)) return '';
+  return d.base_url || DEFAULT_BASE[d.provider];
+}
+
+/** What a CLI provider will actually run, as one line. */
+function commandLine(p: ProviderConfig): string {
+  if (p.provider === 'claude-cli') return 'claude -p';
+  if (p.provider === 'codex-cli') return 'codex exec';
+  return [p.command ?? '', ...(p.args ?? [])].filter(Boolean).join(' ');
+}
+
+/**
+ * The egress line, in the three words that matter.
+ *
+ * `cli` runs a program this codebase did not write, so the honest answer is
+ * that it does not know. Saying so is better than a green line that might be
+ * a lie — the user chose that command and is the only one who can answer.
+ */
+function egressLine(p: ProviderConfig): string {
+  switch (egress(p)) {
+    case 'no':
+      return green(tr('veri bu makineden çıkmaz'));
+    case 'yes':
+      return yellow(tr('veri bu makineden ÇIKAR'));
+    default:
+      return yellow(tr('veri çıkar mı — bilinmiyor: bu komutu sen seçtin'));
+  }
 }
 
 /**
@@ -85,11 +122,28 @@ function providerConfig(cfg: Awaited<ReturnType<typeof loadConfig>>['config']): 
 async function showProviders(json: boolean): Promise<number> {
   const { config } = await loadConfig();
   const d = config.digest;
+  const p = providerConfig(config);
   const key = resolveKey(d.provider, d.api_key_env);
-  const base = d.base_url || (d.provider === 'off' || d.provider === 'claude-cli' ? '' : DEFAULT_BASE[d.provider]);
+  const base = baseFor(d);
   const model = d.model || DEFAULT_MODEL[d.provider];
   const wantsKey = d.provider !== 'off' && needsKey(d.provider, d.base_url);
-  const ready = d.provider === 'off' ? false : !wantsKey || key.key !== null;
+  // A CLI provider is only ready if the program is there. This is the failure
+  // that would otherwise surface as a stack trace at the end of a minute of
+  // waiting, on the one command that costs the user something.
+  const exe = isCliProvider(d.provider)
+    ? d.provider === 'claude-cli'
+      ? 'claude'
+      : d.provider === 'codex-cli'
+        ? 'codex'
+        : d.command.trim()
+    : '';
+  const exePath = exe ? whichCommand(exe) : null;
+  const ready =
+    d.provider === 'off'
+      ? false
+      : isCliProvider(d.provider)
+        ? exe !== '' && exePath !== null
+        : !wantsKey || key.key !== null;
 
   if (json) {
     process.stdout.write(
@@ -98,11 +152,14 @@ async function showProviders(json: boolean): Promise<number> {
           provider: d.provider,
           model,
           baseUrl: base,
+          command: exe || null,
+          commandPath: exePath,
           needsKey: wantsKey,
           keyFrom: key.from,
           keyEnv: key.envName ?? null,
           ready,
-          leavesMachine: leavesMachine(providerConfig(config)),
+          egress: egress(p),
+          leavesMachine: leavesMachine(p),
         },
         null,
         2,
@@ -117,6 +174,14 @@ async function showProviders(json: boolean): Promise<number> {
   if (d.provider !== 'off') {
     if (model) out.push(`    ${tr('model')}       ${model}`);
     if (base) out.push(`    ${tr('adres')}       ${base}`);
+    if (isCliProvider(d.provider)) {
+      out.push(`    ${tr('komut')}       ${commandLine(p) || red(tr('yazılmamış'))}`);
+      out.push(
+        exePath === null
+          ? `    ${red(tr('bulunamadı'))}  ${exe ? t`"${exe}" PATH'te yok` : tr('[digest] command boş')}`
+          : dim(`    ${tr('yeri')}        ${exePath}`),
+      );
+    }
     if (wantsKey) {
       out.push(
         key.key === null
@@ -126,23 +191,27 @@ async function showProviders(json: boolean): Promise<number> {
     } else {
       out.push(dim(`    ${tr('anahtar')}     ${tr('gerekmiyor')}`));
     }
-    out.push(
-      leavesMachine(providerConfig(config))
-        ? `    ${yellow(tr('veri bu makineden ÇIKAR'))}`
-        : `    ${green(tr('veri bu makineden çıkmaz'))}`,
-    );
+    out.push(`    ${egressLine(p)}`);
     out.push(ready ? `    ${green(tr('hazır'))}` : `    ${red(tr('eksik yapılandırma'))}`);
   } else {
     out.push(dim(tr('    Panodaki her sayı yerel motorla hesaplanıyor. Hiçbir şey gönderilmiyor.')));
   }
 
+  // The last column is the point of this command. "Not everyone has Claude" is
+  // only fixed if the alternatives are visible from inside the tool — and the
+  // installed ones are marked, because the cheapest answer for most people is
+  // a program they are already paying for and already have.
+  const mark = (name: string): string =>
+    whichCommand(name) ? green(` ← ${tr('kurulu')}`) : dim(` ${tr('(kurulu değil)')}`);
   out.push('');
   out.push(bold(tr('  Seçebileceklerin')));
   out.push(`    off         ${tr('kapalı — yapısal motor tek başına çalışır')}`);
-  out.push(`    ollama      ${tr('makinendeki model; anahtar yok, veri çıkmaz')}`);
+  out.push(`    ollama      ${tr('makinendeki model; anahtar yok, veri çıkmaz')}${mark('ollama')}`);
+  out.push(`    claude-cli  ${tr('makinendeki claude komutu; aboneliğinin kotasından yer')}${mark('claude')}`);
+  out.push(`    codex-cli   ${tr('makinendeki codex komutu; Codex aboneliğinden yer')}${mark('codex')}`);
+  out.push(`    cli         ${tr('başka herhangi bir komut — command + args ile')}`);
   out.push(`    openai      ${tr('OpenAI biçimi: OpenAI, OpenRouter, Groq, DeepSeek, Mistral, xAI, LM Studio, vLLM…')}`);
   out.push(`    anthropic   ${tr('Anthropic API')}`);
-  out.push(`    claude-cli  ${tr('makinendeki claude komutu; aboneliğinin kotasından yer')}`);
   out.push('');
   out.push(dim(tr('  Değiştirmek için config dosyasındaki [digest] bölümünü düzenle: vt config path')));
   process.stdout.write(`${out.join('\n')}\n`);
@@ -313,22 +382,29 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
   // ── the preview ──────────────────────────────────────────────────────
   // Shown before anything is sent, always, and shown in full. A preview that
   // summarised the payload would be a second thing to trust.
-  const egress = leavesMachine(provider);
   const head: string[] = [''];
   head.push(bold(`  ${project.displayName} · ${progress.phase?.labelRaw ?? tr('faz bilinmiyor')}`));
   head.push(`  ${tr('sağlayıcı')}  ${provider.provider}${provider.model ? ' · ' + provider.model : ''}`);
   if (provider.provider !== 'off') {
-    const base = provider.baseUrl || DEFAULT_BASE[provider.provider as 'anthropic' | 'openai' | 'ollama'] || '';
+    const base = baseFor(config.digest);
     if (base) head.push(`  ${tr('adres')}      ${base}${isLocal(base) ? ' ' + tr('(bu makine)') : ''}`);
+    // Named before it runs, always. This is the one provider family where what
+    // happens next is a program of the user's choosing, and approving a send
+    // without seeing the command would be approving half the decision.
+    if (isCliProvider(provider.provider)) {
+      head.push(`  ${tr('komut')}      ${commandLine(provider)}`);
+    }
   }
   head.push(t`  yük        ${payload.tokens} token · ${payload.system.length + payload.user.length} karakter`);
   if (payload.dropped.length) {
     head.push(yellow(`  ${tr('sığmadı')}    ${payload.dropped.join(', ')}`));
   }
   head.push(
-    egress
-      ? yellow(tr('  Bu metin bu makineden çıkacak.'))
-      : green(tr('  Bu metin bu makineden çıkmayacak.')),
+    egress(provider) === 'no'
+      ? green(tr('  Bu metin bu makineden çıkmayacak.'))
+      : egress(provider) === 'yes'
+        ? yellow(tr('  Bu metin bu makineden çıkacak.'))
+        : yellow(tr('  Bu metin yukarıdaki komuta verilecek. Nereye gittiğini o komut bilir.')),
   );
   process.stdout.write(`${head.join('\n')}\n\n`);
   process.stdout.write(dim('─'.repeat(60)) + '\n');
@@ -344,6 +420,22 @@ export async function runDigestCmd(args: DigestArgs): Promise<number> {
     const env = config.digest.api_key_env || DEFAULT_KEY_ENV[provider.provider] || '';
     process.stderr.write(t`\nAnahtar yok. ${env} ayarla ya da: vt digest key <anahtar>\n`);
     return 3;
+  }
+
+  // Checked here rather than discovered inside `spawn`: the answer is the same
+  // either way, but this one arrives before the confirmation prompt instead of
+  // after it.
+  if (isCliProvider(provider.provider)) {
+    const exe = commandLine(provider).split(' ')[0] ?? '';
+    if (!exe) {
+      process.stderr.write(tr('\nÇalıştırılacak komut yazılmamış: [digest] command\n'));
+      return 3;
+    }
+    if (!whichCommand(exe)) {
+      process.stderr.write(t`\n"${exe}" bulunamadı — kurulu mu, PATH'te mi?\n`);
+      process.stderr.write(tr('  Seçenekler için: vt digest providers\n'));
+      return 3;
+    }
   }
 
   // Two gates, not one. The config switch says "this feature may run"; this
