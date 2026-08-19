@@ -398,8 +398,8 @@ test('a workspace folder URI becomes a usable path', () => {
   // like this: percent-encoded, with a slash in front of the drive letter that
   // no Windows API accepts.
   assert.equal(
-    pathFromFileUri('file:///c%3A/Users/askim/OneDrive/Masa%C3%BCst%C3%BC/SASPERA/Saspera'),
-    'c:/Users/askim/OneDrive/Masaüstü/SASPERA/Saspera',
+    pathFromFileUri('file:///c%3A/Users/ad/OneDrive/Masa%C3%BCst%C3%BC/PROJE/Proje'),
+    'c:/Users/ad/OneDrive/Masaüstü/PROJE/Proje',
   );
   assert.equal(pathFromFileUri('file:///home/ali/dev/foo'), '/home/ali/dev/foo');
   assert.equal(pathFromFileUri('untitled:Untitled-1'), null);

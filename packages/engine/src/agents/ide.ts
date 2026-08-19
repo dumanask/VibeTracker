@@ -152,8 +152,8 @@ export function createIdeAdapters(): AgentAdapter[] {
  * Gemini / Antigravity CLI.
  *
  * `~/.gemini/projects.json` is a flat map of path to name. Two things about it
- * are worth writing down: the paths are **lower-cased** (`c:\users\askim\
- * onedrive\masaüstü\business\projectbsh`), and they keep their Turkish
+ * are worth writing down: the paths are **lower-cased** (`c:\users\ad\
+ * onedrive\masaüstü\business\projeadi`), and they keep their Turkish
  * characters. Neither is a problem downstream — identity goes through `realpath`
  * and a git root commit, and the display name comes from git rather than from
  * this file — but a reader that compared these strings to anything would get it

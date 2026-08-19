@@ -1093,7 +1093,7 @@ yakardı. Ayrı bir `permission` tablosu var ve boş; dolduğunda bakılacak yer
 **Codex `c:\GDEV\x` ve `C:\GDEV\x` yazıyor, Gemini yolları küçük harfe indiriyor.** Aynı
 depo, farklı yazım. Git kök commit'i bunu zaten çözüyordu ama `path:` kimliği çözmüyordu:
 `realpath` Windows'ta harf büyüklüğünü düzeltmiyor — ona ne verirsen onu döndürüyor — ve
-çıktısını hash'lemek bir dizine iki kimlik veriyordu. Panoda `projectbsh` ve `ProjectBSH`
+çıktısını hash'lemek bir dizine iki kimlik veriyordu. Panoda `projeadi` ve `ProjeAdi`
 diye iki satır olarak görüldü. Artık katlanmış anahtar hash'leniyor; `pathKey` Linux'ta
 katlamayı zaten reddediyor, çünkü orada iki yazım gerçekten iki dizin.
 

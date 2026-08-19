@@ -206,8 +206,8 @@ export async function resolveProjectIdentity(
   }
 
   // Folded, not raw. `realpath` does not canonicalise case on Windows -- asked
-  // for `c:/users/askim/.../projectbsh` it returns exactly that, and asked for
-  // `C:/Users/askim/.../ProjectBSH` it returns that -- so hashing its output
+  // for `c:/users/ad/.../projeadi` it returns exactly that, and asked for
+  // `C:/Users/ad/.../ProjeAdi` it returns that -- so hashing its output
   // gives one directory two identities and the board two rows for it. Both
   // spellings turn up in real agent state: Gemini writes its project paths
   // lower-cased, Codex records `c:\GDEV\x` and `C:\GDEV\x` for the same
