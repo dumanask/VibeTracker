@@ -300,3 +300,32 @@ test('always-on-top is dropped for the length of a modal dialog', () => {
   assert.match(source, /\$note\.TopMost = \$false/);
   assert.match(source, /finally \{\s*\$note\.TopMost = \$wasTop\s*\}/);
 });
+
+/**
+ * The one thing this window exists to do.
+ *
+ * `TopMost = true` in the constructor is not enough, and the way it fails is
+ * worse than not setting it: assigning `Location` before the handle exists —
+ * which is exactly what restoring a remembered position does — loses
+ * `WS_EX_TOPMOST`. So the note comes up looking perfectly right and simply
+ * stops staying above the editor, on every launch **after the first time you
+ * move it**, with nothing on screen to say so.
+ *
+ * Measured by A/B on this machine, same daemon, same labels: with a remembered
+ * position the window reported `ex=0x00050000`, with a fresh one
+ * `ex=0x00050008`. Both halves of the fix are load-bearing — the property,
+ * because WinForms consults it every time it rebuilds bounds, and the explicit
+ * `SetWindowPos`, because the property setter is a no-op when the stored value
+ * already matches the value being assigned.
+ */
+test('the note asserts its own z-order rather than trusting the constructor', () => {
+  assert.match(source, /public void PinTop\(\)/);
+  // The property, so WinForms' own belief is corrected...
+  assert.match(source, /TopMost = false;\s*\n\s*TopMost = true;/);
+  // ...and the call, so the window moves now.
+  assert.match(source, /SetWindowPos\(Handle, new IntPtr\(-1\)/);
+  // Asserted once the handle exists, and again on every shape change, because
+  // a resize is the other moment WinForms rebuilds bounds.
+  assert.match(source, /\$note\.PinTop\(\)/);
+  assert.match(source, /scroll = 0;\s*\n\s*PinTop\(\);/);
+});

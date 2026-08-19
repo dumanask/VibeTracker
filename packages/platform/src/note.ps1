@@ -29,7 +29,16 @@ param(
   # voice speaks `-Lang`: the sentence is then said in this one, because a
   # voice that cannot pronounce the interface language will mangle it, and a
   # correctly-read English line beats a mauled Turkish one.
-  [string]$LangAlt = ''
+  [string]$LangAlt = '',
+  # Where the daemon publishes the port and token it is currently using.
+  #
+  # The window is launched with both as arguments, and for the length of one
+  # daemon that is enough. It is not enough for the length of one *window*: the
+  # daemon rotates nothing now, but it can move port, and it can be reinstalled
+  # under this window while the window is still up. Re-reading the file after a
+  # refusal costs one file read on a path that was already failing, and turns
+  # "the post-it went dead at some point last night" into a two-second gap.
+  [string]$RuntimePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -247,6 +256,18 @@ public class Note : Form {
   /// only live projects cannot be used to add it.
   /// </summary>
   public List<Pick> Picks = new List<Pick>();
+  /// <summary>
+  /// Why the chooser is empty, when it is empty for a reason.
+  ///
+  /// An empty list and a list that could not be fetched look identical and mean
+  /// opposite things, and for a while this window told the user the first when
+  /// it meant the second: the daemon restarts on its own, the token it was
+  /// launched with stopped being accepted, and the chooser -- whose fetch
+  /// swallowed every error -- reported "no projects found". That is an
+  /// assertion about the user's disk, made at the one moment we knew nothing
+  /// about it. Empty stays empty; a failure says so.
+  /// </summary>
+  public string PickError = "";
   public bool Picking = false;
   public int NeedsYou = 0;
   public bool Connected = false;
@@ -337,6 +358,40 @@ public class Note : Form {
 
   [DllImport("user32.dll")] static extern bool ReleaseCapture();
   [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, int msg, int wp, int lp);
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after,
+    int x, int y, int cx, int cy, uint flags);
+
+  /// <summary>
+  /// Put this window back on top of everything, whatever WinForms believes.
+  ///
+  /// `TopMost = true` in the constructor is not enough, and the way it fails is
+  /// worse than not setting it at all. Assigning `Location` before the handle
+  /// exists -- which is what restoring a remembered position does -- loses
+  /// `WS_EX_TOPMOST`, so the window comes up looking exactly right and simply
+  /// does not stay on top. Measured by A/B: the same script with a remembered
+  /// position gives `ex=0x00050000`, with a fresh one `ex=0x00050008`.
+  ///
+  /// Which means the defect only appears **after you have moved the note
+  /// once**, on every launch from then on, silently. The one thing this window
+  /// exists to do is sit above the editor, so it is asserted here rather than
+  /// inferred from a property, and asserted again on every shape change,
+  /// because a resize is the other moment WinForms rebuilds bounds.
+  /// </summary>
+  public void PinTop() {
+    if (!IsHandleCreated) return;
+    // Both halves, and both are needed. The property is what WinForms consults
+    // whenever it rebuilds bounds, so leaving its belief at false means the
+    // next resize quietly puts the window back down; the explicit call is what
+    // actually moves it now. Assigning false first is not redundant -- the
+    // setter is a no-op when the value already matches, and after the
+    // handle-creation quirk the stored value is already `true` while the
+    // window's style says otherwise.
+    TopMost = false;
+    TopMost = true;
+    // NOMOVE | NOSIZE | NOACTIVATE: position, size and focus are all somebody
+    // else's business; this call is only about the z-order band.
+    SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0002 | 0x0001 | 0x0010);
+  }
 
   public Note() {
     FormBorderStyle = FormBorderStyle.None;
@@ -490,6 +545,7 @@ public class Note : Form {
     if (shape == Shape.Shade) ClientSize = new Size(WideW, ListTop() + RowH);
     if (shape == Shape.Badge) ClientSize = new Size(84, 84);
     scroll = 0;
+    PinTop();
     if (OnShape != null) OnShape(shape);
     Invalidate();
   }
@@ -850,7 +906,9 @@ public class Note : Form {
   void PaintPicks(Graphics g) {
     int top = ListTop();
     if (Picks.Count == 0) {
-      Cell(g, T("nopick", "proje bulunamadi"), fSmall, Dim, PadX, top,
+      bool failed = PickError.Length > 0;
+      Cell(g, failed ? PickError : T("nopick", "proje bulunamadi"),
+        fSmall, failed ? Alarm : Dim, PadX, top,
         ClientSize.Width - PadX * 2, false);
       return;
     }
@@ -1449,10 +1507,54 @@ function Announce($rows) {
 # Plain polling, not SSE: this is a readout that redraws twice a second at
 # most, and a streaming client here would be more code holding more state for
 # no visible difference.
-$headers = @{ 'X-VT-Token' = $Token }
-$base = ($Url -replace '\?.*$', '').TrimEnd('/')
-$api = $base + '/api/v1/overview'
+$script:token = $Token
+$script:base = ($Url -replace '\?.*$', '').TrimEnd('/')
+$script:headers = @{ 'X-VT-Token' = $script:token }
+$script:api = $script:base + '/api/v1/overview'
 $script:noticeTicks = 0
+
+# Re-read the daemon's published port and token.
+#
+# Returns true only when something actually changed, so a caller can tell
+# "there is a new daemon, try again" from "the daemon is simply down" without
+# retrying in a loop.
+function Reconnect-Daemon {
+  if (-not $RuntimePath) { return $false }
+  try {
+    $rt = Get-Content -LiteralPath $RuntimePath -Raw -ErrorAction Stop | ConvertFrom-Json
+  } catch { return $false }
+  if (-not $rt.port -or -not $rt.token) { return $false }
+  $newBase = 'http://127.0.0.1:' + [string]$rt.port
+  if ($newBase -eq $script:base -and [string]$rt.token -eq $script:token) { return $false }
+  $script:base = $newBase
+  $script:token = [string]$rt.token
+  $script:headers = @{ 'X-VT-Token' = $script:token }
+  $script:api = $script:base + '/api/v1/overview'
+  return $true
+}
+
+# One GET, with a single reconnect-and-retry when it fails.
+function Get-Api([string]$path, [int]$timeout = 4) {
+  try {
+    return Invoke-RestMethod -Uri ($script:base + $path) -Headers $script:headers `
+      -TimeoutSec $timeout -ErrorAction Stop
+  } catch {
+    if (-not (Reconnect-Daemon)) { throw }
+    return Invoke-RestMethod -Uri ($script:base + $path) -Headers $script:headers `
+      -TimeoutSec $timeout -ErrorAction Stop
+  }
+}
+
+function Send-Api([string]$path, [string]$body, [int]$timeout = 4) {
+  try {
+    return Invoke-RestMethod -Uri ($script:base + $path) -Headers $script:headers -Method Post `
+      -Body $body -ContentType 'application/json' -TimeoutSec $timeout -ErrorAction Stop
+  } catch {
+    if (-not (Reconnect-Daemon)) { throw }
+    return Invoke-RestMethod -Uri ($script:base + $path) -Headers $script:headers -Method Post `
+      -Body $body -ContentType 'application/json' -TimeoutSec $timeout -ErrorAction Stop
+  }
+}
 
 function Set-Notice([string]$text) {
   $note.Notice = $text
@@ -1466,7 +1568,7 @@ function Refresh {
     if ($script:noticeTicks -eq 0) { $note.Notice = '' }
   }
   try {
-    $r = Invoke-RestMethod -Uri $api -Headers $headers -TimeoutSec 4 -ErrorAction Stop
+    $r = Get-Api '/api/v1/overview'
     $rows = New-Object 'System.Collections.Generic.List[VibeTracker.Row]'
     foreach ($p in $r.projects) {
       if (-not $p.tracked) { continue }
@@ -1520,8 +1622,9 @@ function Refresh {
 # only contribution is which line you clicked.
 function Get-Picks {
   $list = New-Object 'System.Collections.Generic.List[VibeTracker.Pick]'
+  $err = ''
   try {
-    $c = Invoke-RestMethod -Uri ($base + '/api/v1/candidates') -Headers $headers -TimeoutSec 4 -ErrorAction Stop
+    $c = Get-Api '/api/v1/candidates'
     foreach ($x in $c.candidates) {
       $pk = New-Object VibeTracker.Pick
       $pk.Id = [string]$x.projectId
@@ -1529,7 +1632,16 @@ function Get-Picks {
       $pk.On = [bool]$x.tracked
       $list.Add($pk)
     }
-  } catch { }
+  } catch {
+    # Not "there are no projects" -- that is a claim about the user's disk we
+    # are in no position to make from here. The daemon either refused us or is
+    # not there, and those are the two things worth saying.
+    $code = 0
+    if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+    $err = if ($code -eq 401 -or $code -eq 403) { $note.L['pickDenied'] } else { $note.L['pickFail'] }
+    $list.Clear()
+  }
+  $note.PickError = [string]$err
   $note.Picks = $list
 }
 
@@ -1545,9 +1657,13 @@ $note.OnToggle = [Action] {
     $body = @{ remove = @($note.ToggledId) } | ConvertTo-Json -Compress
   }
   try {
-    Invoke-RestMethod -Uri ($base + '/api/v1/tracking') -Headers $headers -Method Post `
-      -Body $body -ContentType 'application/json' -TimeoutSec 4 -ErrorAction Stop | Out-Null
-  } catch { }
+    Send-Api '/api/v1/tracking' $body | Out-Null
+  } catch {
+    # The tick already moved on screen, so failing quietly would leave the
+    # window asserting a change that never reached the config.
+    Set-Notice ([string]$note.L['pickFail'])
+    Get-Picks
+  }
 }
 
 # Naming a directory. The dialog is the system's own, because the only thing a
@@ -1590,13 +1706,21 @@ $note.OnAddPath = [Action] {
   if (-not $path) { return }
   try {
     $body = @{ path = $path } | ConvertTo-Json -Compress
-    $res = Invoke-RestMethod -Uri ($base + '/api/v1/projects/path') -Headers $headers -Method Post `
-      -Body $body -ContentType 'application/json' -TimeoutSec 20 -ErrorAction Stop
+    $res = Send-Api '/api/v1/projects/path' $body 20
     Set-Notice ([string]$res.displayName + ' ' + $note.L['pathAdded'])
     Get-Picks
     $note.Fit()
   } catch {
-    Set-Notice ([string]$note.L['pathBad'])
+    # Three different failures used to arrive as one sentence. A directory that
+    # is not there, a daemon that will not talk to us, and a config we could not
+    # write are three different things for the person holding the mouse.
+    $code = 0
+    if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
+    $why = if ($code -eq 404) { $note.L['pathNotDir'] }
+           elseif ($code -eq 401 -or $code -eq 403) { $note.L['pickDenied'] }
+           elseif ($code -eq 0) { $note.L['pickFail'] }
+           else { $note.L['pathBad'] }
+    Set-Notice ([string]$why)
   }
 }
 
@@ -1605,6 +1729,9 @@ $timer.Interval = 2000
 $timer.Add_Tick({ Refresh })
 
 $note.Add_Shown({
+  # Before anything else: the window is up, the handle exists, and this is the
+  # first moment the z-order can actually be set. See PinTop.
+  $note.PinTop()
   $note.Apply([VibeTracker.Shape]::Full)
   if ($state.mode -ne 'Full') { $note.Apply([Enum]::Parse([VibeTracker.Shape], $state.mode)) }
   Refresh

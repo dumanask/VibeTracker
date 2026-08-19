@@ -166,10 +166,22 @@ export async function identifyDirectory(
   }
   try {
     const ident = await resolveProjectIdentity(abs, readPackageName);
+    // The repository root, when there is one — not the directory that was
+    // picked.
+    //
+    // Picking `MyRepo/src` in the folder dialog resolves to the *repository's*
+    // identity, because identity walks up to the root commit. The recorded
+    // directory did not walk with it, so the project was followed under the
+    // right id and read under the wrong path: plan documents live at the root,
+    // and the phase engine was pointed at a subdirectory that has none.
+    // Measured on this repository — picking `packages/engine` produced a
+    // VibeTracker entry whose documents could never be found. The display name
+    // had used the toplevel since it was written; the path had not.
+    const root = ident.git?.toplevel ?? abs;
     return {
       projectId: ident.projectId,
-      path: normPath(abs),
-      displayName: displayNameFor(ident.git?.toplevel ?? abs),
+      path: normPath(root),
+      displayName: displayNameFor(root),
     };
   } catch {
     return null;

@@ -375,3 +375,136 @@ test('the timer advances clocks instead of rebuilding the list', () => {
   // And the tick reads exactly that attribute.
   assert.match(html, /querySelectorAll\('\[data-since\]'\)/);
 });
+
+/**
+ * The chooser must never be able to unfollow something it did not show.
+ *
+ * `/api/v1/candidates` is capped, and when it fails the page falls back to the
+ * board — which holds only projects with something running, so it is smaller
+ * again. Both lists are partial, and the page used to save its ticked boxes as
+ * the complete selection, which turned "I unticked one project" into "forget
+ * every project not currently on my screen". Nothing said it had happened; the
+ * projects were simply gone from the board the next time the user looked.
+ */
+test('saving the chooser sends a change, not a whole selection', async () => {
+  const panel = loadPanel();
+  const doc = panel.document as Record<string, unknown>;
+
+  // Three known projects, two of them followed — delivered the way the real
+  // ones are, because the list the delta compares against is the one the page
+  // fetched and not one a test reached in and planted.
+  panel.fetch = () =>
+    Promise.resolve({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          candidates: [
+            { projectId: 'git:a', displayName: 'a', tracked: true },
+            { projectId: 'git:b', displayName: 'b', tracked: true },
+            { projectId: 'git:c', displayName: 'c', tracked: false },
+          ],
+          truncated: false,
+        }),
+    });
+  await (panel.loadCandidates as () => Promise<void>)();
+
+  // The user unticks `b` and ticks `c`. `a` is left alone.
+  const box = (id: string, checked: boolean): Record<string, unknown> => ({
+    checked,
+    dataset: { track: id },
+  });
+  doc.querySelectorAll = (sel: string): unknown[] =>
+    sel.includes('data-track')
+      ? [box('git:a', true), box('git:b', false), box('git:c', true)]
+      : [];
+
+  // Copied out of the sandbox's realm: its arrays have a different `Array`,
+  // and a strict deep-equal compares prototypes before contents.
+  const raw = (panel.pickDelta as () => { add: string[]; remove: string[] })();
+  const delta = { add: [...raw.add], remove: [...raw.remove] };
+  assert.deepEqual(delta.add, ['git:c']);
+  assert.deepEqual(delta.remove, ['git:b']);
+  // `a` was ticked before and is ticked now: an untouched box says nothing.
+  assert.ok(!delta.add.includes('git:a') && !delta.remove.includes('git:a'));
+
+  // And the wire form itself: the save path must not carry the other shape,
+  // which is the one that states a complete selection.
+  const html = readFileSync(PANEL, 'utf8');
+  assert.doesNotMatch(
+    html,
+    /saveTracking\(\{\s*mode:\s*'selected'/,
+    'seçim hâlâ bütün olarak gönderiliyor',
+  );
+  // "hepsi" is the one button that legitimately states a whole mode.
+  assert.match(html, /saveTracking\(\{ mode: 'all', selected: \[\] \}\)/);
+});
+
+/**
+ * A list that could not be fetched is not an empty list.
+ *
+ * The note window said "proje bulunamadı" — an assertion about the user's
+ * disk — whenever its own request failed, which after any daemon restart was
+ * every request it made. The page has the same two states and has to keep them
+ * apart too: it falls back to the board, and it has to say that what it is
+ * showing is not everything.
+ */
+test('a partial chooser says so', () => {
+  const html = readFileSync(PANEL, 'utf8');
+  assert.match(html, /candidatesPartial = !!body\.truncated/);
+  assert.match(html, /candidatesPartial = true/, 'yedek listeden sonra kısmi işaretlenmiyor');
+  assert.match(html, /candidatesPartial \?/, 'kısmi olduğu ekranda söylenmiyor');
+});
+
+/**
+ * The LLM summary has to be legible as a *claim*, not as a measurement.
+ *
+ * Everything else on the page is counted or read off the disk. This one thing
+ * was produced by a system that can be confidently wrong, and it is the only
+ * thing there that cost the user money or quota — so it says which model, when,
+ * and it never borrows the progress bar that counted numbers use.
+ */
+test('the digest is drawn as a claim, with its model and its age on it', () => {
+  const panel = loadPanel();
+  const card = panel.projectCard as (p: ProjectView) => string;
+  const p = project('withDigest', []);
+  (p as ProjectView).digest = {
+    provider: 'openai',
+    model: 'sahte-1',
+    atMs: Date.now() - 3_600_000,
+    phaseKind: 'harden',
+    phaseLabelRaw: 'Denetim',
+    phaseIndex: 4,
+    phaseTotal: 5,
+    phaseStatus: 'in_progress',
+    percentEstimate: 70,
+    percentBasis: 'commits',
+    confidence: 'medium',
+    nextAction: 'CI koştur',
+    blocker: 'depo itilmedi',
+    stallReason: null,
+    riskFlags: ['imzasız'],
+    evidence: [{ kind: 'commit', ref: 'abc' }],
+    conflicts: [],
+    unchanged: false,
+    summary: 'Özet cümlesi.',
+  };
+  const html = card(p);
+
+  assert.match(html, /class="digest"/);
+  assert.match(html, /Denetim/);
+  assert.match(html, /Özet cümlesi\./);
+  assert.match(html, /CI koştur/);
+  assert.match(html, /depo itilmedi/);
+  // Which model said it, and how long ago — both, always.
+  assert.match(html, /openai/);
+  assert.match(html, /sahte-1/);
+  // The estimate is marked as one, and is not rendered through the counted
+  // bar: `.bar` belongs to numbers that were counted.
+  assert.match(html, /~%70/);
+  const afterDigest = html.slice(html.indexOf('class="digest"'));
+  assert.doesNotMatch(afterDigest.slice(0, afterDigest.indexOf('</div>\n  </div>')), /class="bar/);
+
+  // And a project without one shows nothing at all rather than an empty frame.
+  const plain = card(project('noDigest', []));
+  assert.doesNotMatch(plain, /class="digest"/);
+});

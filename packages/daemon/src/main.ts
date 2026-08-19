@@ -23,13 +23,12 @@ import {
 import type { StatusReport } from '@vibetracker/shared';
 import { Store, type MaintenanceResult, type StateChange } from './store.ts';
 import { DaemonServer } from './server.ts';
-import { generateToken } from './security.ts';
 import { enableFileLog, log } from './log.ts';
 import { HookRing } from './hooks/ring.ts';
 import { HookIngest } from './hooks/ingest.ts';
 import { buildBoard, type Board } from './board.ts';
 import { Momentum } from './momentum.ts';
-import { loadOrCreateHookToken } from './hooks/token.ts';
+import { loadOrCreateApiToken, loadOrCreateHookToken } from './tokens.ts';
 
 export const DEFAULT_PORT = 47823;
 
@@ -108,7 +107,15 @@ export class Daemon {
   #scanning = false;
   #stopped = false;
   #daemonId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  #token = generateToken();
+  /**
+   * The dashboard token, persisted rather than minted per start.
+   *
+   * See `tokens.ts`: every surface that shows the board holds this string for
+   * as long as the surface lives, and a daemon restart used to lock all of them
+   * out at once. The daemon restarts on its own — the watchdog exits rather
+   * than hang — so that was not a rare state.
+   */
+  #token = loadOrCreateApiToken();
   #hookToken = loadOrCreateHookToken();
   #ring = new HookRing();
   #momentum = new Momentum();
@@ -633,6 +640,21 @@ export class Daemon {
         }
       }
 
+      // The last thing a model said, if anybody ever asked one.
+      //
+      // Read, never produced. `vt digest` is the only writer, because it is
+      // the only part of this product that talks to a network and the daemon
+      // is deliberately not going to be the second. Attached rather than
+      // merged into `progress`: a counted number and a model's reading of one
+      // are different claims, and the surfaces draw them differently.
+      const digests = this.#store.digests();
+      if (digests.size > 0) {
+        for (const p of report.projects) {
+          const d = digests.get(p.projectId);
+          if (d) p.digest = d;
+        }
+      }
+
       this.#latest = report;
       this.#lastError = null;
       this.#scanCount++;
@@ -775,6 +797,13 @@ async function probeExisting(
 
 export { Store };
 export { existsSync };
-export { loadOrCreateHookToken, readHookToken, hookTokenPath } from './hooks/token.ts';
+export {
+  loadOrCreateHookToken,
+  readHookToken,
+  hookTokenPath,
+  loadOrCreateApiToken,
+  readApiToken,
+  apiTokenPath,
+} from './tokens.ts';
 export { HookRing } from './hooks/ring.ts';
 export { HookIngest, type SessionHookState } from './hooks/ingest.ts';

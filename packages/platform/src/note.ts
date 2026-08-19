@@ -94,6 +94,18 @@ export interface NoteLabels {
   /** What the title strip says after a directory was, or was not, accepted. */
   pathAdded: string;
   pathBad: string;
+  /** The named directory is not a directory. */
+  pathNotDir: string;
+  /**
+   * Why the chooser is empty, when it is empty for a reason.
+   *
+   * Two of them, because they call for different things from the person
+   * reading: a daemon that is not answering is waited out, a daemon that
+   * refuses us is a credential that has to be replaced. Neither of them is
+   * "you have no projects", which is what the window used to say for both.
+   */
+  pickFail: string;
+  pickDenied: string;
   /**
    * Spoken, not drawn. Read out after the project's name, so the sentence is
    * assembled in the catalog's own word order rather than in the window's:
@@ -138,6 +150,15 @@ export interface NoteLabels {
 export interface StartNoteOptions {
   url: string;
   token: string;
+  /**
+   * Where the daemon publishes the port and token it is using now.
+   *
+   * The window is handed both at launch, which is enough for as long as the
+   * daemon that published them keeps running -- and no longer. Passing the file
+   * as well lets a window that has been refused go and look again instead of
+   * spending the rest of its life talking to a daemon that no longer exists.
+   */
+  runtimePath?: string;
   labels: NoteLabels;
   shape?: NoteShape;
   /**
@@ -208,6 +229,7 @@ export function startNote(opts: StartNoteOptions): StartNoteResult {
     '-LabelsPath',
     noteLabelsPath(),
   ];
+  if (opts.runtimePath) inner.push('-RuntimePath', opts.runtimePath);
   if (opts.shape) inner.push('-Mode', opts.shape);
   if (opts.lang) inner.push('-Lang', opts.lang);
   if (opts.langAlt) inner.push('-LangAlt', opts.langAlt);

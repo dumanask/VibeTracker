@@ -307,6 +307,44 @@ export interface ProgressView {
   totalWeight?: number | null;
 }
 
+/**
+ * What a language model said about a project, the last time one was asked.
+ *
+ * Absent for almost every install, and that is the normal state: the summary
+ * is off by default, and nothing on the board depends on it. When it is
+ * present it is drawn *differently* from everything else, because it is the
+ * one thing on the page that was not counted -- see `percentBasis`, which is
+ * how a reader tells "eight of thirteen boxes are ticked" from "a model
+ * thought about it".
+ *
+ * Written by `vt digest`, never by the daemon. The daemon does not go to a
+ * network.
+ */
+export interface DigestView {
+  /** Which family answered, and which model within it. */
+  provider: string;
+  model: string;
+  /** When it was asked. Freshness is the reader's to judge. */
+  atMs: number;
+  phaseKind: string;
+  phaseLabelRaw: string;
+  phaseIndex: number | null;
+  phaseTotal: number | null;
+  phaseStatus: string;
+  percentEstimate: number | null;
+  percentBasis: string;
+  confidence: string;
+  nextAction: string | null;
+  blocker: string | null;
+  stallReason: string | null;
+  riskFlags: string[];
+  /** Required when the summary was accepted at all — see the digest schema. */
+  evidence: Array<{ kind: string; ref: string }>;
+  conflicts: string[];
+  unchanged: boolean;
+  summary: string;
+}
+
 export interface ProjectView {
   projectId: string;
   identityKind: IdentityKind;
@@ -317,6 +355,8 @@ export interface ProjectView {
   flags: string[];
   /** Absent until the phase engine has read this project's documents. */
   progress?: ProgressView;
+  /** Absent unless somebody ran `vt digest` for this project. */
+  digest?: DigestView;
   /**
    * Whether the user asked to follow this project.
    *
@@ -449,3 +489,16 @@ export interface StatusReport {
 }
 
 export * from './hooks.ts';
+
+/**
+ * How many projects `/api/v1/candidates` offers at once.
+ *
+ * A cap rather than a page: a chooser is something you scan with your eyes,
+ * and sixty is already past where that works. It lives here, on the wire
+ * types, because it is part of the contract rather than a storage detail --
+ * both ends have to agree, and the end that matters is the one *drawing* the
+ * list. A client that mistakes a capped list for the whole truth and saves it
+ * back unfollows every project below the line, which is a data loss the user
+ * never asked for and cannot see happen.
+ */
+export const CANDIDATE_LIMIT = 60;

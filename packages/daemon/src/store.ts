@@ -12,7 +12,13 @@ import {
   RETAIN_SESSIONS_MS,
   RETAIN_TRANSITIONS_MS,
 } from '@vibetracker/core';
-import type { ProjectView, SessionView, StatusReport } from '@vibetracker/shared';
+import {
+  CANDIDATE_LIMIT,
+  type DigestView,
+  type ProjectView,
+  type SessionView,
+  type StatusReport,
+} from '@vibetracker/shared';
 import { t } from '@vibetracker/core';
 
 /**
@@ -40,7 +46,7 @@ import { t } from '@vibetracker/core';
 const { DatabaseSync } = await import('node:sqlite');
 type DatabaseSync = InstanceType<typeof DatabaseSync>;
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export interface StoreOptions {
   /** Overridden in tests; defaults to the per-OS data directory. */
@@ -229,6 +235,28 @@ export class Store {
         phase_label   TEXT
       );
       CREATE INDEX IF NOT EXISTS ix_progress ON progress_reading(project_id, computed_at DESC);
+
+      /**
+       * The last LLM summary for a project, if the user ever asked for one.
+       *
+       * One row, replaced. Not a history: a digest is a reading of the state
+       * as it is now, and keeping every one of them would mean a retention
+       * policy, a budget table and a growth problem for a feature that is off
+       * by default.
+       *
+       * Written by "vt digest", never by the daemon. The daemon does not go to
+       * a network and is not going to start; it reads this table the same way
+       * it reads anything else on disk, and renders what it finds. Which means
+       * the board can say "a model said this, at this time, and here is which
+       * model" -- and can say nothing at all when nobody asked one.
+       */
+      CREATE TABLE IF NOT EXISTS project_digest (
+        project_id  TEXT PRIMARY KEY,
+        created_at  INTEGER NOT NULL,
+        provider    TEXT NOT NULL,
+        model       TEXT NOT NULL,
+        json        TEXT NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS activity_hourly (
         project_id  TEXT NOT NULL,
@@ -535,7 +563,7 @@ export class Store {
    * keeps the answer instant and costs no git probe: the rows were written
    * when those projects were live.
    */
-  candidates(limit = 60): Array<{
+  candidates(limit = CANDIDATE_LIMIT): Array<{
     projectId: string;
     displayName: string;
     lastSeenAt: number;
@@ -565,6 +593,65 @@ export class Store {
         displayName: r.display_name,
         lastSeenAt: r.last_seen_at,
       }));
+  }
+
+  /**
+   * Record the summary a model produced, replacing whatever was there.
+   *
+   * Called from `vt digest`, which is a different process from the daemon. WAL
+   * plus the busy timeout is what makes that safe; nothing here is on a hot
+   * path, and one row a few times a day is not a contention problem.
+   */
+  saveDigest(row: {
+    projectId: string;
+    createdAt: number;
+    provider: string;
+    model: string;
+    output: unknown;
+  }): void {
+    this.#db
+      .prepare(
+        `INSERT INTO project_digest (project_id, created_at, provider, model, json)
+              VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET
+              created_at = excluded.created_at,
+              provider   = excluded.provider,
+              model      = excluded.model,
+              json       = excluded.json`,
+      )
+      .run(row.projectId, row.createdAt, row.provider, row.model, JSON.stringify(row.output));
+  }
+
+  /** Every stored summary, by project id. Absent means nobody ever asked. */
+  digests(): Map<string, DigestView> {
+    const rows = this.#db
+      .prepare('SELECT project_id, created_at, provider, model, json FROM project_digest')
+      .all() as Array<{
+      project_id: string;
+      created_at: number;
+      provider: string;
+      model: string;
+      json: string;
+    }>;
+    const out = new Map<string, DigestView>();
+    for (const r of rows) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(r.json) as Record<string, unknown>;
+      } catch {
+        // A row we cannot read is dropped rather than shown half-parsed. It
+        // was written by a schema that validated it once; if it no longer
+        // does, the honest answer is that there is no summary.
+        continue;
+      }
+      out.set(r.project_id, {
+        ...(parsed as unknown as Omit<DigestView, 'provider' | 'model' | 'atMs'>),
+        provider: r.provider,
+        model: r.model,
+        atMs: r.created_at,
+      });
+    }
+    return out;
   }
 
   /**

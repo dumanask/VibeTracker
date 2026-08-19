@@ -166,6 +166,32 @@
      a worse tool than a still one. The same restraint applies here: the
      animation is attached to the waiting and running classes and to nothing
      else, so a quiet board is a still page. */
+    /* A reading, not a measurement: amber rather than phosphor, dashed rather
+     than solid, and always prefixed with a tilde in the markup. */
+  .phase.guess, .pct.guess, .pc.guess { color:var(--amber); }
+  .prov.guess { color:var(--amber); opacity:.8; }
+  .bar.guess { background:none; border:1px dashed var(--bevel); box-sizing:border-box; }
+  .bar.guess > i { background:none; border-right:1px solid var(--amber);
+                   background-image:repeating-linear-gradient(135deg,
+                     rgba(255,178,74,.5) 0 2px, transparent 2px 4px); mask:none; }
+
+  /* The LLM summary, framed so it cannot be read as a counted number.
+     Dashed rather than solid, and offset in the amber of a claim rather than
+     the phosphor of a measurement. */
+  .digest { margin:8px 0 2px; padding:8px var(--pad); border:1px dashed var(--bevel);
+            background:rgba(255,178,74,.04); }
+  .dg-head { font-family:var(--mono); font-size:10.5px; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--amber); }
+  .dg-kind { color:var(--dim); text-transform:none; letter-spacing:0; margin-left:6px; }
+  .dg-phase { font-weight:600; margin-top:4px; }
+  .dg-sum { margin-top:4px; color:var(--ink); }
+  .dg-line { margin-top:3px; font-size:12px; }
+  .dg-line b { color:var(--dim); font-weight:500; margin-right:4px; }
+  .dg-bad b, .dg-bad { color:var(--alarm); }
+  .dg-warn { color:var(--amber); }
+  .dg-ev { margin-top:5px; font-family:var(--mono); font-size:10.5px; color:var(--dim);
+           overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
   @keyframes vt-breath { 0%,100% { opacity:.55 } 50% { opacity:1 } }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation:none !important; }
@@ -672,19 +698,46 @@ function precision(s) {
  * we refused to produce one. Drawing "we do not know" in the same language as
  * "we counted 8 of 13" is how a dashboard starts lying.
  */
-function progressRow(p) {
-  if (!p) return '';
+/**
+ * The row's phase and percentage — and the ladder they come from.
+ *
+ * The structural reading always wins. A model's answer is the rung *below*
+ * "nothing", never above a counted one: it fills the cell only when the
+ * counting engine refused, and when it does it is drawn as an estimate — a
+ * dashed bar, a `~`, and the model's name in the tooltip. The plan's rule, in
+ * one place, because a surface that quietly promotes a guess to a measurement
+ * is worse than one that shows a dash.
+ */
+function progressRow(p, digest) {
+  if (!p && !digest) return '';
+  p = p || { phase: null, percent: null, drift: [] };
   const bits = [];
+  // Only when the counting engine had nothing to say.
+  const guessPhase = !p.phase && digest && digest.phaseLabelRaw ? digest : null;
+  const guessPct = (p.percent === null || p.percent === undefined)
+    && digest && digest.percentEstimate !== null && digest.percentEstimate !== undefined
+    ? digest : null;
   if (p.phase) {
     const total = p.phase.total > p.phase.ordinal ? ' / ' + p.phase.total : '';
     const sub = p.phase.sub ? ' · ' + esc(p.phase.sub) : '';
     bits.push(`<span class="phase" title="kaynak: ${esc(p.phase.basis)}">${esc(p.phase.labelRaw)}${total}${sub}</span>`);
   }
-  if (!p.phase && p.phaseSuppressed) bits.push(`<span class="noprog">${esc(say(p.phaseSuppressed))}</span>`);
+  if (guessPhase) {
+    const pos = guessPhase.phaseIndex !== null && guessPhase.phaseTotal
+      ? ' ' + guessPhase.phaseIndex + '/' + guessPhase.phaseTotal : '';
+    bits.push(`<span class="phase guess" title="${esc(guessPhase.provider + ' · ' + guessPhase.model)}">~${esc(guessPhase.phaseLabelRaw)}${esc(pos)}</span>`);
+  }
+  if (!p.phase && !guessPhase && p.phaseSuppressed) bits.push(`<span class="noprog">${esc(say(p.phaseSuppressed))}</span>`);
   if (p.percent !== null && p.percent !== undefined) {
     const cls = p.approximate ? 'bar approx' : 'bar';
     bits.push(`<span class="${cls}"><i style="width:${segWidth(p.percent)}%"></i></span>`);
     bits.push(`<span class="pct">${fmtPercent(p.percent, p.approximate)}</span>`);
+  } else if (guessPct) {
+    // Coarsened to a tenth and marked, because a model's "70" is not a
+    // measurement of anything and reading it as one is the failure the whole
+    // percentage engine is arranged to avoid.
+    bits.push(`<span class="bar guess"><i style="width:${segWidth(guessPct.percentEstimate)}%"></i></span>`);
+    bits.push(`<span class="pct guess" title="${esc(guessPct.provider + ' · ' + guessPct.model)}">~%${segWidth(guessPct.percentEstimate)}</span>`);
   } else {
     bits.push('<span class="bar none"></span><span class="pct">—</span>');
     if (p.percentSuppressed) bits.push(`<span class="noprog">${esc(say(p.percentSuppressed))}</span>`);
@@ -693,9 +746,49 @@ function progressRow(p) {
     bits.push(`<span class="drift" title="${esc(say(d.evidence))}">${esc(say(d.claim))}</span>`);
   }
   if (p.provenance) bits.push(`<span class="prov">${esc(say(p.provenance))}</span>`);
-  const next = p.nextAction
-    ? `<div class="prov">${t`sonraki: ${esc(p.nextAction.slice(0, 160))}`}</div>` : '';
+  const nextText = p.nextAction || (digest && digest.nextAction) || '';
+  const fromModel = !p.nextAction && nextText;
+  const next = nextText
+    ? `<div class="prov${fromModel ? ' guess' : ''}">${t`sonraki: ${esc(nextText.slice(0, 160))}`}</div>` : '';
   return `<div class="prog">${bits.join('')}</div>${next}`;
+}
+
+/**
+ * What a model said, drawn so it can never be mistaken for what was counted.
+ *
+ * Everything else on this page is a count or a fact off the disk. This is a
+ * reading, produced by a system that can be confidently wrong, and it is the
+ * only thing here that cost the user money or quota. So it gets its own frame,
+ * it names the model, it carries its own timestamp, and its percentage — if it
+ * has one at all — is never drawn in the same bar as a counted one.
+ *
+ * Absent for almost everybody, which is the intended state.
+ */
+function digestBlock(d) {
+  if (!d) return '';
+  const rows = [];
+  if (d.phaseLabelRaw) {
+    const pos = d.phaseIndex !== null && d.phaseTotal ? ` ${d.phaseIndex}/${d.phaseTotal}` : '';
+    rows.push(`<div class="dg-phase">${esc(d.phaseLabelRaw)}${esc(pos)}
+      <span class="dg-kind">${esc(d.phaseKind)} · ${esc(d.phaseStatus)}</span></div>`);
+  }
+  if (d.summary) rows.push(`<div class="dg-sum">${esc(d.summary)}</div>`);
+  if (d.percentEstimate !== null && d.percentEstimate !== undefined) {
+    rows.push(`<div class="dg-line"><b>${tr('ilerleme')}</b> ~%${esc(String(d.percentEstimate))}
+      <span class="dg-kind">${esc(d.percentBasis)} · ${esc(d.confidence)}</span></div>`);
+  }
+  if (d.nextAction) rows.push(`<div class="dg-line"><b>${tr('sonraki')}</b> ${esc(d.nextAction)}</div>`);
+  if (d.blocker) rows.push(`<div class="dg-line dg-bad"><b>${tr('engel')}</b> ${esc(d.blocker)}</div>`);
+  if (d.stallReason) rows.push(`<div class="dg-line"><b>${tr('durgunluk')}</b> ${esc(d.stallReason)}</div>`);
+  for (const c of d.conflicts || []) rows.push(`<div class="dg-line dg-warn">${esc(c)}</div>`);
+  for (const r of d.riskFlags || []) rows.push(`<div class="dg-line dg-warn">${esc(r)}</div>`);
+  const ev = (d.evidence || []).map(e => `${e.kind}: ${e.ref}`).join(' · ');
+  return `<div class="digest">
+    <div class="dg-head">${tr('LLM özeti')}
+      <span class="dg-kind">${esc(d.provider)}${d.model ? ' · ' + esc(d.model) : ''} · ${esc(fmtAge(Date.now() - d.atMs))}</span></div>
+    ${rows.join('')}
+    ${ev ? `<div class="dg-ev" title="${esc(ev)}">${tr('kanıt')}: ${esc(ev.slice(0, 200))}</div>` : ''}
+  </div>`;
 }
 
 function subagentBadge(s) {
@@ -883,10 +976,24 @@ function renderLoad() {
 }
 
 /** The same bar the detailed card draws, at list scale. */
-function miniBar(pr) {
-  if (!pr || pr.percent == null) return '<span class="bar none"></span>';
-  const cls = pr.approximate ? 'bar approx' : 'bar';
-  return `<span class="${cls}"><i style="width:${segWidth(pr.percent)}%"></i></span>`;
+/**
+ * The row's meter. Counted first, a model's reading only when nothing counted.
+ *
+ * Three states, three drawings, and they have to stay distinguishable at a
+ * glance from two metres away: solid segments for a count, outlined segments
+ * for a coarse one, hatched amber for a model's estimate, and a dotted empty
+ * channel for "no honest number". A meter that drew a guess the way it draws a
+ * count would make the whole row lie quietly.
+ */
+function miniBar(pr, digest) {
+  if (pr && pr.percent != null) {
+    const cls = pr.approximate ? 'bar approx' : 'bar';
+    return `<span class="${cls}"><i style="width:${segWidth(pr.percent)}%"></i></span>`;
+  }
+  if (digest && digest.percentEstimate != null) {
+    return `<span class="bar guess"><i style="width:${segWidth(digest.percentEstimate)}%"></i></span>`;
+  }
+  return '<span class="bar none"></span>';
 }
 
 function renderList() {
@@ -905,8 +1012,11 @@ function renderList() {
     const glyph = a.kind === 'waiting' ? (a.urgency >= 3 ? '●' : '⏸')
                 : a.kind === 'running' ? '▶' : '·';
     const dwell = a.leadSince ? fmtAge(sinceMs(now, a.leadSince)) : '';
-    const pct = p.progress && p.progress.percent != null
-      ? fmtPercent(p.progress.percent, p.progress.approximate) : '—';
+    const counted = p.progress && p.progress.percent != null;
+    const guessed = !counted && p.digest && p.digest.percentEstimate != null;
+    const pct = counted
+      ? fmtPercent(p.progress.percent, p.progress.approximate)
+      : guessed ? '~%' + segWidth(p.digest.percentEstimate) : '—';
     const why = !MINI && a.leadTitle ? `<span class="why">${esc(a.leadTitle)}</span>` : '';
     return `<button class="prow ${a.kind} u${a.urgency}" data-open="${esc(p.projectId)}">
       <span>${glyph}</span>
@@ -915,8 +1025,8 @@ function renderList() {
       <span class="ag wait${a.waiting > 0 ? '' : ' off'}">${esc(waitingText(a))}</span>
       <span class="ag run${a.running > 0 ? '' : ' off'}">${esc(runningText(a))}</span>
       <span class="xy" data-since="${a.leadSince ?? ''}">${esc(dwell)}</span>
-      ${miniBar(p.progress)}
-      <span class="pc">${esc(pct)}</span>
+      ${miniBar(p.progress, p.digest)}
+      <span class="pc${guessed ? ' guess' : ''}"${guessed ? ` title="${esc(p.digest.provider + ' · ' + p.digest.model)}"` : ''}>${esc(pct)}</span>
       ${why}
     </button>`;
   }).join('');
@@ -931,7 +1041,8 @@ function projectCard(p) {
         <span class="pid">${esc(p.projectId)}${p.identityKind !== 'git_root' ? ' · ' + esc(p.identityKind) : ''}</span>
         ${p.flags.map(f => `<span class="flag">${esc(flagText(f))}</span>`).join('')}
       </h3>
-      ${progressRow(p.progress)}
+      ${progressRow(p.progress, p.digest)}
+      ${digestBlock(p.digest)}
       <button class="boardbtn" data-project="${esc(p.projectId)}">${tr('faz panosu')}</button>
       <div class="board" id="board-${esc(p.projectId)}" hidden></div>
       ${p.workspaces.map(w => {
@@ -1000,6 +1111,8 @@ let picking = false;
  * because that depends on the tracking *mode*, which the board does not carry.
  */
 let candidates = null;
+/** Whether the list we are showing is known to be less than all of them. */
+let candidatesPartial = false;
 
 async function loadCandidates() {
   try {
@@ -1007,13 +1120,16 @@ async function loadCandidates() {
       headers: { 'X-VT-Token': TOKEN },
     });
     if (!res.ok) throw new Error(String(res.status));
-    candidates = (await res.json()).candidates || [];
+    const body = await res.json();
+    candidates = body.candidates || [];
+    candidatesPartial = !!body.truncated;
   } catch (e) {
     // Fall back to the board rather than to an empty list: a partial chooser
     // still works, an empty one looks broken.
     candidates = (report ? report.projects : []).map(p => ({
       projectId: p.projectId, displayName: p.displayName, tracked: p.tracked,
     }));
+    candidatesPartial = true;
   }
   renderPick();
 }
@@ -1032,8 +1148,36 @@ function renderPick() {
     <div class="pickbar">
       <button id="pickSave">${tr('kaydet')}</button>
       <button id="pickAll">${tr('hepsi')}</button>
-      <span class="msg" id="pickMsg"></span>
+      <span class="msg" id="pickMsg">${
+        candidatesPartial ? esc(tr('liste tam değil — yalnızca burada değiştirdiklerin yazılır')) : ''
+      }</span>
     </div>`;
+}
+
+/**
+ * What the chooser is asking to change, as a change.
+ *
+ * The save used to send the ticked boxes as the whole truth — `{mode,
+ * selected}` — and that form is only correct for a client showing every
+ * project there is. This one never is. The list is capped at
+ * `CANDIDATE_LIMIT`, and when the fetch fails it falls back to the board,
+ * which is smaller still. So saving quietly unfollowed every project that had
+ * not happened to be on screen, and nothing on screen said so. The daemon has
+ * carried a comment warning about exactly this above `/api/v1/tracking` since
+ * it was written; the page was simply using the wrong one of the two forms it
+ * offers.
+ *
+ * Comparing against what was loaded rather than against the board is what
+ * makes the delta narrow: a box nobody touched contributes nothing, whichever
+ * way it is set.
+ */
+function pickDelta() {
+  const boxes = [...document.querySelectorAll('#pick input[data-track]')];
+  const was = new Map((candidates || []).map(p => [p.projectId, !!p.tracked]));
+  return {
+    add: boxes.filter(i => i.checked && !was.get(i.dataset.track)).map(i => i.dataset.track),
+    remove: boxes.filter(i => !i.checked && was.get(i.dataset.track)).map(i => i.dataset.track),
+  };
 }
 
 async function saveTracking(body) {
@@ -1048,6 +1192,18 @@ async function saveTracking(body) {
     if (!res.ok) throw new Error(String(res.status));
     // The daemon notices the config change on its next scan; the board
     // updates itself from the next push rather than from a guess made here.
+    // The chooser's own ticks are the exception: they are what the *next*
+    // delta is computed against, so leaving them stale would make a second
+    // save re-send a change that has already been applied.
+    if (candidates) {
+      const on = new Set(body.add || []);
+      const off = new Set(body.remove || []);
+      for (const p of candidates) {
+        if (on.has(p.projectId)) p.tracked = true;
+        if (off.has(p.projectId)) p.tracked = false;
+        if (body.mode === 'all') p.tracked = true;
+      }
+    }
     if (msg) msg.textContent = tr('kaydedildi');
   } catch (e) {
     if (msg) msg.textContent = tr('kaydedilemedi');
@@ -1070,9 +1226,13 @@ document.addEventListener('click', (e) => {
   if (all) { void saveTracking({ mode: 'all', selected: [] }); return; }
   const save = e.target.closest && e.target.closest('#pickSave');
   if (save) {
-    const selected = [...document.querySelectorAll('#pick input[data-track]')]
-      .filter(i => i.checked).map(i => i.dataset.track);
-    void saveTracking({ mode: 'selected', selected });
+    const delta = pickDelta();
+    if (!delta.add.length && !delta.remove.length) {
+      const msg = document.getElementById('pickMsg');
+      if (msg) msg.textContent = tr('değişiklik yok');
+      return;
+    }
+    void saveTracking(delta);
     return;
   }
   const full = e.target.closest && e.target.closest('#miniFull');

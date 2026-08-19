@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { HOOK_PATH, type StatusReport } from '@vibetracker/shared';
+import { CANDIDATE_LIMIT, HOOK_PATH, type StatusReport } from '@vibetracker/shared';
 import { guard, isLoopback, tokenMatches } from './security.ts';
 import { catalogEntries, getLang, tr } from '@vibetracker/core';
 
@@ -16,7 +16,7 @@ export interface ServerDeps {
   /** Latest report, or null before the first scan completes. */
   latest: () => StatusReport | null;
   health: () => Record<string, unknown>;
-  /** Stable token for hook deliveries — outlives daemon restarts. */
+  /** Stable token for hook deliveries. See `tokens.ts`: so is `token`. */
   hookToken: string;
   /** Called with each raw hook body. Must be O(1); see HookRing. */
   onHook: (raw: string) => void;
@@ -365,7 +365,12 @@ export class DaemonServer {
 
     if (path === '/api/v1/candidates') {
       if (!this.#deps.candidates) return json(res, 501, { error: tr('bu sürümde yok') });
-      return json(res, 200, { candidates: this.#deps.candidates() });
+      const candidates = this.#deps.candidates();
+      // Said out loud, because a client that does not know the list is capped
+      // will treat it as the whole truth. Exactly-at-the-cap reads as
+      // truncated, which is one project's worth of over-caution in exchange
+      // for never claiming completeness we cannot check.
+      return json(res, 200, { candidates, truncated: candidates.length >= CANDIDATE_LIMIT });
     }
 
     // Stopping is a mutation, so it is POST: a GET would let any page that

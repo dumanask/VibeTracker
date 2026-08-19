@@ -23,7 +23,7 @@ import {
   type NoteLabels,
   type NoteShape,
 } from '@vibetracker/platform';
-import { readRuntimeInfo } from '@vibetracker/daemon';
+import { readRuntimeInfo, runtimeFilePath } from '@vibetracker/daemon';
 import { getLang, t, tr, trInto, type Lang } from '@vibetracker/core';
 import { dashboardUrl } from './daemon-cmd.ts';
 
@@ -95,6 +95,9 @@ function noteLabels(): NoteLabels {
     chooseDir: tr('İzlenecek proje klasörünü seç'),
     pathAdded: tr('eklendi'),
     pathBad: tr('klasör eklenemedi'),
+    pathNotDir: tr('böyle bir dizin yok'),
+    pickFail: tr('daemon yanıt vermiyor'),
+    pickDenied: tr('daemon bizi tanımadı'),
     // Spoken. The name goes in front, so these are the rest of the sentence.
     speakWaiting: tr('beklemeye geçti'),
     speakMany: tr('proje beklemeye geçti'),
@@ -155,6 +158,7 @@ export async function runMini(args: MiniArgs): Promise<number> {
     const started = startNote({
       url: dashboardUrl(info.port, info.token),
       token: info.token,
+      runtimePath: runtimeFilePath(),
       labels: noteLabels(),
       shape: args.shape,
       // Which voice reads a project name aloud. The words themselves are in
