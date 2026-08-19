@@ -464,14 +464,20 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
           )
         : null;
 
-    const derived = deriveState({
-      liveness,
-      facts,
-      cpuPct: cpuPctFor(entry.pid),
-      descendants,
-      prevState: opts.previousState?.(entry.sessionId) ?? null,
+    // Derived from this one sample, then held to the previous answer unless
+    // the change survives a second look. This is the path cpu noise enters by.
+    const derived = ctx.settle(
+      entry.sessionId,
+      deriveState({
+        liveness,
+        facts,
+        cpuPct: cpuPctFor(entry.pid),
+        descendants,
+        prevState: opts.previousState?.(entry.sessionId) ?? null,
+        now,
+      }),
       now,
-    });
+    );
 
     // Unrecognised line types are accumulated rather than warned about one by
     // one: a single surprise is normal, a *rate* of them means this build no
@@ -539,18 +545,22 @@ async function runScan(opts: ScanOptions, ctx: ScanContext): Promise<StatusRepor
       if (liveness !== 'live' && !opts.includeDead) continue;
       live++;
 
-      const derived = deriveState({
-        liveness,
-        facts: s.facts,
-        // No CPU for these: sampling costs a held poll and only pays off for a
-        // session whose pid we know, which is exactly the case where the
-        // transcript has already answered. With no cpu there is no threshold
-        // to sit on, so the previous state has nothing to decide either.
-        cpuPct: null,
-        descendants: null,
-        prevState: null,
+      const derived = ctx.settle(
+        s.sessionId,
+        deriveState({
+          liveness,
+          facts: s.facts,
+          // No CPU for these: sampling costs a held poll and only pays off for
+          // a session whose pid we know, which is exactly the case where the
+          // transcript has already answered. With no cpu there is no threshold
+          // to sit on, so the previous state has nothing to decide either.
+          cpuPct: null,
+          descendants: null,
+          prevState: null,
+          now,
+        }),
         now,
-      });
+      );
       const evidence = [...derived.evidence, ...extra];
       // Liveness we inferred from a clock cannot support the confidence of
       // liveness we measured. Capped rather than recomputed, so the state

@@ -1,5 +1,5 @@
-import type { ProcessTreeEntry, ProcessProbe } from '@vibetracker/shared';
-import { TREE_CACHE_MS } from '@vibetracker/core';
+import type { ProcessTreeEntry, ProcessProbe, SessionStateName } from '@vibetracker/shared';
+import { SETTLE_MS, TREE_CACHE_MS, type DerivedState } from '@vibetracker/core';
 import { createProcessProbe, type ProjectIdentity } from '@vibetracker/platform';
 import { TailReader } from './tail.ts';
 import { closeAdapters } from './agents/index.ts';
@@ -43,7 +43,65 @@ export class ScanContext {
   #identity = new Map<string, { at: number; value: ProjectIdentity }>();
   #tail = new TailReader();
   #progress = new Map<string, { at: number; value: ProgressReport }>();
+  #states = new Map<
+    string,
+    { accepted: DerivedState; candidate: SessionStateName | null; since: number; at: number }
+  >();
   #closed = false;
+
+  /**
+   * A state change has to be seen twice before it is believed.
+   *
+   * `deriveState` reads one sample and answers honestly about that sample. The
+   * sample can lie: a cpu reading is quantised to ~2.2% steps (see the
+   * thresholds), so an idle process that catches two scheduler ticks in one
+   * 700 ms window reads 4.5% and clears the busy line. One such sample used to
+   * be enough to move a session from STALLED to BUSY and back on the next
+   * poll -- 985 times in six hours for two sessions that did nothing at all.
+   *
+   * The whole accepted reading is held, not just its name: holding the state
+   * but showing the new sample's evidence would put "no cpu" next to BUSY, and
+   * a surface that contradicts itself is worse than one that is a poll behind.
+   *
+   * Memory belongs here because this is where memory across scans lives. A
+   * one-shot `vt status` builds a fresh context, has nothing to compare
+   * against and adopts what it sees -- which is the right answer for a
+   * snapshot: it is reporting a sample and says so.
+   */
+  settle(sessionId: string, derived: DerivedState, now: number): DerivedState {
+    const e = this.#states.get(sessionId);
+    if (!e) {
+      this.#prune(now);
+      this.#states.set(sessionId, { accepted: derived, candidate: null, since: now, at: now });
+      return derived;
+    }
+    e.at = now;
+    if (derived.state === e.accepted.state) {
+      // Still the same answer: take the fresh evidence and forget whatever
+      // change was being considered.
+      e.accepted = derived;
+      e.candidate = null;
+      return derived;
+    }
+    if (e.candidate !== derived.state) {
+      e.candidate = derived.state;
+      e.since = now;
+      return e.accepted;
+    }
+    if (now - e.since < SETTLE_MS) return e.accepted;
+    e.accepted = derived;
+    e.candidate = null;
+    return derived;
+  }
+
+  /**
+   * Sessions end, and their entry can only grow the map. Swept on insert
+   * rather than on a timer, which is the only moment the map can grow.
+   */
+  #prune(now: number): void {
+    if (this.#states.size < 256) return;
+    for (const [id, e] of this.#states) if (now - e.at > 3_600_000) this.#states.delete(id);
+  }
 
   /** Project progress, cached — see PROGRESS_CACHE_MS. */
   async progress(
@@ -111,6 +169,7 @@ export class ScanContext {
     this.#probe = null;
     this.#tree = null;
     this.#progress.clear();
+    this.#states.clear();
     await this.#tail.close();
     // The other agents' readers hold SQLite handles of their own. A one-shot
     // `vt status` that left them open would keep a 361 MB database mapped for

@@ -58,6 +58,39 @@ export const CPU_BUSY_PCT = 3;
 export const CPU_IDLE_PCT = 1;
 
 /**
+ * What these two numbers can actually mean, measured.
+ *
+ * Windows accounts cpu in ~15.6 ms scheduler ticks and the sample window is
+ * 700 ms, so the only readings that exist are 0%, 2.2%, 4.5%, 6.7%... A
+ * session logged for two minutes produced exactly three distinct values.
+ * Tuning either line to a tenth of a percent is therefore theatre: 3% means
+ * "at least two ticks" and 1% means "any tick at all", and there is no third
+ * setting between them.
+ *
+ * It also means a threshold alone can never be the whole answer here. An idle
+ * process that catches two ticks in one window reads 4.5% and clears the upper
+ * line honestly; that is what `settle` in the scan context is for.
+ */
+
+/**
+ * A state change has to survive a second look before it is believed.
+ *
+ * Measured cost of not doing this: one cpu sample of 4.5% -- two scheduler
+ * ticks, on a session that had been silent for six hours -- moved a session
+ * from STALLED to BUSY and straight back on the next poll. Over six hours that
+ * pattern produced 985 transitions and, before the alert rules were fixed, a
+ * notification for most of them.
+ *
+ * Expressed in milliseconds rather than in polls so the scan interval can
+ * change without changing the meaning, but the intent is "seen twice": with a
+ * three-second loop the second consecutive observation adopts the change, and
+ * a single-sample spike never does. The price is one extra poll of latency on
+ * a real transition, against a detection path that already takes fifteen to
+ * thirty seconds to notice a permission gate.
+ */
+export const SETTLE_MS = 1_500;
+
+/**
  * The gap between "assistant finished its text" and "assistant starts the next
  * tool" is routinely 2-8 s. Twenty seconds is comfortably past that and still
  * reads as instant to someone scanning a dashboard.
