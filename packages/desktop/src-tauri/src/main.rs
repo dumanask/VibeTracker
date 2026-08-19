@@ -18,7 +18,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -126,9 +126,32 @@ fn read_runtime() -> Option<Runtime> {
     serde_json::from_str(&body).ok()
 }
 
+/// \\?\C:\x  back to  C:\x.
+///
+/// Windows' verbatim prefix is what `resource_dir()` hands back, and it is
+/// perfectly valid -- to Windows. It is not valid to everything that reads a
+/// path *as a string*, and Node is one of those: handed
+/// \\?\C:\...\index.ts as its main module it parses its way down to
+/// `lstat('C:')` and exits with EISDIR before a line of user code runs.
+///
+/// Which is the whole of "the desktop app cannot start its own daemon". The
+/// child launched, died in milliseconds, wrote nothing anywhere, and the tray
+/// reported an empty board for ever. The path existed, `exists()` said so, and
+/// every check this process was able to make passed.
+fn plain(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{rest}"));
+    }
+    if let Some(rest) = s.strip_prefix(r"\\?\") {
+        return PathBuf::from(rest.to_string());
+    }
+    p
+}
+
 /// The staged Node runtime that ships inside the bundle.
 fn runtime_paths(app: &AppHandle) -> Option<(PathBuf, PathBuf)> {
-    let base = app.path().resource_dir().ok()?.join("runtime");
+    let base = plain(app.path().resource_dir().ok()?).join("runtime");
     let node = base.join(if cfg!(windows) { "node.exe" } else { "node" });
     let entry = base
         .join("packages")
@@ -152,10 +175,24 @@ fn runtime_paths(app: &AppHandle) -> Option<(PathBuf, PathBuf)> {
 fn spawn_daemon(app: &AppHandle) -> Option<Child> {
     if let Some(rt) = read_runtime() {
         if health(&rt).is_some() {
+            log("daemon zaten yanit veriyor, baslatilmadi");
             return None;
         }
     }
-    run_cli(app, &["daemon"])
+    match run_cli(app, &["daemon"]) {
+        Some(c) => {
+            log(&format!("daemon baslatildi pid={}", c.id()));
+            Some(c)
+        }
+        None => {
+            // The one failure that used to be completely silent. A supervisor
+            // that cannot start the thing it supervises, and says nothing
+            // about it, is indistinguishable from a healthy one -- and the
+            // symptom is a tray icon reporting nothing at all, for ever.
+            log("daemon BASLATILAMADI");
+            None
+        }
+    }
 }
 
 /// Run the bundled `vt` with the given arguments.
@@ -164,11 +201,57 @@ fn spawn_daemon(app: &AppHandle) -> Option<Child> {
 /// carries a Node and the CLI's sources, and every subcommand is reachable
 /// from here without the user having installed anything.
 fn run_cli(app: &AppHandle, args: &[&str]) -> Option<Child> {
-    let (node, entry) = runtime_paths(app)?;
+    let Some((node, entry)) = runtime_paths(app) else {
+        // Which half is missing matters: no `node` means the bundle was built
+        // without a runtime, no entry means it was built without the sources.
+        // Both look identical from the outside -- nothing happens -- and both
+        // are build faults rather than anything the user did.
+        let base = app
+            .path()
+            .resource_dir()
+            .map(|d| d.join("runtime").display().to_string())
+            .unwrap_or_else(|_| "(resource_dir yok)".into());
+        log(&format!("calisma zamani bulunamadi: {base}"));
+        return None;
+    };
+    // Written down, because a wrong one produces a child that dies before it
+    // can say anything and a tray that reports nothing for ever.
+    log(&format!("calistiriliyor: node={} entry={} {args:?}", node.display(), entry.display()));
     let mut cmd = Command::new(node);
-    cmd.arg("--no-warnings=ExperimentalWarning").arg(entry);
+    cmd.arg("--no-warnings=ExperimentalWarning").arg(&entry);
     for a in args {
         cmd.arg(a);
+    }
+    // Somewhere to write, and not the handles this process was given.
+    //
+    // This process has no console -- `windows_subsystem = "windows"` -- so what
+    // a child inherits is not a handle to anything. The daemon prints its
+    // startup lines to stdout before its own logger exists, which is exactly
+    // the window in which it can die without leaving a trace: the tray then
+    // reports an empty board for ever and nothing anywhere says why.
+    //
+    // A file rather than `Stdio::null()` for that reason. Null would fix the
+    // writing and keep the silence, and the silence is the part that costs a
+    // day.
+    cmd.stdin(Stdio::null());
+    match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir().map(|d| d.join("daemon-stdout.log")).unwrap_or_default())
+    {
+        Ok(f) => {
+            let e = match f.try_clone() {
+                Ok(c) => c,
+                Err(_) => {
+                    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+                    return spawn_it(cmd);
+                }
+            };
+            cmd.stdout(Stdio::from(f)).stderr(Stdio::from(e));
+        }
+        Err(_) => {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
     }
     #[cfg(windows)]
     {
@@ -176,7 +259,17 @@ fn run_cli(app: &AppHandle, args: &[&str]) -> Option<Child> {
         // CREATE_NO_WINDOW: without it every launch flashes a console.
         cmd.creation_flags(0x0800_0000);
     }
-    cmd.spawn().ok()
+    spawn_it(cmd)
+}
+
+fn spawn_it(mut cmd: Command) -> Option<Child> {
+    match cmd.spawn() {
+        Ok(c) => Some(c),
+        Err(e) => {
+            log(&format!("calistirilamadi: {e}"));
+            None
+        }
+    }
 }
 
 /// Open the sticky note.
@@ -363,6 +456,7 @@ fn build_panel(app: &AppHandle) {
 fn main() {
     let child: Arc<Mutex<Option<Child>>> = Arc::new(Mutex::new(None));
     let child_for_exit = Arc::clone(&child);
+    let child_for_supervisor = Arc::clone(&child);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
@@ -423,18 +517,71 @@ fn main() {
             // it does is one blocking HTTP call every three seconds, and the
             // whole runtime that would make that asynchronous is more machinery
             // than the problem has.
+            //
+            // It is also the supervisor, and until now nothing was. The daemon
+            // was started once at launch and never looked at again, so the
+            // moment it exited -- and it exits on purpose, the watchdog would
+            // rather die than hang -- the tray reported an empty board until
+            // somebody restarted the whole app. "Keeps the daemon alive" is one
+            // of the three reasons this process exists; starting it once is not
+            // that.
+            let child_for_poll = Arc::clone(&child_for_supervisor);
+            let supervisor = handle.clone();
             std::thread::spawn(move || {
                 let deadline = std::time::Instant::now() + STARTUP_GRACE;
                 let mut prev: Option<u32> = None;
+                // Consecutive silent polls, and when we last did something
+                // about it. Three polls is about nine seconds -- long enough
+                // that an ordinary restart is not raced, short enough that a
+                // person does not go and make coffee.
+                let mut quiet: u32 = 0;
+                let mut last_restart: Option<std::time::Instant> = None;
                 loop {
                     std::thread::sleep(POLL);
-                    let Some(rt) = read_runtime() else {
+                    let rt = read_runtime();
+                    let answered = rt.as_ref().and_then(overview);
+                    let Some(ov) = answered else {
+                        // No overview is not the same as no daemon. A daemon
+                        // that has just started has not finished its first scan
+                        // and answers `health` while it has nothing to report,
+                        // and counting that as death restarts a perfectly good
+                        // daemon nine seconds after launching it. So liveness
+                        // is asked of the endpoint that can answer it, and only
+                        // in the path where something already looked wrong.
+                        let alive = rt.as_ref().map(|r| health(r).is_some()).unwrap_or(false);
+                        if alive {
+                            quiet = 0;
+                            continue;
+                        }
+                        quiet += 1;
                         if std::time::Instant::now() > deadline {
                             let _ = tx.send(u32::MAX);
                         }
+                        // A restart at most every thirty seconds. A supervisor
+                        // that respawns as fast as a broken daemon can exit is
+                        // a fork bomb with good intentions.
+                        let cool = last_restart
+                            .map(|t| t.elapsed() >= Duration::from_secs(30))
+                            .unwrap_or(true);
+                        if quiet >= 3 && cool {
+                            last_restart = Some(std::time::Instant::now());
+                            log(&format!("daemon {quiet} tur sessiz, yeniden baslatiliyor"));
+                            if let Some(c) = spawn_daemon(&supervisor) {
+                                if let Ok(mut slot) = child_for_poll.lock() {
+                                    // Whatever was there is gone -- that is why
+                                    // we are here -- but it is reaped rather
+                                    // than left as a zombie.
+                                    if let Some(mut old) = slot.take() {
+                                        let _ = old.kill();
+                                        let _ = old.wait();
+                                    }
+                                    *slot = Some(c);
+                                }
+                            }
+                        }
                         continue;
                     };
-                    let Some(ov) = overview(&rt) else { continue };
+                    quiet = 0;
                     let n = ov.counts.needs_you;
                     let _ = tx.send(n);
 

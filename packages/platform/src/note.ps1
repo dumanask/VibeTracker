@@ -62,6 +62,21 @@ public class Row {
   public int Waiting, Running, Live, Total, Urgency;
   public double Percent = -1;      // negative means "no honest number"
   public bool Approximate;
+  /// <summary>
+  /// The number came from a language model, not from counting anything.
+  ///
+  /// A third state rather than a second use of `Approximate`: a coarse count
+  /// and a model's estimate are both uncertain, but only one of them is a
+  /// reading of something that exists. Drawn in amber and outlined, so the
+  /// four cases stay apart at a glance -- solid cyan counted, outlined cyan
+  /// coarse, outlined amber guessed, dotted channel nothing.
+  ///
+  /// It is here at all because the dashboard shows it, and two surfaces of the
+  /// same product disagreeing about the same project is what destroys trust in
+  /// both. The note showing a dash while the panel showed a number was exactly
+  /// that.
+  /// </summary>
+  public bool Guess;
   public string Lead = "";
   /// <summary>
   /// The last twenty-four minutes, oldest first: how many sessions this
@@ -1037,7 +1052,7 @@ public class Note : Form {
 
   string PctText(Row r) {
     if (r.Percent < 0) return "\u2014";
-    return (r.Approximate ? "~" : "") + "%" + (int)Math.Round(r.Percent);
+    return (r.Approximate || r.Guess ? "~" : "") + "%" + (int)Math.Round(r.Percent);
   }
 
   /// <summary>One string, vertically centred in the row band.</summary>
@@ -1144,7 +1159,12 @@ public class Note : Form {
     for (int i = 0; i < segs; i++) {
       Rectangle seg = new Rectangle(x + i * (segW + segGap), top, segW, 8);
       if (i < lit) {
-        if (r.Approximate) {
+        if (r.Guess) {
+          // Never filled, never glowing: a model's estimate does not get to
+          // look like a measurement, and the travelling highlight is reserved
+          // for numbers that came from counting something.
+          using (Pen p = new Pen(Amber)) g.DrawRectangle(p, seg);
+        } else if (r.Approximate) {
           using (Pen p = new Pen(Cyan)) g.DrawRectangle(p, seg);
         } else {
           using (Brush b = new SolidBrush(Cyan)) g.FillRectangle(b, seg);
@@ -1235,7 +1255,7 @@ public class Note : Form {
     // a real one. "We measured nothing here" is an answer; a blank is not --
     // and it is drawn in Dim rather than Bevel, because at Bevel the dash
     // disappeared into the background and the row looked broken.
-    Cell(g, PctText(r), fMono, r.Percent < 0 ? Dim : Ink, lay.PctX, y, lay.PctW, true);
+    Cell(g, PctText(r), fMono, r.Percent < 0 ? Dim : (r.Guess ? Amber : Ink), lay.PctX, y, lay.PctW, true);
 
     // What the agent is actually doing, once you ask for it. The text is
     // redacted before it ever leaves the engine, which is the only reason a
@@ -1585,6 +1605,14 @@ function Refresh {
       if ($p.progress -and $null -ne $p.progress.percent) {
         $row.Percent = [double]$p.progress.percent
         $row.Approximate = [bool]$p.progress.approximate
+      } elseif ($p.digest -and $null -ne $p.digest.percentEstimate) {
+        # Only when the counting engine refused. A model's reading is the rung
+        # below "nothing", never above a counted one -- the same rule the
+        # dashboard obeys, so the two windows cannot say different things about
+        # the same project. Coarsened to a tenth, because that is all a guess
+        # is worth.
+        $row.Percent = [double]([Math]::Round([double]$p.digest.percentEstimate / 10) * 10)
+        $row.Guess = $true
       }
       # Absent for a one-shot reader with no past; drawn as a gap, not a floor.
       if ($p.momentum) { $row.Spark = [int[]]$p.momentum }

@@ -329,3 +329,28 @@ test('the note asserts its own z-order rather than trusting the constructor', ()
   assert.match(source, /\$note\.PinTop\(\)/);
   assert.match(source, /scroll = 0;\s*\n\s*PinTop\(\);/);
 });
+
+/**
+ * Four meters, four meanings, and none of them borrowing another's credibility.
+ *
+ * The note and the dashboard draw the same projects, and two surfaces of one
+ * product disagreeing about the same number is what destroys trust in both.
+ * When the dashboard learned to show a model's estimate the note still showed a
+ * dash for it — so the same project read "70%" in one window and "no idea" in
+ * the other.
+ *
+ * The fix is not to show it the same way. A counted number is filled and can
+ * glow; a coarse one is outlined; a model's guess is outlined *in amber* and
+ * never glows, because the travelling highlight is reserved for numbers that
+ * came from counting something.
+ */
+test('a model estimate is drawn as one, and only when nothing was counted', () => {
+  assert.match(source, /public bool Guess;/);
+  // The counting engine wins; the model fills in behind it.
+  assert.match(source, /\$p\.progress\.percent\) \{[\s\S]{0,200}?\} elseif \(\$p\.digest/);
+  // Amber, outlined, no glow.
+  assert.match(source, /if \(r\.Guess\) \{[\s\S]{0,300}?new Pen\(Amber\)\)/);
+  // And the label says it is an estimate rather than a measurement.
+  assert.match(source, /r\.Approximate \|\| r\.Guess \? "~"/);
+  assert.match(source, /r\.Guess \? Amber : Ink/);
+});
