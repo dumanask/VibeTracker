@@ -42,7 +42,7 @@ export const DEFAULT_PORT = 47823;
  * shorter window would fire on any project that took a holiday.
  */
 const D5_WINDOW_MS = 21 * 24 * 3600_000;
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
 
 /**
  * The port is fixed rather than negotiated.
