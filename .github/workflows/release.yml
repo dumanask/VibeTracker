@@ -98,13 +98,19 @@ jobs:
 
       # Tauri's Linux backend is WebKitGTK, and the packagers for .deb and
       # AppImage are separate tools. None of this is needed on the other two.
+      #
+      # Only the ayatana tray library, never both: `libappindicator3-dev`
+      # Conflicts with it, so asking apt for the pair is an impossible request
+      # and the job dies with "held broken packages" before compiling a line.
+      # Tauri 2 uses ayatana; ci.yml has always installed only that one, which
+      # is why the desktop check was green while the release build was not.
       - name: linux dependencies
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-            build-essential curl wget file libssl-dev libayatana-appindicator3-dev
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+            build-essential curl wget file libssl-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
